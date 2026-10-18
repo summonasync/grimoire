@@ -15,6 +15,7 @@ export interface MemoryFilters {
   kind: MemoryKind | "";
   status: MemoryStatusFilter;
   tags: string;
+  tome: string;
   limit: string;
 }
 
@@ -25,6 +26,7 @@ export function defaultMemoryFilters(): MemoryFilters {
     kind: "",
     status: ["active"],
     tags: "",
+    tome: "",
     limit: "",
   };
 }
@@ -39,6 +41,7 @@ export function parseTagList(raw: string): string[] {
 export function toMemoryListParams(filters: MemoryFilters): MemoryListParams {
   const query = filters.query.trim();
   const tags = parseTagList(filters.tags);
+  const tome = filters.tome.trim();
   const limit = Number.parseInt(filters.limit, 10);
 
   return {
@@ -47,6 +50,7 @@ export function toMemoryListParams(filters: MemoryFilters): MemoryListParams {
     kind: filters.kind === "" ? undefined : filters.kind,
     status: filters.status,
     tag: tags.length > 0 ? tags : undefined,
+    tome: tome.length > 0 ? tome : undefined,
     limit: Number.isNaN(limit) ? undefined : limit,
   };
 }

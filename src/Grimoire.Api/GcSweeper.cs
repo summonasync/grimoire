@@ -9,12 +9,14 @@ public sealed class GcSweeper(
     Func<CancellationToken, Task<GcResult>> gc,
     IClock clock,
     TimeSpan interval,
+    IGcStateStore? gcState = null,
     Func<TimeSpan, CancellationToken, Task>? pause = null,
     ILogger<GcSweeper>? logger = null) : BackgroundService
 {
     private readonly Func<CancellationToken, Task<GcResult>> _gc = gc ?? throw new ArgumentNullException(nameof(gc));
     private readonly IClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     private readonly TimeSpan _interval = ValidateInterval(interval);
+    private readonly IGcStateStore? _gcState = gcState;
     private readonly Func<TimeSpan, CancellationToken, Task> _pause =
         pause ?? ((delay, cancellationToken) => Task.Delay(delay, cancellationToken));
     private readonly ILogger<GcSweeper> _logger = logger ?? NullLogger<GcSweeper>.Instance;
@@ -37,6 +39,7 @@ public sealed class GcSweeper(
                 break;
             }
 
+            var attemptStartedAt = _clock.UtcNow;
             try
             {
                 var result = await _gc(stoppingToken);
@@ -45,6 +48,8 @@ public sealed class GcSweeper(
                     _logger.LogInformation("GC sweep removed {Removed} expired sessions and {Tombstones} aged tombstones",
                         result.ExpiredSessions, result.AgedTombstones);
                 }
+
+                await RecordSuccessAsync(attemptStartedAt, result, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -53,7 +58,61 @@ public sealed class GcSweeper(
             catch (Exception ex)
             {
                 _logger.LogError(ex, "GC sweep failed; retrying after the next interval");
+                await RecordFailureAsync(attemptStartedAt, ex, stoppingToken);
             }
+        }
+    }
+
+    private async Task RecordSuccessAsync(DateTimeOffset attemptStartedAt, GcResult result, CancellationToken stoppingToken)
+    {
+        if (_gcState is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _gcState.WriteAsync(new GcState
+            {
+                LastAttemptAt = attemptStartedAt,
+                LastSuccessAt = _clock.UtcNow,
+                RemovedExpired = result.ExpiredSessions,
+                RemovedTombstones = result.AgedTombstones,
+            }, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception failure)
+        {
+            _logger.LogWarning(failure, "GC heartbeat write failed; the sweep itself succeeded");
+        }
+    }
+
+    private async Task RecordFailureAsync(DateTimeOffset attemptStartedAt, Exception sweepFailure, CancellationToken stoppingToken)
+    {
+        if (_gcState is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var current = await _gcState.ReadAsync(stoppingToken);
+            await _gcState.WriteAsync(current with
+            {
+                LastAttemptAt = attemptStartedAt,
+                LastError = sweepFailure.Message,
+            }, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception failure)
+        {
+            _logger.LogWarning(failure, "GC heartbeat write failed on top of a failed sweep");
         }
     }
 

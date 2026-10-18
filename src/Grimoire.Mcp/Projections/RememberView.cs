@@ -12,6 +12,8 @@ internal sealed record RememberView
 
     public required string Actor { get; init; }
 
+    public required string Tome { get; init; }
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }
@@ -21,6 +23,10 @@ internal sealed record RememberView
     public required bool SupersededExisting { get; init; }
 
     public Guid? SupersededMemoryId { get; init; }
+
+    public required bool IdempotentReplay { get; init; }
+
+    public required bool MaintenancePending { get; init; }
 
     public required int BodyChars { get; init; }
 

@@ -1,3 +1,4 @@
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Tests.Fakes;
@@ -20,9 +21,10 @@ public sealed class QdrantCollectionBootstrapperTests
         db.CreateCollectionCount.ShouldBe(1);
         db.CreatedDimensions.ShouldBe(4);
         db.CreatedIndexes.Select(index => index.Field).ShouldBe(
-            ["scope", "kind", "status", "tags", "projectId", "sessionId", "expiresAt"], ignoreOrder: true);
-        db.CreatedIndexes.ShouldContain(index => index.Field == "expiresAt" && index.Type == PayloadSchemaType.Datetime);
-        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(6);
+            ["scope", "kind", "status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
+            ignoreOrder: true);
+        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Datetime).ShouldBe(2);
+        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
         db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
         db.PayloadOf(EmbeddingFingerprint.MarkerPointId)[EmbeddingFingerprint.ModelField].StringValue
             .ShouldBe("nomic-embed-text");
@@ -48,28 +50,48 @@ public sealed class QdrantCollectionBootstrapperTests
     }
 
     [Fact]
-    public async Task Ensure_WithDifferentModel_ThrowsTypedError()
+    public async Task Ensure_WithDifferentModel_ThrowsReindexRequiredWithHint()
     {
         var db = new FakeQdrantVectorDb();
         var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        var exception = await Should.ThrowAsync<EmbeddingFingerprintException>(
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
             () => bootstrapper.EnsureAsync(EmbeddingFingerprint.From("bge-small", 4), CancellationToken.None));
 
         exception.Message.ShouldContain("nomic-embed-text");
         exception.Message.ShouldContain("bge-small");
+        exception.Message.ShouldContain("run `grimoire reindex`");
     }
 
     [Fact]
-    public async Task Ensure_WithDifferentDimensions_ThrowsTypedError()
+    public async Task Ensure_WithDifferentDimensions_ThrowsReindexRequired()
     {
         var db = new FakeQdrantVectorDb();
         var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        await Should.ThrowAsync<EmbeddingFingerprintException>(
+        await Should.ThrowAsync<ReindexRequiredException>(
             () => bootstrapper.EnsureAsync(EmbeddingFingerprint.From("nomic-embed-text", 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Ensure_AfterBeginReindex_RefusesUntilCompleted()
+    {
+        var db = new FakeQdrantVectorDb();
+        var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
+        await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
+        var target = EmbeddingFingerprint.From("bge-small", 4);
+
+        await bootstrapper.BeginReindexAsync(target, CancellationToken.None);
+
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => bootstrapper.EnsureAsync(target, CancellationToken.None));
+        exception.Message.ShouldContain("in progress");
+        exception.Message.ShouldContain("run `grimoire reindex`");
+
+        await bootstrapper.CompleteReindexAsync(target, CancellationToken.None);
+        await bootstrapper.EnsureAsync(target, CancellationToken.None);
     }
 
     [Fact]
@@ -110,9 +132,9 @@ public sealed class QdrantCollectionBootstrapperTests
 
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        db.CreatedIndexes.Count.ShouldBe(existing + 5);
+        db.CreatedIndexes.Count.ShouldBe(existing + 8);
         db.CreatedIndexes.Skip(existing).Select(index => index.Field).ShouldBe(
-            ["status", "tags", "projectId", "sessionId", "expiresAt"], ignoreOrder: true);
+            ["status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"], ignoreOrder: true);
     }
 
     private static EmbeddingFingerprint Fingerprint() => EmbeddingFingerprint.From("nomic-embed-text", 4);

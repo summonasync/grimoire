@@ -35,19 +35,54 @@ internal static class CommandCatalog
     private static readonly FlagSpec Limit = new(
         "limit", "n", "Maximum number of results.");
 
+    private static readonly FlagSpec ProjectFilter = new(
+        "project", "id", "Restrict the brief to one project's memories.");
+
+    private static readonly FlagSpec FactsPerScope = new(
+        "facts-per-scope", "n", "Top facts per scope. Default: 5.");
+
+    private static readonly FlagSpec JournalPerScope = new(
+        "journal-per-scope", "n", "Recent journal entries per scope. Default: 5.");
+
+    private static readonly FlagSpec TombstoneLimit = new(
+        "tombstone-limit", "n", "Tombstoned records in the digest. Default: 10.");
+
     private static readonly FlagSpec Reason = new(
         "reason", "text", "Tombstone reason. Default: 'forgotten via grimoire cli'.");
 
     private static readonly FlagSpec WebRoot = new(
         "web-root", "path", "Static SPA export directory. Default: ~/.grimoire/web");
 
+    private static readonly FlagSpec Gzip = FlagSpec.Switch(
+        "gzip", "Write the export through gzip; the default export path gets .jsonl.gz.");
+
+    private static readonly FlagSpec Agent = new(
+        "agent", "alias", "Claim this directory for an agent: rewrite the managed grimoire:actor block in AGENTS.md.");
+
+    private static readonly FlagSpec ClaimTome = new(
+        "tome", "key", "Tome key for the claim block. Default: the alias as a tome key.");
+
+    private static readonly FlagSpec Tome = new(
+        "tome", "key",
+        "Tome key for this operation. Default: GRIMOIRE_TOME, then the GRIMOIRE_ACTOR alias, then the AGENTS.md claim, then the configured default tome.");
+
+    private static readonly FlagSpec Tomes = new(
+        "tomes", "a,b", "Comma-separated tome keys to search. Default: every tome except your own.");
+
+    private static readonly FlagSpec IncludeJournal = FlagSpec.Switch(
+        "include-journal", "Opt into other tomes' journal entries; facts alone are searched by default.");
+
+    private static readonly FlagSpec Attribution = new(
+        "attribution", "none|light|full", "Actor fields on results: none, light (alias) or full (alias+vendor). Default: none.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
         {
             Name = "init",
-            Summary = "Write the default config when missing and prepare the Qdrant collection.",
+            Summary = "Write the default config when missing, prepare the Qdrant collection, and with --agent claim this directory in AGENTS.md.",
             Syntax = "init",
+            Flags = [Agent, ClaimTome],
         },
         new CommandSpec
         {
@@ -69,7 +104,7 @@ internal static class CommandCatalog
             Summary = "Store a memory.",
             Syntax = "remember <text>",
             MinPositional = 1,
-            Flags = [Scope, Kind, Tags, Importance, Ttl, Session, Project, Actor],
+            Flags = [Scope, Kind, Tags, Importance, Ttl, Session, Project, Actor, Tome],
         },
         new CommandSpec
         {
@@ -88,6 +123,21 @@ internal static class CommandCatalog
         },
         new CommandSpec
         {
+            Name = "brief",
+            Summary = "Render the agent startup brief: persona, top facts, recent journal, tombstones.",
+            Syntax = "brief",
+            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit],
+        },
+        new CommandSpec
+        {
+            Name = "scry",
+            Summary = "Search other tomes anonymously: facts by default, journal opt-in, session never.",
+            Syntax = "scry <query>",
+            MinPositional = 1,
+            Flags = [Tomes, IncludeJournal, Attribution, Limit],
+        },
+        new CommandSpec
+        {
             Name = "forget",
             Summary = "Tombstone a memory by id or by its best query match.",
             Syntax = "forget <id|query>",
@@ -102,10 +152,30 @@ internal static class CommandCatalog
         },
         new CommandSpec
         {
+            Name = "reindex",
+            Summary = "Re-embed every active memory with the configured embedding model. Resumable: an interrupted run leaves the store read-refused until reindex completes.",
+            Syntax = "reindex",
+        },
+        new CommandSpec
+        {
+            Name = "export",
+            Summary = "Dump every memory — all statuses and tomes, vectors included — to a JSONL file stamped with the embedding fingerprint.",
+            Syntax = "export [path]",
+            Flags = [Gzip],
+        },
+        new CommandSpec
+        {
+            Name = "import",
+            Summary = "Restore a store export: validates the embedding fingerprint against the configured model, then upserts records with ids, statuses, timestamps and vectors preserved. Re-running an import is safe.",
+            Syntax = "import <path>",
+            MinPositional = 1,
+        },
+        new CommandSpec
+        {
             Name = "persona",
             Summary = "Show or edit the persona document read by agents.",
             Syntax = "persona [show | set-section <identity|tone|preferences|rules> <text>]",
-            Flags = [Actor],
+            Flags = [Actor, Tome],
         },
         new CommandSpec
         {

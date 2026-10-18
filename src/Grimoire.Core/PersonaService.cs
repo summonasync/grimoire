@@ -1,10 +1,16 @@
 namespace Grimoire.Core;
 
-public sealed class PersonaService(IMemoryStore store, IEmbeddingProvider embeddings, IClock clock)
+public sealed class PersonaService(
+    IMemoryStore store,
+    IEmbeddingProvider embeddings,
+    IClock clock,
+    MemoryEngineOptions? options = null)
 {
-    public async Task<PersonaDocument> GetAsync(CancellationToken cancellationToken)
+    private readonly MemoryEngineOptions _options = options ?? new();
+
+    public async Task<PersonaDocument> GetAsync(CancellationToken cancellationToken, string? tome = null)
     {
-        var records = await store.ListAsync(PersonaFilter(), cancellationToken);
+        var records = await store.ListAsync(PersonaFilter(ResolveTome(tome)), cancellationToken);
 
         var document = new PersonaDocument();
         foreach (var record in records.OrderBy(record => record.CreatedAt))
@@ -19,12 +25,13 @@ public sealed class PersonaService(IMemoryStore store, IEmbeddingProvider embedd
         return document;
     }
 
-    public async Task<PersonaDocument> SetAsync(PersonaDocument document, MemoryActor actor, CancellationToken cancellationToken)
+    public async Task<PersonaDocument> SetAsync(PersonaDocument document, MemoryActor actor, CancellationToken cancellationToken, string? tome = null)
     {
         ArgumentNullException.ThrowIfNull(document);
 
+        var resolved = ResolveTome(tome);
         var now = clock.UtcNow;
-        var records = await store.ListAsync(PersonaFilter(), cancellationToken);
+        var records = await store.ListAsync(PersonaFilter(resolved), cancellationToken);
         var existing = records
             .Select(record => (Record: record, Section: ParseSection(record)))
             .Where(pair => pair.Section is not null)
@@ -63,6 +70,7 @@ public sealed class PersonaService(IMemoryStore store, IEmbeddingProvider embedd
                     Scope = MemoryScope.Personal,
                     Kind = MemoryKind.Fact,
                     Actor = actor,
+                    Tome = resolved,
                     Tags = [PersonaSectionExtensions.PersonaTag, section.SectionTag()],
                     CreatedAt = now,
                     LastAccessedAt = now,
@@ -74,11 +82,14 @@ public sealed class PersonaService(IMemoryStore store, IEmbeddingProvider embedd
         return document;
     }
 
-    private static MemoryFilter PersonaFilter() => new()
+    private string ResolveTome(string? tome) => TomeKey.Normalize(tome ?? _options.DefaultTome);
+
+    private static MemoryFilter PersonaFilter(string tome) => new()
     {
         Scopes = [MemoryScope.Personal],
         Kind = MemoryKind.Fact,
         Status = MemoryStatus.Active,
+        Tome = tome,
         Tags = [PersonaSectionExtensions.PersonaTag],
     };
 

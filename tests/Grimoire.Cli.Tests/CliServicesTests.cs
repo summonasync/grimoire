@@ -19,6 +19,7 @@ public sealed class CliServicesTests
         provider.GetRequiredService<IEmbeddingProvider>().ShouldBeOfType<OllamaEmbeddingProvider>();
         provider.GetRequiredService<IClock>().ShouldBeOfType<SystemClock>();
         provider.GetRequiredService<QdrantCollectionBootstrapper>().ShouldNotBeNull();
+        provider.GetRequiredService<IActorClaimProvider>().ShouldBeOfType<ActorClaimProvider>();
     }
 
     [Fact]
@@ -27,6 +28,7 @@ public sealed class CliServicesTests
         using var provider = CliServices.Build(Options());
 
         var options = provider.GetRequiredService<MemoryEngineOptions>();
+        options.DefaultTome.ShouldBe("platform");
         options.SessionTtlHours.ShouldBe(5);
         options.DedupSimilarityThreshold.ShouldBe(0.75);
         options.TombstoneRetentionDays.ShouldBe(9);
@@ -45,6 +47,7 @@ public sealed class CliServicesTests
 
     private static GrimoireOptions Options() => new()
     {
+        DefaultTome = "platform",
         Memory = new MemoryOptions
         {
             SessionTtlHours = 5,

@@ -10,6 +10,10 @@ public readonly record struct EmbeddingFingerprint(string Model, int Dimensions)
 
     public const string DimensionsField = "__grimoire_embedding_dimensions";
 
+    public const string ReindexStateField = "__grimoire_reindex_state";
+
+    public const string ReindexStateInProgress = "in_progress";
+
     public static EmbeddingFingerprint From(string model, int dimensions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(model);

@@ -69,6 +69,16 @@ export function MemoryFilterBar({ filters, onChange, onReset }: MemoryFilterBarP
           </select>
         </label>
         <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted">Tome</span>
+          <input
+            type="text"
+            value={filters.tome}
+            onChange={(event) => onChange({ tome: event.target.value })}
+            placeholder="any tome"
+            className="w-36 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted">Tags</span>
           <input
             type="text"

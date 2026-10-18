@@ -19,7 +19,8 @@ internal static class TestMemories
         DateTimeOffset? expiresAt = null,
         Guid? supersededBy = null,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string tome = TomeKey.DefaultTome)
     {
         var moment = createdAt ?? FakeClock.DefaultStart;
 
@@ -30,6 +31,7 @@ internal static class TestMemories
             Scope = scope,
             Kind = kind,
             Actor = actor ?? Agent,
+            Tome = tome,
             Tags = tags ?? [],
             Importance = importance,
             CreatedAt = moment,
@@ -56,7 +58,8 @@ internal static class TestMemories
         DateTimeOffset? expiresAt = null,
         Guid? supersededBy = null,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string tome = TomeKey.DefaultTome)
     {
         var record = Create(
             content,
@@ -70,7 +73,8 @@ internal static class TestMemories
             expiresAt,
             supersededBy,
             tombstoneReason,
-            tombstonedAt);
+            tombstonedAt,
+            tome);
         store.Seed(record, vector);
         return record;
     }

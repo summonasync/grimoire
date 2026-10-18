@@ -32,6 +32,7 @@ export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) 
           <span className="rounded bg-background px-1.5 py-0.5 font-medium text-foreground">
             {record.scope}
           </span>
+          <span>tome {record.tome}</span>
           <span>{record.kind}</span>
           <span>importance {record.importance.toFixed(2)}</span>
           <span>{record.accessCount} accesses</span>

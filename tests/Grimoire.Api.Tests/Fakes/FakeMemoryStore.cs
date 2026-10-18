@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Grimoire.Core;
 
 namespace Grimoire.Api.Tests.Fakes;
@@ -96,6 +97,26 @@ public class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        foreach (var point in _points.Values)
+        {
+            yield return new MemoryPoint { Record = point.Record, Vector = point.Vector };
+        }
+    }
+
+    public virtual Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        foreach (var point in points)
+        {
+            _points[point.Record.Id] = new StoredPoint(point.Record, point.Vector.ToArray());
+        }
+
+        return Task.CompletedTask;
+    }
+
     private IEnumerable<StoredPoint> Matching(MemoryFilter filter)
     {
         IEnumerable<StoredPoint> query = _points.Values;
@@ -125,6 +146,16 @@ public class FakeMemoryStore : IMemoryStore
             query = query.Where(point => filter.ExcludeTags.All(tag => !point.Record.Tags.Contains(tag)));
         }
 
+        if (filter.Tome is not null)
+        {
+            query = query.Where(point => point.Record.Tome == filter.Tome);
+        }
+
+        if (filter.Tomes.Count > 0)
+        {
+            query = query.Where(point => filter.Tomes.Contains(point.Record.Tome));
+        }
+
         if (filter.ProjectId is not null)
         {
             query = query.Where(point => point.Record.ProjectId == filter.ProjectId);
@@ -143,6 +174,16 @@ public class FakeMemoryStore : IMemoryStore
         if (filter.TombstonedBefore is not null)
         {
             query = query.Where(point => point.Record.TombstonedAt is not null && point.Record.TombstonedAt <= filter.TombstonedBefore);
+        }
+
+        if (filter.IdempotencyKey is not null)
+        {
+            query = query.Where(point => point.Record.IdempotencyKey == filter.IdempotencyKey);
+        }
+
+        if (filter.CreatedAfter is not null)
+        {
+            query = query.Where(point => point.Record.CreatedAt >= filter.CreatedAfter);
         }
 
         if (filter.Limit is not null)

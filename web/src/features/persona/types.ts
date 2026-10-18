@@ -1,3 +1,5 @@
+import type { PersonaDocument } from "@/shared/api/types";
+
 export type PersonaSectionKey = "identity" | "tone" | "preferences" | "rules";
 
 export interface PersonaSectionSpec {
@@ -11,4 +13,9 @@ export interface PersonaSectionSpec {
 export interface ApiFailure {
   code: string;
   message: string;
+}
+
+export interface PersonaWriteResult {
+  tome: string;
+  document: PersonaDocument;
 }

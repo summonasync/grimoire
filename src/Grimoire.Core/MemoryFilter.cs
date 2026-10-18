@@ -12,6 +12,10 @@ public sealed record MemoryFilter
 
     public IReadOnlyList<string> ExcludeTags { get; init; } = [];
 
+    public string? Tome { get; init; }
+
+    public IReadOnlyList<string> Tomes { get; init; } = [];
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }
@@ -22,14 +26,22 @@ public sealed record MemoryFilter
 
     public int? Limit { get; init; }
 
+    public string? IdempotencyKey { get; init; }
+
+    public DateTimeOffset? CreatedAfter { get; init; }
+
     public bool IsEmpty =>
         Scopes.Count == 0 &&
         Kind is null &&
         Status is null &&
         Tags.Count == 0 &&
         ExcludeTags.Count == 0 &&
+        Tome is null &&
+        Tomes.Count == 0 &&
         ProjectId is null &&
         SessionId is null &&
         ExpiresBefore is null &&
-        TombstonedBefore is null;
+        TombstonedBefore is null &&
+        IdempotencyKey is null &&
+        CreatedAfter is null;
 }

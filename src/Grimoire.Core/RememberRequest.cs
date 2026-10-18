@@ -10,6 +10,8 @@ public sealed record RememberRequest
 
     public required MemoryActor Actor { get; init; }
 
+    public string? Tome { get; init; }
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }

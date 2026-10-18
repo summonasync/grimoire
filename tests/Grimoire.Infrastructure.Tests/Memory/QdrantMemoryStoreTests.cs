@@ -2,6 +2,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Tests.Fakes;
+using Grpc.Core;
 using Qdrant.Client.Grpc;
 using Shouldly;
 using Xunit;
@@ -92,6 +93,19 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
+    public async Task Upsert_StampsTheConfiguredVectorModelOntoThePoint()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var record = TestMemories.Create("stamped");
+        float[] vector = [1f, 0, 0, 0];
+
+        await store.UpsertAsync(record, vector, CancellationToken.None);
+
+        db.PayloadOf(record.Id)[MemoryPayloadFields.VectorModel].StringValue.ShouldBe("nomic-embed-text");
+    }
+
+    [Fact]
     public async Task Get_ById_RoundTripsEveryPayloadField()
     {
         var db = new FakeQdrantVectorDb();
@@ -114,7 +128,8 @@ public sealed class QdrantMemoryStoreTests
             supersededBy: superseded,
             tombstoneReason: "user asked",
             tombstonedAt: TestMemories.Moment.AddMinutes(9),
-            sources: [source]);
+            sources: [source],
+            idempotencyKey: "key-42");
         await store.UpsertAsync(record, new float[] { 0.5f, 0.5f, 0.5f, 0.5f }, CancellationToken.None);
 
         var loaded = await store.GetAsync(record.Id, CancellationToken.None);
@@ -139,6 +154,7 @@ public sealed class QdrantMemoryStoreTests
         loaded.TombstoneReason.ShouldBe("user asked");
         loaded.TombstonedAt.ShouldBe(TestMemories.Moment.AddMinutes(9));
         loaded.Sources.ShouldBe([source]);
+        loaded.IdempotencyKey.ShouldBe("key-42");
     }
 
     [Fact]
@@ -269,6 +285,73 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
+    public async Task List_WithTomeFilter_IsolatesTomes()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var alpha = await SeedAsync(store, TestMemories.Create("alpha", tome: "alpha"));
+        var fallback = await SeedAsync(store, TestMemories.Create("fallback"));
+
+        (await ListIdsAsync(store, new MemoryFilter { Tome = "alpha" })).ShouldBe([alpha.Id]);
+        (await ListIdsAsync(store, new MemoryFilter { Tome = TomeKey.DefaultTome })).ShouldBe([fallback.Id]);
+    }
+
+    [Fact]
+    public async Task List_WithLegacyPointWithoutPayloadTome_ResolvesItIntoDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var modern = await SeedAsync(store, TestMemories.Create("modern"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var defaults = await store.ListAsync(new MemoryFilter { Tome = TomeKey.DefaultTome }, CancellationToken.None);
+        var alpha = await store.ListAsync(new MemoryFilter { Tome = "alpha" }, CancellationToken.None);
+
+        defaults.Select(record => record.Id).ShouldBe(new[] { modern.Id, legacy.Id }, ignoreOrder: true);
+        defaults.Single(record => record.Id == legacy.Id).Tome.ShouldBe(TomeKey.DefaultTome);
+        alpha.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Count_WithTomeFilter_GroupsLegacyPointsIntoDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("modern default"));
+        await SeedAsync(store, TestMemories.Create("modern alpha", tome: "alpha"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var defaultCount = await store.CountAsync(new MemoryFilter { Tome = TomeKey.DefaultTome }, CancellationToken.None);
+        var alphaCount = await store.CountAsync(new MemoryFilter { Tome = "alpha" }, CancellationToken.None);
+
+        defaultCount.ShouldBe(2);
+        alphaCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Get_WithLegacyPointWithoutPayloadTome_DecodesAsDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("modern"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var loaded = await store.GetAsync(legacy.Id, CancellationToken.None);
+
+        loaded.ShouldNotBeNull();
+        loaded.Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
     public async Task List_WithExpiresBeforeBoundary_IncludesEqualTimestamp()
     {
         var db = new FakeQdrantVectorDb();
@@ -296,6 +379,36 @@ public sealed class QdrantMemoryStoreTests
             CancellationToken.None);
 
         records.Select(record => record.Id).ShouldBe([aged.Id]);
+    }
+
+    [Fact]
+    public async Task List_WithReplayLookupShape_ReturnsOnlyKeyedRecordInsideWindow()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var keyed = await SeedAsync(store, TestMemories.Create("keyed", created: TestMemories.Moment.AddHours(2), idempotencyKey: "key-1"));
+        await SeedAsync(store, TestMemories.Create("stale", created: TestMemories.Moment.AddHours(-30), idempotencyKey: "key-1"));
+        await SeedAsync(store, TestMemories.Create("otherKey", created: TestMemories.Moment.AddHours(1), idempotencyKey: "key-2"));
+        await SeedAsync(store, TestMemories.Create("unkeyed", created: TestMemories.Moment.AddHours(3)));
+
+        var records = await store.ListAsync(
+            new MemoryFilter { IdempotencyKey = "key-1", CreatedAfter = TestMemories.Moment },
+            CancellationToken.None);
+
+        records.Select(record => record.Id).ShouldBe([keyed.Id]);
+    }
+
+    [Fact]
+    public async Task List_WithCreatedAfterBoundary_IncludesEqualTimestamp()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var boundary = await SeedAsync(store, TestMemories.Create("boundary", created: TestMemories.Moment));
+        await SeedAsync(store, TestMemories.Create("older", created: TestMemories.Moment.AddHours(-1)));
+
+        var records = await store.ListAsync(new MemoryFilter { CreatedAfter = TestMemories.Moment }, CancellationToken.None);
+
+        records.Select(record => record.Id).ShouldBe([boundary.Id]);
     }
 
     [Fact]
@@ -382,14 +495,15 @@ public sealed class QdrantMemoryStoreTests
         db.CreateCollectionCount.ShouldBe(1);
         db.CreatedDimensions.ShouldBe(4);
         db.CreatedIndexes.Select(index => index.Field).ShouldBe(
-            ["scope", "kind", "status", "tags", "projectId", "sessionId", "expiresAt"], ignoreOrder: true);
+            ["scope", "kind", "status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
+            ignoreOrder: true);
         db.CreatedIndexes.ShouldContain(index => index.Type == PayloadSchemaType.Datetime);
-        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(6);
+        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
         db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
     }
 
     [Fact]
-    public async Task Store_WhenEmbeddingModelDiffers_ThrowsTypedErrorOnFirstUse()
+    public async Task Store_WhenEmbeddingModelDiffers_ThrowsReindexRequiredOnFirstUse()
     {
         var db = new FakeQdrantVectorDb();
         db.Seed(
@@ -398,14 +512,15 @@ public sealed class QdrantMemoryStoreTests
             EmbeddingFingerprint.From("other-model", 4).ToPayload());
         var store = NewStore(db);
 
-        var exception = await Should.ThrowAsync<EmbeddingFingerprintException>(
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
             () => store.ListAsync(new MemoryFilter(), CancellationToken.None));
 
         exception.Message.ShouldContain("other-model");
+        exception.Message.ShouldContain("run `grimoire reindex`");
     }
 
     [Fact]
-    public async Task Store_WhenEmbeddingDimensionsDiffers_ThrowsTypedErrorOnFirstUse()
+    public async Task Store_WhenEmbeddingDimensionsDiffers_ThrowsReindexRequiredOnFirstUse()
     {
         var db = new FakeQdrantVectorDb();
         db.Seed(
@@ -414,8 +529,35 @@ public sealed class QdrantMemoryStoreTests
             EmbeddingFingerprint.From("nomic-embed-text", 8).ToPayload());
         var store = NewStore(db);
 
-        await Should.ThrowAsync<EmbeddingFingerprintException>(
+        await Should.ThrowAsync<ReindexRequiredException>(
             () => store.ListAsync(new MemoryFilter(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_WhenReindexInProgress_RefusesOperationsUntilMarkerClears()
+    {
+        var db = new FakeQdrantVectorDb();
+        db.Seed(
+            EmbeddingFingerprint.MarkerPointId,
+            new float[4],
+            WithReindexState(EmbeddingFingerprint.From("nomic-embed-text", 4)));
+        var store = NewStore(db);
+
+        await Should.ThrowAsync<ReindexRequiredException>(
+            () => store.ListAsync(new MemoryFilter(), CancellationToken.None));
+
+        db.Seed(EmbeddingFingerprint.MarkerPointId, new float[4], EmbeddingFingerprint.From("nomic-embed-text", 4).ToPayload());
+
+        await store.ListAsync(new MemoryFilter(), CancellationToken.None);
+    }
+
+    private static IReadOnlyDictionary<string, Value> WithReindexState(EmbeddingFingerprint fingerprint)
+    {
+        var payload = new Dictionary<string, Value>(fingerprint.ToPayload())
+        {
+            [EmbeddingFingerprint.ReindexStateField] = EmbeddingFingerprint.ReindexStateInProgress,
+        };
+        return payload;
     }
 
     [Fact]
@@ -453,6 +595,129 @@ public sealed class QdrantMemoryStoreTests
         matches.Select(match => match.Record.Id).ShouldBe([active.Id]);
         count.ShouldBe(1);
     }
+
+    [Theory]
+    [InlineData(StatusCode.Unavailable)]
+    [InlineData(StatusCode.DeadlineExceeded)]
+    [InlineData(StatusCode.Unauthenticated)]
+    public async Task Store_WhenQdrantFailsWithAvailabilityGrade_ThrowsUpstreamUnavailable(StatusCode statusCode)
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await store.CountAsync(new MemoryFilter(), CancellationToken.None);
+        db.Failure = new RpcException(new Status(statusCode, "upstream degraded"));
+
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
+            () => store.CountAsync(new MemoryFilter(), CancellationToken.None));
+
+        exception.Upstream.ShouldBe("qdrant");
+        exception.InnerException.ShouldBeOfType<RpcException>();
+        exception.InnerException!.Message.ShouldContain("upstream degraded");
+    }
+
+    [Fact]
+    public async Task Store_WhenQdrantRejectsPermissions_KeepsRawRpcException()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await store.CountAsync(new MemoryFilter(), CancellationToken.None);
+        db.Failure = new RpcException(new Status(StatusCode.PermissionDenied, "forbidden"));
+
+        await Should.ThrowAsync<RpcException>(
+            () => store.CountAsync(new MemoryFilter(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_WhenBootstrapCannotReachQdrant_ThrowsUpstreamUnavailable()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        db.Failure = new RpcException(new Status(StatusCode.Unavailable, "host unreachable"));
+
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
+            () => store.GetAsync(Guid.NewGuid(), CancellationToken.None));
+
+        exception.Upstream.ShouldBe("qdrant");
+        exception.InnerException!.Message.ShouldContain("host unreachable");
+    }
+
+    [Fact]
+    public async Task UpsertBatch_WritesVectorsAndModelMarker_InChunksOf256()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await store.CountAsync(new MemoryFilter(), CancellationToken.None);
+        var upsertsBeforeBatch = db.UpsertCount;
+        var points = Enumerable.Range(0, 300)
+            .Select(index => new MemoryPoint
+            {
+                Record = TestMemories.Create($"batch-{index}", id: BatchId(index)),
+                Vector = new float[] { index, 1, 0, 0 },
+            })
+            .ToList();
+
+        await store.UpsertBatchAsync(points, CancellationToken.None);
+
+        (db.UpsertCount - upsertsBeforeBatch).ShouldBe(2);
+        foreach (var point in points)
+        {
+            db.VectorOf(point.Record.Id).ShouldBe(point.Vector.ToArray());
+            db.PayloadOf(point.Record.Id)[MemoryPayloadFields.VectorModel].StringValue.ShouldBe("nomic-embed-text");
+        }
+    }
+
+    [Fact]
+    public async Task EnumerateAll_CoversEveryStatusWithVectors_AndSkipsTheMarkerPoint()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var active = await SeedAsync(store, TestMemories.Create("active"), 1, 0, 0, 0);
+        var superseded = await SeedAsync(
+            store,
+            TestMemories.Create("superseded", status: MemoryStatus.Superseded, supersededBy: active.Id),
+            0, 1, 0, 0);
+        var tombstoned = await SeedAsync(
+            store,
+            TestMemories.Create("gone", status: MemoryStatus.Tombstoned, tombstoneReason: "gone", tombstonedAt: TestMemories.Moment),
+            0, 0, 1, 0);
+
+        var enumerated = await EnumerateAllAsync(store);
+
+        enumerated.Select(point => point.Record.Id).ShouldBe([active.Id, superseded.Id, tombstoned.Id]);
+        enumerated.ShouldNotContain(point => point.Record.Id == EmbeddingFingerprint.MarkerPointId);
+        enumerated.Single(point => point.Record.Id == tombstoned.Id).Vector.ToArray().ShouldBe([0f, 0, 1, 0]);
+    }
+
+    [Fact]
+    public async Task EnumerateAll_PagesThroughStoresLargerThanOneScrollPage()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var ids = new List<Guid>();
+
+        for (var index = 0; index < PointsPerScrollPage + 1; index++)
+        {
+            ids.Add((await SeedAsync(store, TestMemories.Create($"bulk-{index}"), 1, 0, 0, 0)).Id);
+        }
+
+        var enumerated = await EnumerateAllAsync(store);
+
+        enumerated.Select(point => point.Record.Id).ShouldBe(ids);
+    }
+
+    private static async Task<IReadOnlyList<MemoryPoint>> EnumerateAllAsync(QdrantMemoryStore store)
+    {
+        var enumerated = new List<MemoryPoint>();
+
+        await foreach (var point in store.EnumerateAllAsync(CancellationToken.None))
+        {
+            enumerated.Add(point);
+        }
+
+        return enumerated;
+    }
+
+    private static Guid BatchId(int index) => new(index, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     private static QdrantMemoryStore NewStore(FakeQdrantVectorDb db) =>
         new(db, "grimoire", new EmbeddingOptions { Model = "nomic-embed-text", Dimensions = 4 });

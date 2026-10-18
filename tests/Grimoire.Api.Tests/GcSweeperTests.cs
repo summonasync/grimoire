@@ -86,6 +86,90 @@ public class GcSweeperTests
     }
 
     [Fact]
+    public async Task Sweep_RecordsHeartbeatAfterSuccess()
+    {
+        var store = new FakeMemoryStore();
+        store.Seed("stale session observation", [1f, 0f], scope: MemoryScope.Session, expiresAt: FakeClock.DefaultStart.AddHours(-1));
+        var gcState = new FakeGcStateStore();
+        var sweeper = new GcSweeper(CreateService(store).GcAsync, new FakeClock(), Interval, gcState, pause: (_, _) => Task.CompletedTask);
+        using var cts = new CancellationTokenSource();
+
+        await sweeper.StartAsync(cts.Token);
+        await Wait.UntilAsync(() => gcState.Writes.Count > 0);
+        await sweeper.StopAsync(cts.Token);
+
+        var heartbeat = gcState.Writes[0];
+        heartbeat.IsUnknown.ShouldBeFalse();
+        heartbeat.LastAttemptAt.ShouldBe(FakeClock.DefaultStart);
+        heartbeat.LastSuccessAt.ShouldBe(FakeClock.DefaultStart);
+        heartbeat.RemovedExpired.ShouldBe(1);
+        heartbeat.RemovedTombstones.ShouldBe(0);
+        heartbeat.LastError.ShouldBeNull();
+        heartbeat.UnknownReason.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Sweep_FailureRecordsLastErrorAndKeepsThePreviousSuccess()
+    {
+        var store = new FlakyMemoryStore();
+        store.Seed("stale session observation", [1f, 0f], scope: MemoryScope.Session, expiresAt: FakeClock.DefaultStart.AddHours(-1));
+        var gcState = new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-2),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-2),
+            RemovedExpired = 1,
+        });
+        var firstSweep = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondSweep = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gateIndex = 0;
+        var gates = new[] { firstSweep.Task, secondSweep.Task, Task.CompletedTask };
+        var sweeper = new GcSweeper(
+            CreateService(store).GcAsync,
+            new FakeClock(),
+            Interval,
+            gcState,
+            pause: (_, _) => gates[Math.Min(gateIndex++, gates.Length - 1)]);
+        using var cts = new CancellationTokenSource();
+
+        await sweeper.StartAsync(cts.Token);
+        firstSweep.SetResult();
+        await Wait.UntilAsync(() => gcState.Writes.Count > 0);
+
+        var failure = gcState.Writes[0];
+        failure.LastAttemptAt.ShouldBe(FakeClock.DefaultStart);
+        failure.LastSuccessAt.ShouldBe(FakeClock.DefaultStart.AddHours(-2));
+        failure.RemovedExpired.ShouldBe(1);
+        failure.LastError.ShouldBe("qdrant is unreachable");
+
+        secondSweep.SetResult();
+        await Wait.UntilAsync(() => gcState.Writes.Count >= 2);
+        await sweeper.StopAsync(cts.Token);
+
+        var recovered = gcState.Writes[1];
+        recovered.LastError.ShouldBeNull();
+        recovered.LastSuccessAt.ShouldBe(FakeClock.DefaultStart);
+        recovered.RemovedExpired.ShouldBe(1);
+        recovered.UnknownReason.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Sweep_KeepsSweepingWhenTheHeartbeatWriteFails()
+    {
+        var store = new FakeMemoryStore();
+        store.Seed("stale session observation", [1f, 0f], scope: MemoryScope.Session, expiresAt: FakeClock.DefaultStart.AddHours(-1));
+        var gcState = new FakeGcStateStore { FailWrites = true };
+        var sweeper = new GcSweeper(CreateService(store).GcAsync, new FakeClock(), Interval, gcState, pause: (_, _) => Task.CompletedTask);
+        using var cts = new CancellationTokenSource();
+
+        await sweeper.StartAsync(cts.Token);
+        await Wait.UntilAsync(() => gcState.WriteAttempts >= 2);
+        await sweeper.StopAsync(cts.Token);
+
+        store.DeleteCount.ShouldBe(1);
+        gcState.Writes.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Constructor_RejectsNonPositiveInterval() =>
         Should.Throw<ArgumentOutOfRangeException>(() =>
             new GcSweeper(_ => Task.FromResult(new GcResult { ExpiredSessions = 0, AgedTombstones = 0 }), new FakeClock(), TimeSpan.Zero));

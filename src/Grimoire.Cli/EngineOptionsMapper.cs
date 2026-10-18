@@ -5,8 +5,9 @@ namespace Grimoire.Cli;
 
 internal static class EngineOptionsMapper
 {
-    public static MemoryEngineOptions ToEngineOptions(MemoryOptions options) => new()
+    public static MemoryEngineOptions ToEngineOptions(MemoryOptions options, string defaultTome) => new()
     {
+        DefaultTome = defaultTome,
         SessionTtlHours = options.SessionTtlHours,
         DedupSimilarityThreshold = options.DedupSimilarityThreshold,
         RecencyHalfLives = new RecencyHalfLives
@@ -17,5 +18,6 @@ internal static class EngineOptionsMapper
             PersonalDays = options.RecencyHalfLifeDays.Personal,
         },
         TombstoneRetentionDays = options.TombstoneRetentionDays,
+        ReindexBatchSize = Math.Max(1, options.ReindexBatchSize),
     };
 }

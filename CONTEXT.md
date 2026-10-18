@@ -9,13 +9,24 @@ Grimoire is a local agent memory service: short-term (session), long-term (proje
 and personal memory for AI coding agents, plus the tooling around it. One binary, three faces:
 
 - **MCP server** (`grimoire mcp`, stdio) — the agent-facing surface: `memory_remember`,
-  `memory_recall`, `memory_forget`, `memory_list`, `memory_persona_get`,
-  `memory_compact_candidates`, `memory_stats`.
+  `memory_recall`, `memory_brief`, `memory_scry`, `memory_forget`, `memory_list`,
+  `memory_persona_get`, `memory_compact_candidates`, `memory_stats`. Every tool takes a
+  `tome` param; omit it to work in your resolved tome (see Tomes below).
 - **Local web server** (`grimoire serve`, loopback HTTP + static SPA) — the human-facing
-  surface: browse/search/edit memories, edit persona, view settings and stats; also runs the
-  background GC sweep.
-- **CLI** (`grimoire <command>`) — management and scripting: `init`, `remember`, `recall`,
-  `list`, `forget`, `gc`, `persona`, `stats`, `config`.
+  surface: browse/search/edit memories, edit persona, scry across tomes, view settings and
+  stats; also runs the background GC sweep.
+- **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
+  a directory), `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
+  `stats`, `config`.
+
+The MCP tool surface is frozen by contract snapshots: `tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json`
+pins each tool's title, description, annotations, input schema and the output shape observed
+through the real transport, and `McpToolContractTests` turns any drift red — including a new
+tool without a snapshot and a stale snapshot for a removed tool. To change a tool
+intentionally: change the tool and update its snapshot in the same change (rerun the
+contract tests with `GRIMOIRE_UPDATE_TOOL_SNAPSHOTS=1` to regenerate), so review sees the
+contract diff in that JSON. The teaching-keyword pins in the same test class stay — they
+guard teaching quality the snapshots cannot express.
 
 All three faces are independent clients of one Qdrant instance (vectors + payload metadata).
 There is no internal hub and no IPC between faces — Qdrant is the single source of truth.
@@ -52,8 +63,17 @@ a payload. Two orthogonal dimensions:
 - Every write carries **actor provenance** (agent alias+vendor, or `human`).
 - **Recall is hybrid**: vector similarity × recency decay × importance, filtered by
   scope/kind/tags, active records only.
-- **Persona** is a first-class structured document in the personal scope, edited by humans
-  (UI/CLI), read by agents via `memory_persona_get`.
+- **Tomes partition records** (ADR-007): a tome is a persona/tenant container keyed by the
+  writer's actor alias. Each tome owns its persona document, facts and journal; several
+  agents may share one tome (crew case), product assistants get one each. The default tome
+  is `default`; keys are kebab-case. An agent's tome resolves by chain: explicit param →
+  `GRIMOIRE_TOME` → `GRIMOIRE_ACTOR` alias → the AGENTS.md claim block (`grimoire init
+  --agent`) → clientInfo actor → configured default.
+- **Persona** is a first-class structured document in the personal scope of a tome, edited
+  by humans (UI/CLI), read by agents via `memory_persona_get`.
+- **Scry is the one cross-tome door** (ADR-007): `memory_scry` reads other tomes at query
+  time — facts by default, journal opt-in, session never, anonymous by default
+  (`light`/`full` attribution opt-in); the store always keeps full provenance.
 
 ## Standing rules
 
@@ -61,6 +81,9 @@ a payload. Two orthogonal dimensions:
   delete is GC's job only: expired session records and aged tombstones.
 - **Loopback only.** The HTTP face binds `127.0.0.1` — that is the security boundary.
   Never bind a public interface without a new ADR.
+- **Tome isolation.** Writes are tome-bound and never cross tomes; reading another tome you
+  own and `memory_scry` are the deliberate doors (ADR-007). Session scope never crosses
+  tomes at all.
 - **Explicit writes only** in v1 — no auto-extraction from transcripts (ADR-003).
 - **The core never runs an LLM.** Journal → knowledge compaction works as: the core detects
   candidates (`memory_compact_candidates` — clustering + staleness over stored embeddings,

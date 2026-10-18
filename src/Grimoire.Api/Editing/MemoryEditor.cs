@@ -3,11 +3,16 @@ using Grimoire.Core;
 
 namespace Grimoire.Api.Editing;
 
-public sealed class MemoryEditor(IMemoryStore store, IEmbeddingProvider embeddings)
+public sealed class MemoryEditor(IMemoryStore store, IEmbeddingProvider embeddings, IClock clock)
 {
     public async Task<MemoryRecord?> EditAsync(Guid id, PatchMemoryRequest patch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(patch);
+
+        if (string.IsNullOrWhiteSpace(patch.Reason))
+        {
+            throw new ArgumentException("A patch reason is required.", nameof(patch));
+        }
 
         if (patch.Content is not null && string.IsNullOrWhiteSpace(patch.Content))
         {
@@ -37,17 +42,18 @@ public sealed class MemoryEditor(IMemoryStore store, IEmbeddingProvider embeddin
             Tags = patch.Tags ?? record.Tags,
             Importance = patch.Importance is null ? record.Importance : Math.Clamp(patch.Importance.Value, 0, 1),
         };
+        var corrected = CorrectionTrail.Append(updated, clock.UtcNow, MemoryActor.Human, CorrectionAction.Patch, patch.Reason);
 
         if (contentChanged)
         {
             var vector = await embeddings.EmbedAsync(updated.Content, cancellationToken);
-            await store.UpsertAsync(updated, vector, cancellationToken);
+            await store.UpsertAsync(corrected, vector, cancellationToken);
         }
         else
         {
-            await store.UpdateAsync(updated, cancellationToken);
+            await store.UpdateAsync(corrected, cancellationToken);
         }
 
-        return updated;
+        return corrected;
     }
 }

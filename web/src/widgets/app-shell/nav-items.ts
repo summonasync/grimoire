@@ -8,6 +8,7 @@ export interface TabItem {
 export const tabItems: TabItem[] = [
   { id: "memories", label: "Memories" },
   { id: "persona", label: "Persona" },
+  { id: "scry", label: "Scry" },
   { id: "settings", label: "Settings" },
   { id: "stats", label: "Stats" },
 ];

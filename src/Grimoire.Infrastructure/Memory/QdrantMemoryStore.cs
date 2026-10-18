@@ -1,5 +1,7 @@
+using System.Runtime.CompilerServices;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
+using Grpc.Core;
 using Qdrant.Client.Grpc;
 
 namespace Grimoire.Infrastructure.Memory;
@@ -8,15 +10,28 @@ namespace Grimoire.Infrastructure.Memory;
 /// Qdrant-backed <see cref="IMemoryStore"/>. Read contract: filtered reads
 /// (list/fetch/search/count) always constrain status to active unless the filter names a
 /// status explicitly, so tombstoned and superseded points never leak into unconstrained
-/// queries; range filters are inclusive (ExpiresBefore/TombstonedBefore match equal
-/// values); a null filter member is unconstrained; list/fetch results are ordered
+/// queries; range filters are inclusive (ExpiresBefore/TombstonedBefore/CreatedAfter match
+/// equal values); a null filter member is unconstrained; list/fetch results are ordered
 /// createdAt desc then id asc with filter.Limit applied after ordering. GetAsync is a
 /// raw point-by-id fetch that returns any status — Forget depends on seeing superseded
-/// and tombstoned records. Scroll pagination is adapter-internal.
+/// and tombstoned records. Scroll pagination is adapter-internal. EnumerateAllAsync is the
+/// one status-unconstrained read: the ops dump for export and reindex-class sweeps, marker
+/// point excluded, vectors included, paged the same way. UpsertBatchAsync writes record+vector
+/// pairs as recorded (import path) in bounded chunks, stamping the configured vector-model
+/// marker exactly like UpsertAsync. gRPC failures in the
+/// availability grades (unavailable, deadline exceeded, unauthenticated) surface as
+/// UpstreamUnavailableException; every other RpcException propagates unchanged. A store
+/// whose embedding state disagrees with the configuration (model changed, or a reindex
+/// sweep is in progress) refuses every operation with ReindexRequiredException until
+/// `grimoire reindex` completes.
 /// </summary>
 public sealed class QdrantMemoryStore : IMemoryStore
 {
     private const uint ScrollPageSize = 256;
+
+    private const int UpsertBatchSize = 256;
+
+    private const string UpstreamName = "qdrant";
 
     private readonly IQdrantVectorDb _db;
     private readonly string _collection;
@@ -41,19 +56,19 @@ public sealed class QdrantMemoryStore : IMemoryStore
     public async Task UpsertAsync(MemoryRecord record, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
         await EnsureReadyAsync(cancellationToken);
-        await _db.UpsertAsync(_collection, [Point(record, vector)], cancellationToken);
+        await GuardAsync(() => _db.UpsertAsync(_collection, [Point(record, vector)], cancellationToken));
     }
 
     public async Task UpdateAsync(MemoryRecord record, CancellationToken cancellationToken)
     {
         await EnsureReadyAsync(cancellationToken);
-        await _db.SetPayloadAsync(_collection, MemoryPayloadMapper.ToPayload(record), record.Id, cancellationToken);
+        await GuardAsync(() => _db.SetPayloadAsync(_collection, MemoryPayloadMapper.ToPayload(record), record.Id, cancellationToken));
     }
 
     public async Task<MemoryRecord?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         await EnsureReadyAsync(cancellationToken);
-        var points = await _db.RetrieveAsync(_collection, [id], withVectors: false, cancellationToken);
+        var points = await GuardAsync(() => _db.RetrieveAsync(_collection, [id], withVectors: false, cancellationToken));
 
         return points.Count == 0 ? null : Decode(points[0]);
     }
@@ -103,7 +118,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
             return [];
         }
 
-        var matches = await _db.SearchAsync(_collection, vector, MemoryFilterTranslator.Translate(filter), limit, cancellationToken);
+        var matches = await GuardAsync(() => _db.SearchAsync(_collection, vector, MemoryFilterTranslator.Translate(filter), limit, cancellationToken));
 
         return [.. matches.Select(match => new VectorMatch
         {
@@ -115,7 +130,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
     public async Task<long> CountAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
         await EnsureReadyAsync(cancellationToken);
-        return await _db.CountAsync(_collection, MemoryFilterTranslator.Translate(filter), cancellationToken);
+        return await GuardAsync(() => _db.CountAsync(_collection, MemoryFilterTranslator.Translate(filter), cancellationToken));
     }
 
     public async Task DeleteAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
@@ -127,7 +142,48 @@ public sealed class QdrantMemoryStore : IMemoryStore
             return;
         }
 
-        await _db.DeleteAsync(_collection, ids, cancellationToken);
+        await GuardAsync(() => _db.DeleteAsync(_collection, ids, cancellationToken));
+    }
+
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await EnsureReadyAsync(cancellationToken);
+
+        PointId? offset = null;
+
+        do
+        {
+            var page = await GuardAsync(() => _db.ScrollAsync(_collection, new Filter(), ScrollPageSize, offset, withVectors: true, cancellationToken));
+
+            foreach (var point in page.Result)
+            {
+                if (PointId(point.Id) == EmbeddingFingerprint.MarkerPointId)
+                {
+                    continue;
+                }
+
+                yield return ToPoint(point);
+            }
+
+            offset = page.NextPageOffset;
+        }
+        while (offset is not null);
+    }
+
+    public async Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        await EnsureReadyAsync(cancellationToken);
+
+        for (var start = 0; start < points.Count; start += UpsertBatchSize)
+        {
+            var batch = points
+                .Skip(start)
+                .Take(UpsertBatchSize)
+                .Select(point => Point(point.Record, point.Vector))
+                .ToArray();
+
+            await GuardAsync(() => _db.UpsertAsync(_collection, batch, cancellationToken));
+        }
     }
 
     private async Task<IReadOnlyList<RetrievedPoint>> ScrollAllAsync(Filter filter, bool withVectors, CancellationToken cancellationToken)
@@ -137,7 +193,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
 
         do
         {
-            var page = await _db.ScrollAsync(_collection, filter, ScrollPageSize, offset, withVectors, cancellationToken);
+            var page = await GuardAsync(() => _db.ScrollAsync(_collection, filter, ScrollPageSize, offset, withVectors, cancellationToken));
             collected.AddRange(page.Result);
             offset = page.NextPageOffset;
         }
@@ -162,7 +218,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
                 return;
             }
 
-            await _bootstrapper.EnsureAsync(_fingerprint, cancellationToken);
+            await GuardAsync(() => _bootstrapper.EnsureAsync(_fingerprint, cancellationToken));
             _ready = true;
         }
         finally
@@ -171,7 +227,36 @@ public sealed class QdrantMemoryStore : IMemoryStore
         }
     }
 
-    private static PointStruct Point(MemoryRecord record, ReadOnlyMemory<float> vector)
+    private async Task GuardAsync(Func<Task> call)
+    {
+        try
+        {
+            await call();
+        }
+        catch (RpcException ex) when (IsAvailabilityFailure(ex))
+        {
+            throw new UpstreamUnavailableException(UpstreamName, ex);
+        }
+    }
+
+    private async Task<T> GuardAsync<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await call();
+        }
+        catch (RpcException ex) when (IsAvailabilityFailure(ex))
+        {
+            throw new UpstreamUnavailableException(UpstreamName, ex);
+        }
+    }
+
+    private static bool IsAvailabilityFailure(RpcException ex) =>
+        ex.Status.StatusCode is StatusCode.Unavailable
+            or StatusCode.DeadlineExceeded
+            or StatusCode.Unauthenticated;
+
+    private PointStruct Point(MemoryRecord record, ReadOnlyMemory<float> vector)
     {
         var point = new PointStruct { Id = record.Id, Vectors = vector.ToArray() };
 
@@ -180,6 +265,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
             point.Payload.Add(pair.Key, pair.Value);
         }
 
+        point.Payload[MemoryPayloadFields.VectorModel] = _fingerprint.Model;
         return point;
     }
 

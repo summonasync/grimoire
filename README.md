@@ -12,10 +12,11 @@ One binary, three faces:
 | Web console | `grimoire serve` (loopback HTTP + SPA) | the human — browse, edit, tune |
 | CLI | `grimoire <command>` | scripts and quick queries |
 
-**Status**: MVP complete and acceptance-verified end to end — all three faces
-(CLI, MCP stdio, loopback web console) round-trip against a live Qdrant +
-Ollama, 353 tests green. Live work tracking happens on the Overmind board;
-this README describes the shipped shape plus the frozen contracts.
+**Status**: the MVP plus honest-writes, startup-brief and the tome model are landed
+and acceptance-verified end to end — all three faces (CLI, MCP stdio, loopback web
+console) round-trip against a live Qdrant + Ollama, 656 tests green. Live work
+tracking happens on the Overmind board; this README describes the shipped shape plus
+the frozen contracts.
 
 ## The name
 
@@ -65,6 +66,14 @@ content) plus a payload. Two orthogonal dimensions:
 | `global` | cross-project "the human said X" | cross-project encyclopedia |
 | `personal` | user habits and tastes | **persona** (identity / tone / rules) |
 
+Memories are partitioned into **tomes** (ADR-007) — persona/tenant containers keyed by
+the writer's actor alias. Each tome owns its persona, facts and journal; a coding crew
+shares one tome, product assistants get one each. An agent's tome resolves from an
+explicit param, `GRIMOIRE_TOME`, `GRIMOIRE_ACTOR`, the AGENTS.md claim block
+(`grimoire init --agent`) or clientInfo, falling back to the `default` tome. Isolation
+is the rule; `memory_scry` is the one deliberate cross-tome read — facts by default,
+journal opt-in, session never, anonymous by default.
+
 Recall is a hybrid score — similarity alone is not memory:
 
 ```
@@ -91,12 +100,14 @@ Standing rules, enforced from day one:
 
 | Tool | Teaches the agent to… |
 |---|---|
-| `memory_remember` | write a memory (journal vs fact routing, scope choice) |
-| `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
+| `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest |
+| `memory_compact_candidates` | get journal clusters worth distilling into facts |
 | `memory_forget` | retract with a reason (tombstone, never delete) |
 | `memory_list` | browse recent active memories |
-| `memory_persona_get` | read the persona document |
-| `memory_compact_candidates` | get journal clusters worth distilling into facts |
+| `memory_persona_get` | read the tome's persona document |
+| `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
+| `memory_remember` | write a memory (journal vs fact routing, scope choice) |
+| `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
 | `memory_stats` | counts, `pendingCompaction`, provider health |
 
 Tool descriptions are the extraction substitute — they are pinned by wire-level
@@ -110,7 +121,7 @@ contract tests.
 |---|---|
 | `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
 | `embedding` | `provider` (`ollama`), `model` (`nomic-embed-text`), `endpoint` (`http://localhost:11434`), `dimensions` (768) |
-| `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
+| `memory` | `defaultTome` (`default`), `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 
 Unknown keys are rejected — typos in a hand-edited file fail loudly.
@@ -140,5 +151,5 @@ Grimoire.sln
 Dependency direction: `Core ← Infrastructure / Mcp / Api ← Cli`. `Mcp` and
 `Api` never reference each other. Decisions live in
 [TECHNICAL-SOLUTIONS.md](TECHNICAL-SOLUTIONS.md) (ADR-001..007) — including
-the Books & Universe tenant model that lands post-MVP: persona-isolated
-memory books with one deliberate cross-book surface.
+the tome tenant model (ADR-007): persona-isolated tomes with one deliberate
+cross-tome read, `memory_scry`.

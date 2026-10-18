@@ -1,0 +1,42 @@
+{
+  "contract": {
+    "description": "The undo door of the memory system: bring back a memory whose earlier correction turned out wrong. Use it when you tombstoned a fact that is true again, or a newer memory superseded an older one that was right all along and the old truth must return. A restore is total: the record goes back to active with its tombstone lifted, and the superseding memory is tombstoned with reason \"restored <id>\" so exactly one active truth per fact remains. Repeating a restore is a safe no-op. An id that does not exist or lives in another tome comes back restored=false - an honest answer, not an error; writes never cross tomes. The response echoes the resolved tome and, when the record had a successor, where that superseder stands now. Every restore is recorded on the memory's correction trail with your reason, for the human to audit. upstream_unavailable means the store is unreachable and the reversal was not applied - the earlier correction stands. A crash between the two writes can leave the reversal half-applied; repeating the restore converges both sides.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "memoryId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "memoryId",
+        "reason"
+      ]
+    },
+    "name": "memory_restore",
+    "readOnly": false,
+    "title": "Restore a memory"
+  },
+  "output": {
+    "memoryId": "string",
+    "reason": "string",
+    "restored": "boolean",
+    "superseder": {
+      "memoryId": "string",
+      "tombstoneReason": "string",
+      "tombstoned": "boolean"
+    },
+    "tome": "string"
+  }
+}

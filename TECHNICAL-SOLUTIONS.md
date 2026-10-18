@@ -159,6 +159,7 @@ migration** — partitioning is read/write logic over the existing schema. Entit
 "Book"/"Universe" are working titles; a naming-sensei DOJO round runs inside feature 008,
 and the winning names are renamed across backend code, MCP/REST contracts and UI **within
 that feature** (user requirement: naming parity in code and UI, never docs-only).
+<removed 2026-10-18 — renamed to Tome/Scry, see addendum>
 
 Alternatives considered:
 - Agent = book (partition by every writer) — lost: breaks the crew-sharing spirit of
@@ -171,9 +172,20 @@ Alternatives considered:
 
 Consequences:
 + Both scenarios (crew / product assistants) run on one mechanic: isolation by default
-  with a deliberate sharing door (Universe).
-+ Zero migration — the schema already carries the book key.
+  with a deliberate sharing door (Universe). <removed 2026-10-18 — renamed to Tome/Scry, see addendum>
++ Zero migration — the schema already carries the book key. <removed 2026-10-18 — renamed to Tome/Scry, see addendum>
 − `memory_brief` and recall gain book-awareness (filters, per-book persona) — that is
-  feature 008's scope, post-MVP.
+  feature 008's scope, post-MVP. <removed 2026-10-18 — renamed to Tome/Scry, see addendum>
 − Session scope never crosses books; cross-agent serendipity is opt-in (journal) —
-  accepted.
+  accepted. <removed 2026-10-18 — renamed to Tome/Scry, see addendum>
+
+Naming addendum — 2026-10-18: the working titles "Book"/"Universe" landed as
+**Tome**/**Scry** (naming-sensei DOJO strike, user decision 2026-10-18) and were swept
+across backend code, MCP/REST contracts, the web UI and docs within feature
+`008-books-and-universe`. Tome = the persona/tenant container keyed by the writer's actor
+alias (per-tome persona, default tome `default`, resolution chain explicit param →
+`GRIMOIRE_TOME` → `GRIMOIRE_ACTOR` → AGENTS.md claim block → clientInfo → default). Scry =
+the deliberate cross-tome read surface (`memory_scry`: facts by default, journal opt-in,
+session never, anonymous by default with `light`/`full` attribution opt-in). Decision text
+above keeps Book/Universe wording as history; everywhere live the Tome/Scry names are
+canonical.

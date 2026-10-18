@@ -12,7 +12,7 @@ internal static class ToolResults
         {
             return await action(cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }

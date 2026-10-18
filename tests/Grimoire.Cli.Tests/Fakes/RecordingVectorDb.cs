@@ -78,14 +78,49 @@ public sealed class RecordingVectorDb : IQdrantVectorDb
         return Task.FromResult(result);
     }
 
-    public Task<ScrollResponse> ScrollAsync(string collection, Filter filter, uint limit, PointId? offset, bool withVectors, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+    public Task<ScrollResponse> ScrollAsync(string collection, Filter filter, uint limit, PointId? offset, bool withVectors, CancellationToken cancellationToken)
+    {
+        var matching = Matching(filter);
+        var start = offset is null ? 0 : matching.IndexOf(Guid.Parse(offset.Uuid)) + 1;
+        var page = matching.Skip(start).Take((int)limit).ToArray();
+        var response = new ScrollResponse();
+
+        foreach (var id in page)
+        {
+            var point = new RetrievedPoint { Id = id };
+            foreach (var pair in _points[id])
+            {
+                point.Payload.Add(pair.Key, pair.Value);
+            }
+
+            response.Result.Add(point);
+        }
+
+        if (start + page.Length < matching.Count)
+        {
+            response.NextPageOffset = page[^1];
+        }
+
+        return Task.FromResult(response);
+    }
 
     public Task<IReadOnlyList<ScoredPoint>> SearchAsync(string collection, ReadOnlyMemory<float> vector, Filter filter, int limit, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<long> CountAsync(string collection, Filter filter, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        Task.FromResult((long)Matching(filter).Count);
+
+    private List<Guid> Matching(Filter filter) => _points
+        .Where(pair => filter.Must.All(condition => Matches(condition, pair.Value)))
+        .Select(pair => pair.Key)
+        .ToList();
+
+    private static bool Matches(Condition condition, IReadOnlyDictionary<string, Value> payload) =>
+        condition.Field is { } field && field.Match is { } match && match.MatchValueCase == Match.MatchValueOneofCase.Keyword
+            ? payload.TryGetValue(field.Key, out var value)
+                && value.KindCase == Value.KindOneofCase.StringValue
+                && value.StringValue == match.Keyword
+            : throw new NotSupportedException($"Filter condition on '{condition.Field?.Key}' is not supported by the fake.");
 
     public Task DeleteAsync(string collection, IReadOnlyList<Guid> ids, CancellationToken cancellationToken) =>
         throw new NotSupportedException();

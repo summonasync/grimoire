@@ -1,0 +1,61 @@
+{
+  "contract": {
+    "description": "Read into OTHER tomes - the one deliberate cross-tome surface. Use it when your own tome lacks the answer: a fresh tome needs the project history another agent already recorded, the human asks what a sibling agent knows, or a decision might live in another project's tome. Ranking, query and limit behave exactly like memory_recall over active records; superseded and tombstoned entries never surface. Facts are searched by default, includeJournal opts into append-style journal entries, and session memories never cross tomes. Results are anonymous by default - attribution 'light' adds the author alias, 'full' adds alias and vendor; the store always keeps full provenance, anonymity is presentation only. Without tomes every other tome is searched; pass tomes to narrow. Tome keys must be kebab-case; an empty result means the other tomes hold nothing on the topic, not a failure. upstream_unavailable means the embedding provider or store is unreachable; scry is read-only and never writes into your tome.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "attribution": {
+          "default": "None",
+          "type": "string"
+        },
+        "includeJournal": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 5,
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "tomes": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "name": "memory_scry",
+    "readOnly": true,
+    "title": "Scry other tomes"
+  },
+  "output": {
+    "attribution": "string",
+    "count": "number",
+    "hits": {
+      "arrayOf": {
+        "content": "string",
+        "createdAt": "string",
+        "kind": "string",
+        "memoryId": "string",
+        "scope": "string",
+        "score": "number",
+        "similarity": "number",
+        "tags": {
+          "arrayOf": "string"
+        },
+        "tome": "string"
+      }
+    },
+    "tomes": {
+      "arrayOf": "string"
+    }
+  }
+}

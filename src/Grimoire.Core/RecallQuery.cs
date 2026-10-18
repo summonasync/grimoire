@@ -10,6 +10,10 @@ public sealed record RecallQuery
 
     public IReadOnlyList<string> Tags { get; init; } = [];
 
+    public string? Tome { get; init; }
+
+    public IReadOnlyList<string> Tomes { get; init; } = [];
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }

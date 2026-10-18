@@ -13,15 +13,20 @@ internal sealed class McpCommand(CliEnvironment environment)
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
-        var options = BuildHostOptions(ActorResolver.TryResolve(environment, invocation.Value("actor")));
+        var options = BuildHostOptions(
+            ActorResolver.TryResolve(environment, invocation.Value("actor")),
+            environment.Variable(McpHostOptions.TomeEnvironmentVariable),
+            environment.Variable(ActorResolver.EnvironmentVariable));
         environment.Error.WriteLine($"Grimoire MCP server '{options.ServerName}' v{options.ServerVersion} listening on stdio");
         return await McpHost.RunAsync(options, services, cancellationToken);
     }
 
-    internal static McpHostOptions BuildHostOptions(MemoryActor? actor) => new()
+    internal static McpHostOptions BuildHostOptions(MemoryActor? actor, string? envTome = null, string? envActor = null) => new()
     {
         ServerVersion = VersionText(),
         Actor = actor,
+        EnvTome = envTome,
+        EnvActor = envActor,
     };
 
     private static string VersionText() =>

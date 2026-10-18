@@ -59,4 +59,21 @@ public sealed class CommandLineParserTests
     {
         Should.Throw<UsageException>(() => CommandLineParser.Parse(["list", "--Scope", "project"]));
     }
+
+    [Fact]
+    public void Parse_BareSwitch_DoesNotConsumeTheNextToken()
+    {
+        var invocation = CommandLineParser.Parse(["scry", "deploy pipeline", "--include-journal", "--limit", "3"]);
+
+        invocation.Value("include-journal").ShouldBe("true");
+        invocation.Value("limit").ShouldBe("3");
+    }
+
+    [Fact]
+    public void Parse_SwitchAcceptsInlineFalse()
+    {
+        var invocation = CommandLineParser.Parse(["scry", "deploy pipeline", "--include-journal=false"]);
+
+        invocation.Value("include-journal").ShouldBe("false");
+    }
 }

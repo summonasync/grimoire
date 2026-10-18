@@ -1,6 +1,6 @@
 using Grimoire.Cli.CommandLine;
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
-using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,7 +55,17 @@ internal static class CliApplication
             Report(env, "config", ex.Message);
             return ExitCodes.Config;
         }
-        catch (Exception ex) when (ex is EmbeddingUnavailableException or EmbeddingFingerprintException or RpcException)
+        catch (UpstreamUnavailableException ex)
+        {
+            Report(env, "upstream_unavailable", UnavailableMessage(ex.Upstream));
+            return ExitCodes.UpstreamUnavailable;
+        }
+        catch (ReindexRequiredException ex)
+        {
+            Report(env, "reindex_required", ex.Message);
+            return ExitCodes.ReindexRequired;
+        }
+        catch (Exception ex) when (ex is EmbeddingFingerprintException or RpcException)
         {
             Report(env, "dependency", ex.Message);
             return ExitCodes.Dependency;
@@ -86,8 +96,13 @@ internal static class CliApplication
             "remember" => new Commands.RememberCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "recall" => new Commands.RecallCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "list" => new Commands.ListCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "brief" => new Commands.BriefCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "scry" => new Commands.ScryCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "forget" => new Commands.ForgetCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "gc" => new Commands.GcCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "reindex" => new Commands.ReindexCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "export" => new Commands.ExportCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "import" => new Commands.ImportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "persona" => new Commands.PersonaCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "stats" => new Commands.StatsCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "config" => new Commands.ConfigCommand(env).RunAsync(invocation, config, services, cancellationToken),
@@ -143,4 +158,8 @@ internal static class CliApplication
 
     private static void Report(CliEnvironment env, string code, string message) =>
         env.Error.WriteLine($"error [{code}]: {message}");
+
+    private static string UnavailableMessage(string upstream) =>
+        $"Upstream '{upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +
+        "Nothing was written by this call. Check the service and its configuration, then retry.";
 }

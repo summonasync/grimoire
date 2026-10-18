@@ -2,10 +2,9 @@ using System.ComponentModel;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
-
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class RecallTool(MemoryService memories)
+internal sealed class RecallTool(MemoryService memories, MemoryActorProvider actors)
 {
     public const string Name = "memory_recall";
 
@@ -15,8 +14,11 @@ internal sealed class RecallTool(MemoryService memories)
         "Search memory before you assume. Call it at session start (project and global scope) to load standing " +
         "context, before redoing work that may already have a decision on record, and whenever prior context would " +
         "change the answer: \"did we settle X\", \"what did the human say about Y\", \"why is this built this way\". " +
-        "Matches are ranked by similarity, recency and importance over active records, and reading them bumps their " +
-        "access stats so live knowledge stays fresh. Narrow with scope, projectId or tags instead of raising the limit.";
+        "Returns ranked matches - id, content, scope, kind, tags, similarity and score - over active records only: " +
+        "superseded and tombstoned never surface. Reading a match bumps its access stats so live knowledge stays " +
+        "fresh. Narrow with scope, projectId or tags instead of raising the limit, and pass tome to read another " +
+        "tome you own; memory_scry answers across tomes instead. upstream_unavailable means the embedding provider " +
+        "or store is unreachable; the call is read-only and writes nothing.";
 
     public Task<CallToolResult> Recall(
         [Description("What to look for. Phrasing may be approximate - recall is semantic, not keyword match.")]
@@ -33,6 +35,8 @@ internal sealed class RecallTool(MemoryService memories)
         string[]? tags = null,
         [Description("Maximum matches to return, default 5.")]
         int limit = 5,
+        [Description("Tome to search; omit for your resolved tome, or name another tome you own to read it. The response echoes the tome actually searched. For cross-tome context without leaving your tome use memory_scry.")]
+        string? tome = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -51,14 +55,21 @@ internal sealed class RecallTool(MemoryService memories)
                 nameof(limit))));
         }
 
+        if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
+        {
+            return Task.FromResult(ToolResults.Failure(tomeError));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
             var matches = await memories.RecallAsync(new RecallQuery
             {
                 Text = query,
                 Scopes = scope is null ? [] : [scope.Value],
                 Kind = kind,
                 Tags = tags ?? [],
+                Tome = resolvedTome,
                 ProjectId = projectId,
                 SessionId = sessionId,
                 Limit = limit,
@@ -66,6 +77,7 @@ internal sealed class RecallTool(MemoryService memories)
 
             return ToolResults.Success(new RecallView
             {
+                Tome = resolvedTome,
                 Matches = [.. matches.Select(ToHit)],
                 Count = matches.Count,
             });

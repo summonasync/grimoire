@@ -2,6 +2,7 @@ using System.Net;
 using Grimoire.Api.Contracts;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Querying;
+using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -14,8 +15,10 @@ internal static class MemoryEndpoints
         this WebApplication app,
         MemoryService memories,
         MemoryEditor editor,
+        CorrectionService corrections,
         MemoryQueryRunner queryRunner,
-        IMemoryStore store)
+        IMemoryStore store,
+        ApiTomeResolver tomes)
     {
         app.MapGet("/api/memories", async ([AsParameters] MemoryListQuery query, CancellationToken cancellationToken) =>
         {
@@ -29,7 +32,13 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, ex.Code, ex.Message);
             }
 
-            return Results.Ok(await queryRunner.RunAsync(query.Query, parsed, cancellationToken));
+            var tome = parsed.Filter.Tome ?? await tomes.ResolveAsync(null, cancellationToken);
+            var records = await queryRunner.RunAsync(
+                query.Query,
+                parsed with { Filter = parsed.Filter with { Tome = tome } },
+                cancellationToken);
+
+            return Results.Ok(new MemoryListResponse(tome, records.Count, records));
         });
 
         app.MapGet("/api/memories/{id:guid}", async (Guid id, CancellationToken cancellationToken) =>
@@ -42,14 +51,24 @@ internal static class MemoryEndpoints
 
         app.MapPost("/api/memories", async (CreateMemoryRequest request, CancellationToken cancellationToken) =>
         {
+            if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
             try
             {
+                var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
                 var result = await memories.RememberAsync(new RememberRequest
                 {
                     Content = request.Content,
                     Scope = request.Scope,
                     Kind = request.Kind,
                     Actor = MemoryActor.Human,
+                    Tome = tome,
                     ProjectId = request.ProjectId,
                     SessionId = request.SessionId,
                     Tags = request.Tags,
@@ -59,7 +78,12 @@ internal static class MemoryEndpoints
 
                 return Results.Created(
                     $"/api/memories/{result.Record.Id}",
-                    new CreateMemoryResponse(result.Record, result.SupersededId));
+                    new CreateMemoryResponse(
+                        result.Record,
+                        tome,
+                        result.SupersededId,
+                        result.IdempotentReplay,
+                        result.MaintenancePending));
             }
             catch (ArgumentException ex)
             {
@@ -69,6 +93,11 @@ internal static class MemoryEndpoints
 
         app.MapPatch("/api/memories/{id:guid}", async (Guid id, PatchMemoryRequest request, CancellationToken cancellationToken) =>
         {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A patch reason is required.");
+            }
+
             try
             {
                 var updated = await editor.EditAsync(id, request, cancellationToken);
@@ -93,6 +122,15 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A tombstone reason is required.");
             }
 
+            if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
             var record = await store.GetAsync(id, cancellationToken);
             if (record is null)
             {
@@ -104,16 +142,79 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.Conflict, "already_tombstoned", $"Memory '{id}' is already tombstoned.");
             }
 
-            if (!await memories.ForgetAsync(id, request.Reason, cancellationToken))
+            if (!await memories.ForgetAsync(id, request.Reason, cancellationToken, tome))
             {
                 var raced = await store.GetAsync(id, cancellationToken);
                 return raced is null
                     ? ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.")
-                    : ApiResponses.Error(HttpStatusCode.Conflict, "already_tombstoned", $"Memory '{id}' is already tombstoned.");
+                    : raced.Status == MemoryStatus.Tombstoned
+                        ? ApiResponses.Error(HttpStatusCode.Conflict, "already_tombstoned", $"Memory '{id}' is already tombstoned.")
+                        : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{tome}'.");
             }
 
             return await store.GetAsync(id, cancellationToken) is { } forgotten
                 ? Results.Ok(forgotten)
+                : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+        });
+
+        app.MapPost("/api/memories/{id:guid}/restore", async (Guid id, RestoreMemoryRequest request, CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A restore reason is required.");
+            }
+
+            if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is null)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+            }
+
+            if (record.Tome != tome)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{tome}'.");
+            }
+
+            var result = await corrections.RestoreAsync(id, request.Reason, cancellationToken, tome, MemoryActor.Human);
+            return result.Record is { } current
+                ? Results.Ok(new RestoreMemoryResponse(current, tome, result.Restored, result.Superseder))
+                : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+        });
+
+        app.MapGet("/api/memories/{id:guid}/history", async (Guid id, string? tome, CancellationToken cancellationToken) =>
+        {
+            if (tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var resolved = await tomes.ResolveAsync(tome, cancellationToken);
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is null)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+            }
+
+            if (record.Tome != resolved)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{resolved}'.");
+            }
+
+            var history = await corrections.HistoryAsync(id, cancellationToken, resolved);
+            return history.Found
+                ? Results.Ok(new HistoryResponse(resolved, history.Chain))
                 : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
         });
     }

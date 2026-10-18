@@ -78,6 +78,33 @@ public sealed class MemoryServiceForgetTests
         await Should.ThrowAsync<ArgumentException>(() => _service.ForgetAsync(record.Id, " ", CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Forget_AppendsTrailLineWithReasonAndActor()
+    {
+        var record = Seed();
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        await _service.ForgetAsync(record.Id, "wrong info", CancellationToken.None, actor: TestMemories.Agent);
+
+        var stored = (await _store.GetAsync(record.Id, CancellationToken.None))!;
+        var line = stored.Corrections.Single();
+        line.Action.ShouldBe(CorrectionAction.Forget);
+        line.Reason.ShouldBe("wrong info");
+        line.Actor.ShouldBe(TestMemories.Agent);
+        line.At.ShouldBe(_clock.UtcNow);
+    }
+
+    [Fact]
+    public async Task Forget_RefusedDoesNotTouchTheTrail()
+    {
+        var record = Seed(status: MemoryStatus.Tombstoned, tombstoneReason: "original", tombstonedAt: FakeClock.DefaultStart);
+
+        var forgotten = await _service.ForgetAsync(record.Id, "second reason", CancellationToken.None);
+
+        forgotten.ShouldBeFalse();
+        (await _store.GetAsync(record.Id, CancellationToken.None))!.Corrections.ShouldBe([]);
+    }
+
     private MemoryRecord Seed(
         MemoryStatus status = MemoryStatus.Active,
         Guid? supersededBy = null,

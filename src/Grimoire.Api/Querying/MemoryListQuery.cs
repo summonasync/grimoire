@@ -8,4 +8,5 @@ public sealed record MemoryListQuery(
     string? Tag,
     string? ProjectId,
     string? SessionId,
+    string? Tome,
     int? Limit);

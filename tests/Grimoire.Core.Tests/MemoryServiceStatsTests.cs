@@ -29,10 +29,64 @@ public sealed class MemoryServiceStatsTests
         stats.Superseded.ShouldBe(0);
         stats.Tombstoned.ShouldBe(0);
         stats.PendingCompaction.ShouldBe(0);
+        stats.IdempotencyConflicts.ShouldBe(0);
+        stats.Gc.IsUnknown.ShouldBeTrue();
+        stats.Gc.UnknownReason.ShouldBe("gc state store is not configured");
+        stats.Gc.Stale.ShouldBeTrue();
         foreach (var pair in stats.ActiveByScope)
         {
             pair.Value.ShouldBe(0);
         }
+    }
+
+    [Fact]
+    public async Task Stats_ReportsTheGcHeartbeatFreshEnoughToNotBeStale()
+    {
+        var gcState = new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = _clock.UtcNow.AddMinutes(-10),
+            LastSuccessAt = _clock.UtcNow.AddMinutes(-5),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        });
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) }, gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.IsUnknown.ShouldBeFalse();
+        stats.Gc.LastSuccessAt.ShouldBe(_clock.UtcNow.AddMinutes(-5));
+        stats.Gc.RemovedExpired.ShouldBe(2);
+        stats.Gc.RemovedTombstones.ShouldBe(1);
+        stats.Gc.LastError.ShouldBeNull();
+        stats.Gc.Stale.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Stats_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
+    {
+        var gcState = new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = _clock.UtcNow.AddHours(-3),
+            LastSuccessAt = _clock.UtcNow.AddHours(-3),
+        });
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) }, gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.Stale.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Stats_SurfacesAnUnreadableHeartbeatAsUnknownButNotACrash()
+    {
+        var gcState = new FakeGcStateStore(GcState.Unknown("gc state file is not valid JSON: boom"));
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions(), gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.IsUnknown.ShouldBeTrue();
+        stats.Gc.UnknownReason.ShouldBe("gc state file is not valid JSON: boom");
+        stats.Gc.Stale.ShouldBeTrue();
     }
 
     [Fact]
@@ -95,6 +149,68 @@ public sealed class MemoryServiceStatsTests
         stats.PendingCompaction.ShouldBe(0);
     }
 
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_ZeroOnHealthyStore()
+    {
+        Seed("original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a");
+        Seed("unrelated", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-b");
+        Seed("keyless", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_CountsOrphansOfDuplicateGroup()
+    {
+        Seed("original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart);
+        Seed("orphan one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddMinutes(1));
+        Seed("orphan two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddMinutes(2));
+        Seed("healthy other", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-b", created: FakeClock.DefaultStart.AddMinutes(3));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_IgnoresInactiveAndStaleRecords()
+    {
+        Seed("active original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a");
+        Seed("superseded twin", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Superseded, idempotencyKey: "key-a", supersededBy: Guid.NewGuid());
+        Seed("stale orphan", MemoryScope.Global, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddDays(-2));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Stats_ByTome_CountsActiveAndTombstonedPerKey()
+    {
+        Seed("default active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+        Seed("alpha active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha");
+        Seed("alpha second", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "alpha");
+        Seed("alpha buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, tome: "alpha", tombstoneReason: "gone", tombstonedAt: FakeClock.DefaultStart);
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.Keys.ShouldBe(["alpha", TomeKey.DefaultTome]);
+        stats.ByTome[TomeKey.DefaultTome].Active.ShouldBe(1);
+        stats.ByTome[TomeKey.DefaultTome].Tombstoned.ShouldBe(0);
+        stats.ByTome["alpha"].Active.ShouldBe(2);
+        stats.ByTome["alpha"].Tombstoned.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Stats_ByTome_EmptyStore_HasNoEntries()
+    {
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.ShouldBeEmpty();
+    }
+
     private void Seed(
         string content,
         MemoryScope scope,
@@ -104,7 +220,10 @@ public sealed class MemoryServiceStatsTests
         DateTimeOffset? accessed = null,
         Guid? supersededBy = null,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string? idempotencyKey = null,
+        DateTimeOffset? created = null,
+        string? tome = null)
     {
         var memoryVector = vector ?? [1f, 0f, 0f];
         var record = TestMemories.Create(
@@ -116,7 +235,10 @@ public sealed class MemoryServiceStatsTests
             status: status,
             supersededBy: supersededBy,
             tombstoneReason: tombstoneReason,
-            tombstonedAt: tombstonedAt);
+            tombstonedAt: tombstonedAt,
+            idempotencyKey: idempotencyKey,
+            created: created,
+            tome: tome);
         _store.Seed(record, memoryVector);
     }
 }

@@ -9,12 +9,22 @@ export interface MemoryActor {
   vendor: string | null;
 }
 
+export type CorrectionAction = "patch" | "restore" | "supersede" | "forget";
+
+export interface CorrectionEntry {
+  at: string;
+  actor: MemoryActor;
+  action: CorrectionAction;
+  reason: string;
+}
+
 export interface MemoryRecord {
   id: string;
   content: string;
   scope: MemoryScope;
   kind: MemoryKind;
   actor: MemoryActor;
+  tome: string;
   projectId: string | null;
   sessionId: string | null;
   tags: string[];
@@ -28,6 +38,7 @@ export interface MemoryRecord {
   tombstoneReason: string | null;
   tombstonedAt: string | null;
   sources: string[];
+  corrections: CorrectionEntry[];
 }
 
 export interface PersonaDocument {
@@ -77,10 +88,18 @@ export interface SettingsResponse {
   editable: string[];
 }
 
+export interface TomeStats {
+  active: number;
+  tombstoned: number;
+}
+
 export interface MemoryStats {
+  tome: string;
   active: number;
   superseded: number;
   tombstoned: number;
   activeByScope: Record<MemoryScope, number>;
   pendingCompaction: number;
+  idempotencyConflicts: number;
+  byTome: Record<string, TomeStats>;
 }

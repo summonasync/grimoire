@@ -1,5 +1,7 @@
 using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
+using Grimoire.Infrastructure.Memory;
+using Qdrant.Client.Grpc;
 using Shouldly;
 using Xunit;
 
@@ -43,6 +45,15 @@ public sealed class CliApplicationTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         _host.Output.ToString().ShouldContain(record.Id.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_RoutesBriefAgainstFakes()
+    {
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("facts: (empty)");
     }
 
     [Fact]
@@ -120,14 +131,17 @@ public sealed class CliApplicationTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_EmbeddingOffline_ExitsDependency()
+    public async Task RunAsync_TypedUpstreamFailure_ExitsUpstreamUnavailableWithoutWriting()
     {
         _host.Embeddings.UnavailableText = "deploy";
 
-        var code = await _host.RunAsync("recall", "deploy");
+        var code = await _host.RunAsync("remember", "deploy");
 
-        code.ShouldBe(ExitCodes.Dependency);
-        _host.Output.ToString().ShouldContain("error [dependency]");
+        code.ShouldBe(ExitCodes.UpstreamUnavailable);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [upstream_unavailable]");
+        output.ShouldContain("Nothing was written");
+        _host.Store.Upserted.ShouldBeEmpty();
     }
 
     [Fact]
@@ -137,6 +151,34 @@ public sealed class CliApplicationTests : IDisposable
         var code = await CliApplication.RunAsync(["serve", "--web-root", Path.GetTempPath()], host.Env, new CancellationToken(canceled: true));
 
         code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_Serve_WhenEmbeddingModelChanged_RefusesToStart()
+    {
+        var db = new RecordingVectorDb { CollectionExists = true };
+        await db.UpsertAsync("grimoire", [Marker("old-model", 4)], CancellationToken.None);
+        using var host = new TestHost(db: db);
+
+        var code = await CliApplication.RunAsync(["serve", "--web-root", Path.GetTempPath()], host.Env, new CancellationToken(canceled: true));
+
+        code.ShouldBe(ExitCodes.ReindexRequired);
+        var output = host.Output.ToString();
+        output.ShouldContain("error [reindex_required]");
+        output.ShouldContain("run `grimoire reindex`");
+        output.ShouldNotContain("Serving");
+    }
+
+    private static PointStruct Marker(string model, int dimensions)
+    {
+        var marker = new PointStruct { Id = EmbeddingFingerprint.MarkerPointId, Vectors = new float[dimensions] };
+
+        foreach (var pair in EmbeddingFingerprint.From(model, dimensions).ToPayload())
+        {
+            marker.Payload.Add(pair.Key, pair.Value);
+        }
+
+        return marker;
     }
 
     [Fact]

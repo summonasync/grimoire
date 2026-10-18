@@ -13,12 +13,15 @@ changing anything — this file is the entry point, not a replacement.
 Grimoire — a local agent memory service (short-term session, long-term project/global,
 personal) with three faces of one binary: MCP stdio server (`grimoire mcp`), loopback web
 server + SPA (`grimoire serve`), management CLI. Store: Qdrant. Embeddings: Ollama behind a
-pluggable port. Full topology: `CONTEXT.md`.
+pluggable port. Memory is partitioned into tomes (ADR-007) — persona-isolated containers
+keyed by the writer's actor alias; `memory_scry` is the one deliberate cross-tome read.
+Full topology: `CONTEXT.md`.
 
-Current state: the MVP (board feature `001-agent-memory-mvp`) is in flight — live status
-lives on the Overmind board, never in these files. Post-MVP pipeline: `003-honest-writes`,
-`004-agent-startup-brief`, `008-books-and-universe` (the Books & Universe tenant model,
-ADR-007), then `005`–`007`. Work planning happens ONLY through the Overmind MCP tools.
+Current state: landed — the MVP (`001-agent-memory-mvp`), `003-honest-writes`,
+`004-agent-startup-brief` and `008-books-and-universe` (the Tome/Scry tenant model, ADR-007;
+slug keeps its decision-time working title). In flight: `005`–`007`. Live status lives on
+the Overmind board, never in these files. Work planning happens ONLY through the Overmind
+MCP tools.
 
 ## Stack
 
@@ -45,6 +48,8 @@ ADR-007), then `005`–`007`. Work planning happens ONLY through the Overmind MC
 - **No silent deletes**: `forget` = tombstone (status + reason + timestamp); GC owns hard
   delete (expired session records, aged tombstones).
 - **Every memory write carries actor provenance** (agent alias+vendor, or `human`).
+- **Tome isolation**: writes are tome-bound and never cross tomes; cross-tome reads go
+  through `memory_scry` (or naming a tome you own), session scope never crosses.
 - The Qdrant payload schema is an **additive-only contract**.
 - Dependency direction `Core ← Infrastructure / Mcp / Api ← Cli`; `Mcp` and `Api` never
   reference each other.
@@ -69,7 +74,7 @@ ADR-007), then `005`–`007`. Work planning happens ONLY through the Overmind MC
 - `CONTEXT.md` — system shape: three faces, memory model (scope × kind), standing rules
 - `STRUCTURE.md` — repository layout, dependency direction, code conventions
 - `TECHNICAL-SOLUTIONS.md` — ADR-001..007 (decision history incl. ADR-006 naming, ADR-007
-  Books & Universe tenant model)
+  Tome/Scry tenant model — decided under the working title "Books & Universe")
 - `audits/` — review reports and research artifacts (`review-001-*.md`,
   `architect-review-*.md`, `naming-tournament-*.md`, `strategy-grimoire-*.md`)
 - Overmind board (MCP tools / web UI) — the ONLY live source of feature/task status;

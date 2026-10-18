@@ -11,11 +11,13 @@ Grimoire.sln
 │   ├── Grimoire.Core/             Domain + application: MemoryRecord, Scope/Kind,
 │   │                              RecallQuery, scoring; ports: IMemoryStore,
 │   │                              IEmbeddingProvider, IClock; MemoryService
-│   │                              (remember/recall/forget/list/gc/stats); PersonaService.
-│   │                              Zero external service dependencies.
+│   │                              (remember/recall/forget/list/gc/stats); PersonaService;
+│   │                              BriefService (startup brief); tome partitioning:
+│   │                              TomeKey, TomeResolver, TomeStats. Zero external
+│   │                              service dependencies.
 │   ├── Grimoire.Infrastructure/   Adapters: QdrantMemoryStore, OllamaEmbeddingProvider,
 │   │                              config loading (~/.grimoire/config.json + GRIMOIRE_* env).
-│   ├── Grimoire.Mcp/              MCP face: stdio server, tools over MemoryService.
+│   ├── Grimoire.Mcp/              MCP face: stdio server, agent tools over Core services.
 │   ├── Grimoire.Api/              HTTP face: Kestrel loopback host, minimal API endpoints,
 │   │                              static SPA hosting, background GC sweep.
 │   └── Grimoire.Cli/              ENTRY POINT (exe): command routing; `grimoire mcp` hosts

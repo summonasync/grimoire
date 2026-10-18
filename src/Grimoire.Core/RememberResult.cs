@@ -7,4 +7,8 @@ public sealed record RememberResult
     public Guid? SupersededId { get; init; }
 
     public bool SupersededExisting => SupersededId is not null;
+
+    public bool IdempotentReplay { get; init; }
+
+    public bool MaintenancePending { get; init; }
 }

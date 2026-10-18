@@ -16,9 +16,11 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
   const [content, setContent] = useState(record.content);
   const [tags, setTags] = useState(record.tags.join(", "));
   const [importance, setImportance] = useState(String(record.importance));
+  const [reason, setReason] = useState("");
 
   const nextTags = parseTagList(tags);
   const nextContent = content.trim();
+  const trimmedReason = reason.trim();
   const parsedImportance = Number(importance);
   const contentChanged = nextContent.length > 0 && nextContent !== record.content;
   const tagsChanged =
@@ -29,14 +31,17 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
     Number.isFinite(parsedImportance) &&
     parsedImportance !== record.importance;
   const dirty = contentChanged || tagsChanged || importanceChanged;
+  const reasonMissing = trimmedReason.length === 0;
+  const canSave = dirty && !reasonMissing && !patch.isPending;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (!dirty || patch.isPending) {
+    if (!canSave) {
       return;
     }
     patch.mutate(
       {
+        reason: trimmedReason,
         ...(contentChanged ? { content: nextContent } : {}),
         ...(tagsChanged ? { tags: nextTags } : {}),
         ...(importanceChanged ? { importance: parsedImportance } : {}),
@@ -80,11 +85,27 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
           />
         </label>
       </div>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-muted">
+          Reason <span className="text-red-400">*</span>
+        </span>
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          rows={2}
+          placeholder="Why is this change needed?"
+          aria-label="Correction reason"
+          aria-required
+          className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+        />
+        <span className="text-xs text-muted">Stored on the correction trail.</span>
+      </label>
       {patch.error && <p className="text-xs text-red-400">{patch.error.message}</p>}
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={!dirty || patch.isPending}
+          disabled={!canSave}
+          title={reasonMissing ? "A reason is required to save." : undefined}
           className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition-opacity disabled:opacity-50"
         >
           {patch.isPending ? "Saving…" : "Save"}

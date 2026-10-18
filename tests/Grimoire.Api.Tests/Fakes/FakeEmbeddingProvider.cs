@@ -8,9 +8,16 @@ public sealed class FakeEmbeddingProvider : IEmbeddingProvider
 
     public List<string> Requests { get; } = [];
 
+    public Exception? Failure { get; set; }
+
     public Task<ReadOnlyMemory<float>> EmbedAsync(string text, CancellationToken cancellationToken)
     {
         Requests.Add(text);
+
+        if (Failure is not null)
+        {
+            throw Failure;
+        }
 
         if (!Vectors.TryGetValue(text, out var vector))
         {

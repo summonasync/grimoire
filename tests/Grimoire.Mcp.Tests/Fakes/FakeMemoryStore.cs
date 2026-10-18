@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Grimoire.Core;
 
 namespace Grimoire.Mcp.Tests;
@@ -10,6 +11,8 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public List<IReadOnlyList<Guid>> DeletedBatches { get; } = [];
 
+    public Exception? UpdateFailure { get; set; }
+
     public async Task UpsertAsync(MemoryRecord record, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
         await Task.Yield();
@@ -18,6 +21,11 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public Task UpdateAsync(MemoryRecord record, CancellationToken cancellationToken)
     {
+        if (UpdateFailure is not null)
+        {
+            throw UpdateFailure;
+        }
+
         if (!_points.TryGetValue(record.Id, out var point))
         {
             throw new InvalidOperationException($"Update of unknown point {record.Id}.");
@@ -76,6 +84,26 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        foreach (var point in _points.Values)
+        {
+            yield return point;
+        }
+    }
+
+    public Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        foreach (var point in points)
+        {
+            _points[point.Record.Id] = point;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private IEnumerable<MemoryPoint> Matches(MemoryFilter filter)
     {
         return _points.Values
@@ -122,12 +150,32 @@ internal sealed class FakeMemoryStore : IMemoryStore
             return false;
         }
 
+        if (filter.Tome is not null && record.Tome != filter.Tome)
+        {
+            return false;
+        }
+
+        if (filter.Tomes.Count > 0 && !filter.Tomes.Contains(record.Tome))
+        {
+            return false;
+        }
+
         if (filter.ExpiresBefore is not null && (record.ExpiresAt is null || record.ExpiresAt > filter.ExpiresBefore))
         {
             return false;
         }
 
         if (filter.TombstonedBefore is not null && (record.TombstonedAt is null || record.TombstonedAt > filter.TombstonedBefore))
+        {
+            return false;
+        }
+
+        if (filter.IdempotencyKey is not null && record.IdempotencyKey != filter.IdempotencyKey)
+        {
+            return false;
+        }
+
+        if (filter.CreatedAfter is not null && record.CreatedAt < filter.CreatedAfter)
         {
             return false;
         }

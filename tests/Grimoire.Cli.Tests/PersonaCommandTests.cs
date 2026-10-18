@@ -83,5 +83,67 @@ public sealed class PersonaCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Usage);
     }
 
+    [Fact]
+    public async Task Persona_SetSectionWithEnvTome_WritesIntoThatTome()
+    {
+        using var host = TomedHost(new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+
+        var code = await host.RunAsync("persona", "set-section", "identity", "Senior .NET developer");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("platform-work");
+        host.Output.ToString().ShouldContain("in tome 'platform-work'");
+    }
+
+    [Fact]
+    public async Task Persona_SetSectionExplicitTomeOverridesEnv()
+    {
+        using var host = TomedHost(new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+
+        var code = await host.RunAsync("persona", "set-section", "tone", "dry humor", "--tome", "research");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("research");
+    }
+
+    [Fact]
+    public async Task Persona_ShowReadsTheClaimTomeNotTheDefault()
+    {
+        using var host = TomedHost(
+            null,
+            new FixedClaimProvider(new ActorClaim { Alias = "dan", Tome = "platform-work" }));
+        await host.RunAsync("persona", "set-section", "identity", "Senior .NET developer");
+
+        var code = await host.RunAsync("persona", "show");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldContain("Tome: platform-work");
+        output.ShouldContain("Senior .NET developer");
+    }
+
+    [Fact]
+    public async Task Persona_WithoutIdentity_StaysInTheDefaultTome()
+    {
+        var code = await _host.RunAsync("persona", "set-section", "rules", "no sudo");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("default");
+    }
+
+    private static TestHost TomedHost(
+        IReadOnlyDictionary<string, string>? variables,
+        IActorClaimProvider? claims = null) =>
+        new(
+            new StubEmbeddings(new Dictionary<string, float[]>
+            {
+                [""] = [0f, 0f],
+                ["Senior .NET developer"] = [1f, 0f],
+                ["dry humor"] = [1f, 0f],
+                ["no sudo"] = [1f, 0f],
+            }),
+            claims: claims,
+            variables: variables);
+
     public void Dispose() => _host.Dispose();
 }

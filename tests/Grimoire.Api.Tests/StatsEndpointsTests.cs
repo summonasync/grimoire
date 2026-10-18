@@ -34,5 +34,117 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("activeByScope").GetProperty("project").GetInt64().ShouldBe(2);
         body.GetProperty("activeByScope").GetProperty("session").GetInt64().ShouldBe(1);
         body.GetProperty("pendingCompaction").GetInt64().ShouldBe(0);
+        body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(0);
+        body.GetProperty("tome").GetString().ShouldBe("default");
+        body.GetProperty("byTome").GetProperty("default").GetProperty("active").GetInt64().ShouldBe(3);
+        body.GetProperty("gc").GetProperty("stale").GetBoolean().ShouldBeTrue();
+        body.GetProperty("gc").GetProperty("unknownReason").GetString().ShouldBe("gc state file does not exist yet");
+    }
+
+    [Fact]
+    public async Task Get_CarriesTheGcHeartbeatWithTheStaleFlag()
+    {
+        factory.Reset();
+        factory.GcState.Current = new GcState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-1),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-1),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        };
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var gc = body.GetProperty("gc");
+        gc.GetProperty("stale").GetBoolean().ShouldBeFalse();
+        gc.GetProperty("lastSuccessAt").GetDateTimeOffset().ShouldBe(FakeClock.DefaultStart.AddHours(-1));
+        gc.GetProperty("removedExpired").GetInt32().ShouldBe(2);
+        gc.GetProperty("removedTombstones").GetInt32().ShouldBe(1);
+        gc.GetProperty("lastError").ValueKind.ShouldBe(JsonValueKind.Null);
+        gc.GetProperty("unknownReason").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Get_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
+    {
+        factory.Reset();
+        factory.GcState.Current = new GcState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-5),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-5),
+        };
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("gc").GetProperty("stale").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Get_EchoesTheTomeResolvedFromEnvironment()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+
+        var response = await tomeFactory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tome").GetString().ShouldBe("eng");
+    }
+
+    [Fact]
+    public async Task Get_SplitsCountsByTome()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "alpha gone",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "wrong",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("active").GetInt64().ShouldBe(1);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(1);
+        body.GetProperty("byTome").GetProperty("default").GetProperty("active").GetInt64().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Get_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/stats?tome=Not%20Valid%21%21");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options))
+            .GetProperty("error").GetProperty("code").GetString().ShouldBe("invalid_tome");
+    }
+
+    [Fact]
+    public async Task Get_CountsActiveIdempotencyDuplicates()
+    {
+        factory.Reset();
+        foreach (var content in new[] { "crashed write a", "crashed write b" })
+        {
+            factory.Store.Seed(
+                TestMemories.Create(content, scope: MemoryScope.Global) with { IdempotencyKey = "shared-key" },
+                [1f, 0f]);
+        }
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(1);
     }
 }

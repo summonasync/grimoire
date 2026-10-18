@@ -1,0 +1,100 @@
+{
+  "contract": {
+    "description": "Load the agent startup brief in one call - persona, top-scored facts, recent journal and the tombstone digest - instead of chaining memory_persona_get, memory_recall and memory_list at session start. Sections fill in priority order (persona, facts, tombstones, journal) under a total char budget; chars are the size proxy, not exact tokens, and a section that no longer fits is named in omitted - truncation is never silent. Journal bodies are capped per entry and flagged truncated; tombstones are references only, inspect one via memory_list status=Tombstoned. A section in state empty means cold start: nothing recorded there yet, not a failure - when every section comes back empty the response says so and points at memory_scry for cross-tome context. The brief is scoped to one tome; pass tome to brief another tome you own. upstream_unavailable means the store or embedding provider is unreachable; the call is read-only and writes nothing.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "factsPerScope": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "journalPerScope": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "projectId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scopes": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "tombstoneLimit": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": []
+    },
+    "name": "memory_brief",
+    "readOnly": true,
+    "title": "Get the startup brief"
+  },
+  "output": {
+    "facts": {
+      "items": {
+        "arrayOf": {
+          "content": "string",
+          "createdAt": "string",
+          "memoryId": "string",
+          "scope": "string",
+          "score": "number"
+        }
+      },
+      "state": "string"
+    },
+    "journal": {
+      "items": {
+        "arrayOf": {
+          "content": "string",
+          "createdAt": "string",
+          "memoryId": "string",
+          "scope": "string",
+          "truncated": "boolean"
+        }
+      },
+      "state": "string"
+    },
+    "omitted": {
+      "arrayOf": "string"
+    },
+    "persona": {
+      "state": "string"
+    },
+    "tombstones": {
+      "items": {
+        "arrayOf": {
+          "memoryId": "string",
+          "reason": "string",
+          "tombstonedAt": "string"
+        }
+      },
+      "state": "string"
+    },
+    "tome": "string"
+  }
+}

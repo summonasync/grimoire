@@ -11,6 +11,8 @@ public sealed class GrimoireApiFactory : IDisposable
 {
     private readonly MemoryEngineOptions? _engineOptions;
     private readonly string? _staticRootPath;
+    private readonly string? _envTome;
+    private readonly string? _envActor;
     private ServiceProvider? _ports;
     private WebApplication? _app;
 
@@ -18,20 +20,28 @@ public sealed class GrimoireApiFactory : IDisposable
     {
     }
 
-    private GrimoireApiFactory(MemoryEngineOptions? engineOptions, string? staticRootPath)
+    private GrimoireApiFactory(MemoryEngineOptions? engineOptions, string? staticRootPath, string? envTome, string? envActor)
     {
         _engineOptions = engineOptions;
         _staticRootPath = staticRootPath;
+        _envTome = envTome;
+        _envActor = envActor;
     }
 
-    public static GrimoireApiFactory Create(MemoryEngineOptions? engineOptions = null, string? staticRootPath = null) =>
-        new(engineOptions, staticRootPath);
+    public static GrimoireApiFactory Create(
+        MemoryEngineOptions? engineOptions = null,
+        string? staticRootPath = null,
+        string? envTome = null,
+        string? envActor = null) =>
+        new(engineOptions, staticRootPath, envTome, envActor);
 
     public FakeMemoryStore Store { get; } = new();
 
     public FakeEmbeddingProvider Embeddings { get; } = new();
 
     public FakeClock Clock { get; } = new();
+
+    public FakeGcStateStore GcState { get; } = new();
 
     public void Reset()
     {
@@ -41,6 +51,8 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.GetCount = 0;
         Store.OnGetAsync = null;
         Embeddings.Requests.Clear();
+        Embeddings.Failure = null;
+        GcState.Reset();
     }
 
     public HttpClient NewClient()
@@ -69,6 +81,8 @@ public sealed class GrimoireApiFactory : IDisposable
             Port = 0,
             GcIntervalMinutes = 60,
             StaticRootPath = _staticRootPath ?? Path.Combine(Path.GetTempPath(), "grimoire-api-tests", "missing-export"),
+            EnvTome = _envTome,
+            EnvActor = _envActor,
         }, Ports());
         await _app.StartAsync();
         return _app;
@@ -85,6 +99,8 @@ public sealed class GrimoireApiFactory : IDisposable
         services.AddSingleton<IMemoryStore>(Store);
         services.AddSingleton<IEmbeddingProvider>(Embeddings);
         services.AddSingleton<IClock>(Clock);
+        services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(60) });
+        services.AddSingleton<IGcStateStore>(GcState);
         if (_engineOptions is not null)
         {
             services.AddSingleton(_engineOptions);

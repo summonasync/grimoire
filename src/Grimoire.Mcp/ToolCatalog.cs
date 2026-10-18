@@ -12,20 +12,35 @@ internal static class ToolCatalog
         var embeddings = Require<IEmbeddingProvider>(services);
         var clock = Require<IClock>(services);
         var engineOptions = services.GetService(typeof(MemoryEngineOptions)) as MemoryEngineOptions;
+        var gcOptions = services.GetService(typeof(GcOptions)) as GcOptions;
+        var gcState = services.GetService(typeof(IGcStateStore)) as IGcStateStore;
 
-        var memories = new MemoryService(store, embeddings, clock, engineOptions);
+        var memories = new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
         var persona = new PersonaService(store, embeddings, clock);
-        var actors = new MemoryActorProvider(options.Actor, clientInfo);
+        var brief = new BriefService(store, persona, clock, engineOptions);
+        var corrections = new CorrectionService(store, clock, engineOptions);
+        var claims = Require<IActorClaimProvider>(services);
+        var actors = new MemoryActorProvider(
+            options.Actor,
+            options.EnvTome,
+            options.EnvActor,
+            clientInfo,
+            claims,
+            new TomeResolver(engineOptions));
 
         return
         [
             Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors).Remember, readOnly: false, destructive: false, idempotent: false),
-            Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories).Recall, readOnly: true, destructive: false, idempotent: true),
-            Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories).Forget, readOnly: false, destructive: true, idempotent: true),
-            Build(ListTool.Name, ListTool.Title, ListTool.Description, new ListTool(memories).List, readOnly: true, destructive: false, idempotent: true),
-            Build(PersonaGetTool.Name, PersonaGetTool.Title, PersonaGetTool.Description, new PersonaGetTool(persona).Get, readOnly: true, destructive: false, idempotent: true),
-            Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store).GetCandidates, readOnly: true, destructive: false, idempotent: true),
-            Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories).GetStats, readOnly: true, destructive: false, idempotent: true),
+            Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories, actors).Recall, readOnly: true, destructive: false, idempotent: true),
+            Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories, actors).Forget, readOnly: false, destructive: true, idempotent: true),
+            Build(RestoreTool.Name, RestoreTool.Title, RestoreTool.Description, new RestoreTool(corrections, store, actors).Restore, readOnly: false, destructive: false, idempotent: true),
+            Build(HistoryTool.Name, HistoryTool.Title, HistoryTool.Description, new HistoryTool(corrections, actors).History, readOnly: true, destructive: false, idempotent: true),
+            Build(ListTool.Name, ListTool.Title, ListTool.Description, new ListTool(memories, actors).List, readOnly: true, destructive: false, idempotent: true),
+            Build(PersonaGetTool.Name, PersonaGetTool.Title, PersonaGetTool.Description, new PersonaGetTool(persona, actors).Get, readOnly: true, destructive: false, idempotent: true),
+            Build(BriefTool.Name, BriefTool.Title, BriefTool.Description, new BriefTool(brief, actors).Brief, readOnly: true, destructive: false, idempotent: true),
+            Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store, actors).GetCandidates, readOnly: true, destructive: false, idempotent: true),
+            Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
+            Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
         ];
     }
 

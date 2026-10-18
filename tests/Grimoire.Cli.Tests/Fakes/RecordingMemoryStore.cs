@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Grimoire.Core;
 
 namespace Grimoire.Cli.Tests.Fakes;
@@ -12,9 +13,15 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public List<MemoryRecord> Upserted { get; } = [];
 
+    public List<IReadOnlyList<MemoryPoint>> BatchUpserted { get; } = [];
+
     public List<MemoryRecord> Updated { get; } = [];
 
     public List<IReadOnlyList<Guid>> Deleted { get; } = [];
+
+    public Exception? UpdateFailure { get; set; }
+
+    public Exception? ListFailure { get; set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
@@ -58,6 +65,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public void Seed(MemoryRecord record, params float[] vector) => _points[record.Id] = new StoredPoint(record, vector);
 
+    public void Clear() => _points.Clear();
+
+    public float[] VectorOf(Guid id) => _points[id].Vector;
+
+
     public Task UpsertAsync(MemoryRecord record, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
         Upserted.Add(record);
@@ -67,6 +79,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public Task UpdateAsync(MemoryRecord record, CancellationToken cancellationToken)
     {
+        if (UpdateFailure is not null)
+        {
+            throw UpdateFailure;
+        }
+
         if (!_points.TryGetValue(record.Id, out var point))
         {
             throw new KeyNotFoundException($"No stored point for '{record.Id}'.");
@@ -84,6 +101,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        if (ListFailure is not null)
+        {
+            throw ListFailure;
+        }
+
         ListedFilters.Add(filter);
         IReadOnlyList<MemoryRecord> records = Matching(filter).Select(point => point.Record).ToList();
         return Task.FromResult(records);
@@ -129,6 +151,28 @@ public sealed class RecordingMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        foreach (var point in _points.Values)
+        {
+            yield return new MemoryPoint { Record = point.Record, Vector = point.Vector };
+        }
+    }
+
+    public Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        BatchUpserted.Add([.. points]);
+
+        foreach (var point in points)
+        {
+            _points[point.Record.Id] = new StoredPoint(point.Record, point.Vector.ToArray());
+        }
+
+        return Task.CompletedTask;
+    }
+
     private IEnumerable<StoredPoint> Matching(MemoryFilter filter)
     {
         IEnumerable<StoredPoint> query = _points.Values;
@@ -158,6 +202,16 @@ public sealed class RecordingMemoryStore : IMemoryStore
             query = query.Where(point => filter.ExcludeTags.All(tag => !point.Record.Tags.Contains(tag)));
         }
 
+        if (filter.Tome is not null)
+        {
+            query = query.Where(point => point.Record.Tome == filter.Tome);
+        }
+
+        if (filter.Tomes.Count > 0)
+        {
+            query = query.Where(point => filter.Tomes.Contains(point.Record.Tome));
+        }
+
         if (filter.ProjectId is not null)
         {
             query = query.Where(point => point.Record.ProjectId == filter.ProjectId);
@@ -176,6 +230,16 @@ public sealed class RecordingMemoryStore : IMemoryStore
         if (filter.TombstonedBefore is not null)
         {
             query = query.Where(point => point.Record.TombstonedAt is not null && point.Record.TombstonedAt <= filter.TombstonedBefore);
+        }
+
+        if (filter.IdempotencyKey is not null)
+        {
+            query = query.Where(point => point.Record.IdempotencyKey == filter.IdempotencyKey);
+        }
+
+        if (filter.CreatedAfter is not null)
+        {
+            query = query.Where(point => point.Record.CreatedAt >= filter.CreatedAfter);
         }
 
         if (filter.Limit is not null)

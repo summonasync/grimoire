@@ -18,6 +18,8 @@ public sealed class UsageWriterTests
         {
             text.ShouldContain(spec.Name);
         }
+
+        text.ShouldContain("6 upstream unavailable");
     }
 
     [Fact]

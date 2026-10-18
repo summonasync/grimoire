@@ -13,6 +13,9 @@ internal sealed class RememberCommand(CliEnvironment environment)
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
+        var identity = await ActorResolver.ResolveAsync(
+            environment, invocation.Value("actor"), invocation.Value("tome"), config.DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
         var scope = CliValues.Scope(invocation.Spec, invocation.Value("scope"), MemoryScope.Project);
         var ttlHours = invocation.Value("ttl") is { } ttlText ? ParseTtlHours(invocation.Spec, scope, ttlText) : (double?)null;
         var request = new RememberRequest
@@ -20,7 +23,8 @@ internal sealed class RememberCommand(CliEnvironment environment)
             Content = invocation.JoinedPositional(),
             Scope = scope,
             Kind = CliValues.Kind(invocation.Spec, invocation.Value("kind"), MemoryKind.Journal),
-            Actor = ActorResolver.Resolve(environment, invocation.Value("actor")),
+            Actor = identity.Actor,
+            Tome = identity.Tome,
             ProjectId = invocation.Value("project"),
             SessionId = invocation.Value("session"),
             Tags = CliValues.Tags(invocation.Value("tags")),
@@ -44,7 +48,19 @@ internal sealed class RememberCommand(CliEnvironment environment)
             environment.Output.WriteLine($"Superseded {superseded}");
         }
 
-        environment.Output.WriteLine($"Remembered {result.Record.Id} ({request.Scope}/{request.Kind} by {request.Actor})");
+        environment.Output.WriteLine(
+            $"Remembered {result.Record.Id} ({request.Scope}/{request.Kind} by {request.Actor} in tome '{identity.Tome}')");
+
+        if (result.IdempotentReplay)
+        {
+            environment.Output.WriteLine("Replayed an existing record; nothing new was embedded or superseded.");
+        }
+
+        if (result.MaintenancePending)
+        {
+            environment.Output.WriteLine("Committed, but duplicate maintenance is pending; replay the same command to converge the store.");
+        }
+
         return ExitCodes.Ok;
     }
 

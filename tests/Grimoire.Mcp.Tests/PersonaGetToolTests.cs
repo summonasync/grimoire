@@ -30,7 +30,7 @@ public sealed class PersonaGetToolTests
             Tone = "informal",
             Preferences = "dark mode, Vim bindings",
             Rules = "never commit without being asked",
-        }, MemoryActor.Human, CancellationToken.None);
+        }, MemoryActor.Human, CancellationToken.None, McpTestSession.ClientActor);
 
         var result = await session.Client.CallToolAsync("memory_persona_get", new Dictionary<string, object?>());
 

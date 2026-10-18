@@ -16,13 +16,72 @@ public sealed class MemoryServiceRememberTests
 
     private readonly FakeMemoryStore _store = new();
 
+    private readonly FakeEmbeddingProvider _embeddings = new(Vectors);
+
     private readonly FakeClock _clock = new();
 
     private readonly MemoryService _service;
 
     public MemoryServiceRememberTests()
     {
-        _service = TestMemories.Service(_store, new FakeEmbeddingProvider(Vectors), _clock);
+        _service = TestMemories.Service(_store, _embeddings, _clock);
+    }
+
+    [Fact]
+    public async Task Remember_MissingSource_ThrowsListingTheMissingIds()
+    {
+        var known = TestMemories.Create("known source", [0f, 1f, 0f]);
+        _store.Seed(known, [0f, 1f, 0f]);
+        var ghost = Guid.NewGuid();
+
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
+            _service.RememberAsync(Request("deploy on friday") with { Sources = [known.Id, ghost] }, CancellationToken.None));
+
+        error.Message.ShouldContain(ghost.ToString());
+        error.Message.ShouldNotContain(known.Id.ToString());
+    }
+
+    [Fact]
+    public async Task Remember_WithExistingSources_SucceedsAndKeepsTheLinks()
+    {
+        var source = TestMemories.Create("known source", [0f, 1f, 0f]);
+        _store.Seed(source, [0f, 1f, 0f]);
+
+        var result = await _service.RememberAsync(
+            Request("deploy on friday") with { Sources = [source.Id] },
+            CancellationToken.None);
+
+        result.Record.Sources.ShouldBe([source.Id]);
+        (await _store.GetAsync(source.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Remember_SourceInOtherTome_IsRejectedAsMissing()
+    {
+        var foreign = TestMemories.Create("foreign source", [0f, 1f, 0f], tome: "elsewhere");
+        _store.Seed(foreign, [0f, 1f, 0f]);
+
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
+            _service.RememberAsync(Request("deploy on friday") with { Sources = [foreign.Id] }, CancellationToken.None));
+
+        error.Message.ShouldContain(foreign.Id.ToString());
+    }
+
+    [Fact]
+    public async Task Remember_SupersedeDuplicate_AppendsTrailLineOnTheOldRecord()
+    {
+        var first = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        await _service.RememberAsync(Request("deploy on fridays"), CancellationToken.None);
+
+        var old = (await _store.GetAsync(first.Record.Id, CancellationToken.None))!;
+        old.Status.ShouldBe(MemoryStatus.Superseded);
+        var line = old.Corrections.Single();
+        line.Action.ShouldBe(CorrectionAction.Supersede);
+        line.Reason.ShouldBe($"superseded by {old.SupersededBy}");
+        line.Actor.ShouldBe(TestMemories.Agent);
+        line.At.ShouldBe(_clock.UtcNow);
     }
 
     private RememberRequest Request(
@@ -212,5 +271,109 @@ public sealed class MemoryServiceRememberTests
         var compacted = await _service.RememberAsync(request, CancellationToken.None);
 
         compacted.Record.Sources.ShouldBe([source.Record.Id]);
+    }
+
+    [Fact]
+    public async Task Remember_FirstWrite_IsNotReplayAndStampsContentKey()
+    {
+        var result = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.IdempotentReplay.ShouldBeFalse();
+        result.MaintenancePending.ShouldBeFalse();
+        result.Record.IdempotencyKey.ShouldBe(IdempotencyKey.Compute(Request("deploy on friday")));
+    }
+
+    [Fact]
+    public async Task Remember_RetryWithinWindow_ReturnsOriginalWithoutReembedding()
+    {
+        var first = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        var retry = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        retry.IdempotentReplay.ShouldBeTrue();
+        retry.Record.Id.ShouldBe(first.Record.Id);
+        retry.Record.CreatedAt.ShouldBe(first.Record.CreatedAt);
+        retry.SupersededExisting.ShouldBeFalse();
+        retry.MaintenancePending.ShouldBeFalse();
+        _embeddings.Requests.Count.ShouldBe(1);
+        _store.UpsertCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_ReplayAfterCrash_CompletesPendingSupersede()
+    {
+        var request = Request("deploy on friday");
+        var crashed = TestMemories.Create(
+            "deploy on friday",
+            [1f, 0f, 0f],
+            projectId: "grim",
+            tags: ["ops"],
+            idempotencyKey: IdempotencyKey.Compute(request));
+        var straggler = TestMemories.Create("deploy on friday", [1f, 0f, 0f], projectId: "grim", tags: ["ops"]);
+        _store.Seed(crashed, [1f, 0f, 0f]);
+        _store.Seed(straggler, [1f, 0f, 0f]);
+
+        var replay = await _service.RememberAsync(request, CancellationToken.None);
+
+        replay.IdempotentReplay.ShouldBeTrue();
+        replay.Record.Id.ShouldBe(crashed.Id);
+        replay.MaintenancePending.ShouldBeFalse();
+        _embeddings.Requests.ShouldBeEmpty();
+        (await _store.GetAsync(straggler.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+        (await _store.GetAsync(straggler.Id, CancellationToken.None))!.SupersededBy.ShouldBe(crashed.Id);
+        _store.Records.Count(record => record.Status == MemoryStatus.Active).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_SupersedeFailureAfterCommit_ReportsPendingWithoutThrowing()
+    {
+        var fragile = new FragileMemoryStore(_store) { UpdateFailuresRemaining = 1 };
+        var service = TestMemories.Service(fragile, _embeddings, _clock);
+        _store.Seed(TestMemories.Create("deploy on friday", [1f, 0f, 0f], projectId: "grim", tags: ["ops"]), [1f, 0f, 0f]);
+
+        var result = await service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.MaintenancePending.ShouldBeTrue();
+        result.SupersededExisting.ShouldBeFalse();
+        result.Record.Status.ShouldBe(MemoryStatus.Active);
+        (await _store.GetAsync(result.Record.Id, CancellationToken.None)).ShouldNotBeNull();
+        _store.UpsertCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_ReplayConvergesPendingSupersede()
+    {
+        var fragile = new FragileMemoryStore(_store) { UpdateFailuresRemaining = 1 };
+        var service = TestMemories.Service(fragile, _embeddings, _clock);
+        _store.Seed(TestMemories.Create("deploy on friday", [1f, 0f, 0f], projectId: "grim", tags: ["ops"]), [1f, 0f, 0f]);
+
+        var first = await service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        first.MaintenancePending.ShouldBeTrue();
+
+        var retry = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        retry.IdempotentReplay.ShouldBeTrue();
+        retry.Record.Id.ShouldBe(first.Record.Id);
+        retry.MaintenancePending.ShouldBeFalse();
+        _store.Records.Count(record => record.Status == MemoryStatus.Active).ShouldBe(1);
+        _store.Records.Single(record => record.Status == MemoryStatus.Active).Id.ShouldBe(first.Record.Id);
+        _embeddings.Requests.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_WindowExpiry_FallsThroughToNormalFlow()
+    {
+        var first = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromHours(25));
+
+        var retry = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        retry.IdempotentReplay.ShouldBeFalse();
+        retry.Record.Id.ShouldNotBe(first.Record.Id);
+        retry.SupersededExisting.ShouldBeTrue();
+        retry.SupersededId.ShouldBe(first.Record.Id);
+        _embeddings.Requests.Count.ShouldBe(2);
+        _store.UpsertCount.ShouldBe(2);
     }
 }

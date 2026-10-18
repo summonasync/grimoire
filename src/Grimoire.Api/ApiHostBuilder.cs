@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Endpoints;
 using Grimoire.Api.Querying;
+using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -21,7 +22,11 @@ public static class ApiHostBuilder
         var embeddings = services.GetRequiredService<IEmbeddingProvider>();
         var clock = services.GetRequiredService<IClock>();
         var engineOptions = services.GetService<MemoryEngineOptions>() ?? new MemoryEngineOptions();
-        var memories = services.GetService<MemoryService>() ?? new MemoryService(store, embeddings, clock, engineOptions);
+        var gcOptions = services.GetService<GcOptions>()
+            ?? new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.GcIntervalMinutes) };
+        var gcState = services.GetService<IGcStateStore>();
+        var memories = services.GetService<MemoryService>()
+            ?? new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
         var persona = services.GetService<PersonaService>() ?? new PersonaService(store, embeddings, clock);
 
         var builder = WebApplication.CreateBuilder();
@@ -40,14 +45,29 @@ public static class ApiHostBuilder
         builder.Services.AddHostedService(_ => new GcSweeper(
             memories.GcAsync,
             clock,
-            TimeSpan.FromMinutes(options.GcIntervalMinutes)));
+            TimeSpan.FromMinutes(options.GcIntervalMinutes),
+            gcState));
+
+        var tomeResolver = new ApiTomeResolver(
+            new TomeResolver(engineOptions),
+            services.GetService<IActorClaimProvider>(),
+            options.EnvTome,
+            options.EnvActor);
+        builder.Services.AddSingleton(tomeResolver);
 
         var app = builder.Build();
         app.UseStructuredErrors();
-        app.MapMemoryEndpoints(memories, new MemoryEditor(store, embeddings), new MemoryQueryRunner(store, embeddings), store);
-        app.MapPersonaEndpoints(persona);
+        app.MapMemoryEndpoints(
+            memories,
+            new MemoryEditor(store, embeddings, clock),
+            new CorrectionService(store, clock, engineOptions),
+            new MemoryQueryRunner(store, embeddings),
+            store,
+            tomeResolver);
+        app.MapScryEndpoints(new ScryQueryRunner(memories, store, tomeResolver));
+        app.MapPersonaEndpoints(persona, tomeResolver);
         app.MapSettingsEndpoints(engineOptions, options);
-        app.MapStatsEndpoints(memories);
+        app.MapStatsEndpoints(memories, tomeResolver);
         app.MapHealthEndpoints(store, embeddings, clock);
         app.UseSpaFrontend(options);
 

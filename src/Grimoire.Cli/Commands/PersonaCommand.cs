@@ -7,25 +7,31 @@ namespace Grimoire.Cli.Commands;
 
 internal sealed class PersonaCommand(CliEnvironment environment)
 {
-    public async Task<int> RunAsync(
+    public Task<int> RunAsync(
         CliInvocation invocation,
         GrimoireOptions config,
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
-        var persona = services.GetRequiredService<PersonaService>();
         return (invocation.Positional.FirstOrDefault() ?? "show") switch
         {
-            "show" => await ShowAsync(persona, cancellationToken),
-            "set-section" => await SetSectionAsync(persona, invocation, services, cancellationToken),
+            "show" => ShowAsync(invocation, config, services, cancellationToken),
+            "set-section" => SetSectionAsync(invocation, config, services, cancellationToken),
             var action => throw new UsageException(
                 $"Unknown persona action '{action}' (expected: show, set-section).", invocation.Spec),
         };
     }
 
-    private async Task<int> ShowAsync(PersonaService persona, CancellationToken cancellationToken)
+    private async Task<int> ShowAsync(
+        CliInvocation invocation,
+        GrimoireOptions config,
+        IServiceProvider services,
+        CancellationToken cancellationToken)
     {
-        var document = await persona.GetAsync(cancellationToken);
+        var identity = await ResolveIdentityAsync(invocation, config, services, cancellationToken);
+        var persona = services.GetRequiredService<PersonaService>();
+        var document = await persona.GetAsync(cancellationToken, identity.Tome);
+        environment.Output.WriteLine($"Tome: {identity.Tome}");
         foreach (var section in PersonaSectionExtensions.Sections)
         {
             environment.Output.WriteLine($"{section.ToString().ToLowerInvariant()}:");
@@ -37,8 +43,8 @@ internal sealed class PersonaCommand(CliEnvironment environment)
     }
 
     private async Task<int> SetSectionAsync(
-        PersonaService persona,
         CliInvocation invocation,
+        GrimoireOptions config,
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
@@ -54,12 +60,27 @@ internal sealed class PersonaCommand(CliEnvironment environment)
             throw new UsageException("Persona section text must not be empty; clearing sections is not supported in v1.", invocation.Spec);
         }
 
-        var actor = ActorResolver.Resolve(environment, invocation.Value("actor"));
-        var current = await persona.GetAsync(cancellationToken);
-        await persona.SetAsync(current.WithSection(section, text), actor, cancellationToken);
-        environment.Output.WriteLine($"Persona section '{section.ToString().ToLowerInvariant()}' set by {actor}");
+        var identity = await ResolveIdentityAsync(invocation, config, services, cancellationToken);
+        var persona = services.GetRequiredService<PersonaService>();
+        var current = await persona.GetAsync(cancellationToken, identity.Tome);
+        await persona.SetAsync(current.WithSection(section, text), identity.Actor, cancellationToken, identity.Tome);
+        environment.Output.WriteLine(
+            $"Persona section '{section.ToString().ToLowerInvariant()}' set by {identity.Actor} in tome '{identity.Tome}'");
         return ExitCodes.Ok;
     }
+
+    private Task<CliIdentity> ResolveIdentityAsync(
+        CliInvocation invocation,
+        GrimoireOptions config,
+        IServiceProvider services,
+        CancellationToken cancellationToken) =>
+        ActorResolver.ResolveAsync(
+            environment,
+            invocation.Value("actor"),
+            invocation.Value("tome"),
+            config.DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(),
+            cancellationToken);
 
     private static string Indent(string content) => string.Join(
         "\n",

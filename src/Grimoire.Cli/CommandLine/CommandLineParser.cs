@@ -33,6 +33,10 @@ internal static class CommandLineParser
             {
                 value = inlineValue;
             }
+            else if (flag.IsSwitch)
+            {
+                value = "true";
+            }
             else if (index + 1 < args.Length)
             {
                 value = args[++index];

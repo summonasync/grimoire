@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Grimoire.Core;
@@ -7,6 +8,8 @@ namespace Grimoire.Infrastructure.Embeddings;
 
 public sealed class OllamaEmbeddingProvider(HttpClient http, EmbeddingOptions options) : IEmbeddingProvider
 {
+    private const string UpstreamName = "ollama";
+
     private static readonly JsonSerializerOptions RequestOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<ReadOnlyMemory<float>> EmbedAsync(string text, CancellationToken cancellationToken)
@@ -17,11 +20,15 @@ public sealed class OllamaEmbeddingProvider(HttpClient http, EmbeddingOptions op
         }
         catch (HttpRequestException ex)
         {
-            throw new EmbeddingUnavailableException($"Ollama endpoint '{options.Endpoint}' is unreachable.", ex);
+            throw new UpstreamUnavailableException(UpstreamName, ex);
+        }
+        catch (SocketException ex)
+        {
+            throw new UpstreamUnavailableException(UpstreamName, ex);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new EmbeddingUnavailableException($"Ollama request for model '{options.Model}' timed out.", ex);
+            throw new UpstreamUnavailableException(UpstreamName, ex);
         }
         catch (JsonException ex)
         {

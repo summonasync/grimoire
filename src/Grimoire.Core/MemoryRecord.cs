@@ -12,6 +12,8 @@ public sealed record MemoryRecord
 
     public required MemoryActor Actor { get; init; }
 
+    public string Tome { get; init; } = TomeKey.DefaultTome;
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }
@@ -37,4 +39,8 @@ public sealed record MemoryRecord
     public DateTimeOffset? TombstonedAt { get; init; }
 
     public IReadOnlyList<Guid> Sources { get; init; } = [];
+
+    public IReadOnlyList<CorrectionEntry> Corrections { get; init; } = [];
+
+    public string? IdempotencyKey { get; init; }
 }

@@ -23,6 +23,7 @@ public static class MemoryQueryParser
                 Tags = SplitList(query.Tag),
                 ProjectId = query.ProjectId,
                 SessionId = query.SessionId,
+                Tome = ParseTome(query.Tome),
             },
             Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit));
     }
@@ -87,6 +88,23 @@ public static class MemoryQueryParser
         }
 
         return kind;
+    }
+
+    private static string? ParseTome(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        if (!TomeKey.TryNormalize(raw, out var tome))
+        {
+            throw new MemoryQueryException(
+                "invalid_tome",
+                $"Tome must be a lowercase kebab-case tome key; '{raw}' is not a valid tome key.");
+        }
+
+        return tome;
     }
 
     private static string[] SplitList(string? raw) => string.IsNullOrWhiteSpace(raw)

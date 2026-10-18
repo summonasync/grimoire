@@ -3,8 +3,12 @@ import type { MemoryRecord } from "@/shared/api/types";
 import type {
   CreateMemoryInput,
   CreateMemoryResult,
+  HistoryResult,
   MemoryListParams,
+  MemoryListResult,
   PatchMemoryInput,
+  RestoreMemoryInput,
+  RestoreMemoryResult,
 } from "./types";
 
 export function buildMemoryListQuery(params: MemoryListParams): string {
@@ -34,6 +38,9 @@ export function buildMemoryListQuery(params: MemoryListParams): string {
   if (params.sessionId) {
     search.set("sessionId", params.sessionId);
   }
+  if (params.tome) {
+    search.set("tome", params.tome);
+  }
   if (params.limit !== undefined) {
     search.set("limit", String(params.limit));
   }
@@ -41,9 +48,9 @@ export function buildMemoryListQuery(params: MemoryListParams): string {
   return search.toString();
 }
 
-export async function fetchMemories(params: MemoryListParams): Promise<MemoryRecord[]> {
+export function fetchMemories(params: MemoryListParams): Promise<MemoryListResult> {
   const query = buildMemoryListQuery(params);
-  return apiFetch<MemoryRecord[]>(query ? `/api/memories?${query}` : "/api/memories");
+  return apiFetch<MemoryListResult>(query ? `/api/memories?${query}` : "/api/memories");
 }
 
 export function fetchMemory(id: string): Promise<MemoryRecord> {
@@ -60,4 +67,17 @@ export function patchMemory(id: string, input: PatchMemoryInput): Promise<Memory
 
 export function forgetMemory(id: string, reason: string): Promise<MemoryRecord> {
   return apiFetch<MemoryRecord>(`/api/memories/${id}/forget`, jsonRequest("POST", { reason }));
+}
+
+export function restoreMemory(id: string, input: RestoreMemoryInput): Promise<RestoreMemoryResult> {
+  return apiFetch<RestoreMemoryResult>(`/api/memories/${id}/restore`, jsonRequest("POST", input));
+}
+
+export function fetchMemoryHistory(id: string, tome?: string): Promise<HistoryResult> {
+  const search = new URLSearchParams();
+  if (tome) {
+    search.set("tome", tome);
+  }
+  const query = search.toString();
+  return apiFetch<HistoryResult>(query ? `/api/memories/${id}/history?${query}` : `/api/memories/${id}/history`);
 }

@@ -24,7 +24,9 @@ internal static class TestMemories
         Guid? supersededBy = null,
         string? tombstoneReason = null,
         DateTimeOffset? tombstonedAt = null,
-        IReadOnlyList<Guid>? sources = null)
+        IReadOnlyList<Guid>? sources = null,
+        string? idempotencyKey = null,
+        string? tome = null)
     {
         var moment = created ?? FakeClock.DefaultStart;
 
@@ -35,6 +37,7 @@ internal static class TestMemories
             Scope = scope,
             Kind = kind,
             Actor = actor ?? Agent,
+            Tome = tome ?? TomeKey.DefaultTome,
             ProjectId = projectId,
             SessionId = sessionId,
             Tags = tags ?? [],
@@ -48,9 +51,19 @@ internal static class TestMemories
             TombstoneReason = tombstoneReason,
             TombstonedAt = tombstonedAt,
             Sources = sources ?? [],
+            IdempotencyKey = idempotencyKey,
         };
     }
 
-    public static MemoryService Service(FakeMemoryStore store, FakeEmbeddingProvider embeddings, FakeClock clock, MemoryEngineOptions? options = null)
-        => new(store, embeddings, clock, options);
+    public static MemoryService Service(
+        IMemoryStore store,
+        FakeEmbeddingProvider embeddings,
+        FakeClock clock,
+        MemoryEngineOptions? options = null,
+        GcOptions? gcOptions = null,
+        IGcStateStore? gcState = null)
+        => new(store, embeddings, clock, options, gcOptions, gcState);
+
+    public static CorrectionService Corrections(IMemoryStore store, FakeClock clock, MemoryEngineOptions? options = null)
+        => new(store, clock, options);
 }

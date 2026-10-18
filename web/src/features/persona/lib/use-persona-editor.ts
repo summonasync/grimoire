@@ -24,6 +24,7 @@ export function usePersonaEditor() {
   const queryClient = useQueryClient();
   const query = useQuery(personaQueryOptions());
   const [draft, setDraft] = useState<PersonaDocument | null>(null);
+  const [savedTome, setSavedTome] = useState<string | null>(null);
   const dirtyRef = useRef(false);
 
   useEffect(() => {
@@ -44,8 +45,9 @@ export function usePersonaEditor() {
   const saveMutation = useMutation({
     mutationFn: (document: PersonaDocument) => updatePersona(document),
     onSuccess: (saved) => {
-      setDraft(saved);
-      queryClient.setQueryData(personaKeys.document(), saved);
+      setDraft(saved.document);
+      setSavedTome(saved.tome);
+      queryClient.setQueryData(personaKeys.document(), saved.document);
     },
   });
 
@@ -79,6 +81,7 @@ export function usePersonaEditor() {
   return {
     draft,
     isDirty,
+    savedTome,
     isSaving: saveMutation.isPending,
     isSaved: saveMutation.isSuccess && !isDirty,
     saveError: toFailure(saveMutation.error),
