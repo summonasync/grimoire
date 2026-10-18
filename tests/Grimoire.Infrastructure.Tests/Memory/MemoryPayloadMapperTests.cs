@@ -142,6 +142,84 @@ public sealed class MemoryPayloadMapperTests
     }
 
     [Fact]
+    public void ToPayload_WithCorrections_WritesStructuredTrail()
+    {
+        var record = TestMemories.Create("traced") with
+        {
+            Corrections =
+            [
+                new CorrectionEntry
+                {
+                    At = TestMemories.Moment,
+                    Actor = MemoryActor.Human,
+                    Action = CorrectionAction.Forget,
+                    Reason = "wrong info",
+                },
+            ],
+        };
+
+        var payload = MemoryPayloadMapper.ToPayload(record);
+        var line = payload[MemoryPayloadFields.Corrections].ListValue.Values.Single().StructValue.Fields;
+
+        line["at"].StringValue.ShouldBe(TestMemories.Moment.ToString("O"));
+        line["action"].StringValue.ShouldBe("Forget");
+        line["reason"].StringValue.ShouldBe("wrong info");
+        line["actor"].StructValue.Fields["alias"].StringValue.ShouldBe("human");
+    }
+
+    [Fact]
+    public void ToRecord_AfterToPayload_RoundTripsCorrections()
+    {
+        var record = TestMemories.Create("round trip") with
+        {
+            Corrections =
+            [
+                new CorrectionEntry
+                {
+                    At = TestMemories.Moment,
+                    Actor = MemoryActor.Agent("crew", "claude"),
+                    Action = CorrectionAction.Restore,
+                    Reason = "undo",
+                },
+                new CorrectionEntry
+                {
+                    At = TestMemories.Moment.AddMinutes(1),
+                    Actor = MemoryActor.Human,
+                    Action = CorrectionAction.Supersede,
+                    Reason = "restored predecessor",
+                },
+            ],
+        };
+
+        var decoded = MemoryPayloadMapper.ToRecord(record.Id, new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(record)));
+
+        decoded.Corrections.ShouldBe(record.Corrections);
+    }
+
+    [Fact]
+    public void ToRecord_WithMissingCorrections_DecodesEmptyTrail()
+    {
+        var payload = LegacyPayload();
+
+        var decoded = MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload);
+
+        decoded.Corrections.ShouldBe([]);
+    }
+
+    [Fact]
+    public void ToRecord_WithUnknownCorrectionAction_ThrowsTypedError()
+    {
+        var payload = FullPayload();
+        payload[MemoryPayloadFields.Corrections] = new Value
+        {
+            ListValue = new ListValue { Values = { new Value { StringValue = "not a struct" } } },
+        };
+
+        Should.Throw<PayloadDecodeException>(() => MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload))
+            .Message.ShouldContain("corrections");
+    }
+
+    [Fact]
     public void ToRecord_WithMissingRequiredField_ThrowsTypedError()
     {
         var payload = new Dictionary<string, Value>

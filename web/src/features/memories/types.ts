@@ -1,4 +1,10 @@
-import type { MemoryKind, MemoryRecord, MemoryScope, MemoryStatus } from "@/shared/api/types";
+import type {
+  MemoryActor,
+  MemoryKind,
+  MemoryRecord,
+  MemoryScope,
+  MemoryStatus,
+} from "@/shared/api/types";
 
 export type MemoryStatusFilter = MemoryStatus[] | "all";
 
@@ -41,5 +47,39 @@ export interface PatchMemoryInput {
   content?: string;
   tags?: string[];
   importance?: number;
-  reason?: string;
+  reason: string;
+}
+
+export interface SupersederState {
+  id: string;
+  status: MemoryStatus;
+  tombstoneReason: string | null;
+}
+
+export interface RestoreMemoryInput {
+  reason: string;
+  tome?: string;
+}
+
+export interface RestoreMemoryResult {
+  record: MemoryRecord;
+  tome: string;
+  restored: boolean;
+  superseder: SupersederState | null;
+}
+
+export interface HistoryEntry {
+  id: string;
+  status: MemoryStatus;
+  tome: string;
+  createdAt: string;
+  tombstonedAt: string | null;
+  tombstoneReason: string | null;
+  actor: MemoryActor;
+  bodyPreview: string;
+}
+
+export interface HistoryResult {
+  tome: string;
+  chain: HistoryEntry[];
 }

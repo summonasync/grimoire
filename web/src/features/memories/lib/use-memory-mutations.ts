@@ -1,15 +1,16 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { forgetMemory, patchMemory } from "../api";
+import { forgetMemory, patchMemory, restoreMemory } from "../api";
 import { memoryKeys } from "../queries";
-import type { PatchMemoryInput } from "../types";
+import type { PatchMemoryInput, RestoreMemoryInput } from "../types";
 
 function useInvalidateMemories() {
   const queryClient = useQueryClient();
   return (id: string) => {
     void queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
     void queryClient.invalidateQueries({ queryKey: memoryKeys.detail(id) });
+    void queryClient.invalidateQueries({ queryKey: memoryKeys.history(id) });
   };
 }
 
@@ -26,5 +27,13 @@ export function useForgetMemory(id: string) {
   return useMutation({
     mutationFn: (reason: string) => forgetMemory(id, reason),
     onSuccess: (forgotten) => invalidate(forgotten.id),
+  });
+}
+
+export function useRestoreMemory(id: string) {
+  const invalidate = useInvalidateMemories();
+  return useMutation({
+    mutationFn: (input: RestoreMemoryInput) => restoreMemory(id, input),
+    onSuccess: (result) => invalidate(result.record.id),
   });
 }

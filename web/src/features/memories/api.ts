@@ -3,9 +3,12 @@ import type { MemoryRecord } from "@/shared/api/types";
 import type {
   CreateMemoryInput,
   CreateMemoryResult,
+  HistoryResult,
   MemoryListParams,
   MemoryListResult,
   PatchMemoryInput,
+  RestoreMemoryInput,
+  RestoreMemoryResult,
 } from "./types";
 
 export function buildMemoryListQuery(params: MemoryListParams): string {
@@ -64,4 +67,17 @@ export function patchMemory(id: string, input: PatchMemoryInput): Promise<Memory
 
 export function forgetMemory(id: string, reason: string): Promise<MemoryRecord> {
   return apiFetch<MemoryRecord>(`/api/memories/${id}/forget`, jsonRequest("POST", { reason }));
+}
+
+export function restoreMemory(id: string, input: RestoreMemoryInput): Promise<RestoreMemoryResult> {
+  return apiFetch<RestoreMemoryResult>(`/api/memories/${id}/restore`, jsonRequest("POST", input));
+}
+
+export function fetchMemoryHistory(id: string, tome?: string): Promise<HistoryResult> {
+  const search = new URLSearchParams();
+  if (tome) {
+    search.set("tome", tome);
+  }
+  const query = search.toString();
+  return apiFetch<HistoryResult>(query ? `/api/memories/${id}/history?${query}` : `/api/memories/${id}/history`);
 }

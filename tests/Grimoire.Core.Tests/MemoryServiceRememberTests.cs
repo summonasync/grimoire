@@ -27,6 +27,63 @@ public sealed class MemoryServiceRememberTests
         _service = TestMemories.Service(_store, _embeddings, _clock);
     }
 
+    [Fact]
+    public async Task Remember_MissingSource_ThrowsListingTheMissingIds()
+    {
+        var known = TestMemories.Create("known source", [0f, 1f, 0f]);
+        _store.Seed(known, [0f, 1f, 0f]);
+        var ghost = Guid.NewGuid();
+
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
+            _service.RememberAsync(Request("deploy on friday") with { Sources = [known.Id, ghost] }, CancellationToken.None));
+
+        error.Message.ShouldContain(ghost.ToString());
+        error.Message.ShouldNotContain(known.Id.ToString());
+    }
+
+    [Fact]
+    public async Task Remember_WithExistingSources_SucceedsAndKeepsTheLinks()
+    {
+        var source = TestMemories.Create("known source", [0f, 1f, 0f]);
+        _store.Seed(source, [0f, 1f, 0f]);
+
+        var result = await _service.RememberAsync(
+            Request("deploy on friday") with { Sources = [source.Id] },
+            CancellationToken.None);
+
+        result.Record.Sources.ShouldBe([source.Id]);
+        (await _store.GetAsync(source.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Remember_SourceInOtherTome_IsRejectedAsMissing()
+    {
+        var foreign = TestMemories.Create("foreign source", [0f, 1f, 0f], tome: "elsewhere");
+        _store.Seed(foreign, [0f, 1f, 0f]);
+
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
+            _service.RememberAsync(Request("deploy on friday") with { Sources = [foreign.Id] }, CancellationToken.None));
+
+        error.Message.ShouldContain(foreign.Id.ToString());
+    }
+
+    [Fact]
+    public async Task Remember_SupersedeDuplicate_AppendsTrailLineOnTheOldRecord()
+    {
+        var first = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        await _service.RememberAsync(Request("deploy on fridays"), CancellationToken.None);
+
+        var old = (await _store.GetAsync(first.Record.Id, CancellationToken.None))!;
+        old.Status.ShouldBe(MemoryStatus.Superseded);
+        var line = old.Corrections.Single();
+        line.Action.ShouldBe(CorrectionAction.Supersede);
+        line.Reason.ShouldBe($"superseded by {old.SupersededBy}");
+        line.Actor.ShouldBe(TestMemories.Agent);
+        line.At.ShouldBe(_clock.UtcNow);
+    }
+
     private RememberRequest Request(
         string content,
         MemoryScope scope = MemoryScope.Project,

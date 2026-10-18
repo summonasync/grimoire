@@ -22,6 +22,7 @@ public static class MemoryPayloadMapper
             [MemoryPayloadFields.LastAccessedAt] = Store(record.LastAccessedAt),
             [MemoryPayloadFields.AccessCount] = record.AccessCount,
             [MemoryPayloadFields.Sources] = record.Sources.Select(source => source.ToString()).ToArray(),
+            [MemoryPayloadFields.Corrections] = ToCorrectionsValue(record.Corrections),
         };
 
         if (record.ProjectId is { } projectId)
@@ -87,6 +88,7 @@ public static class MemoryPayloadMapper
                 TombstoneReason = OptionalString(payload, MemoryPayloadFields.TombstoneReason),
                 TombstonedAt = OptionalTimestamp(payload, MemoryPayloadFields.TombstonedAt),
                 Sources = [.. OptionalStrings(payload, MemoryPayloadFields.Sources).Select(Guid.Parse)],
+                Corrections = OptionalCorrections(payload, MemoryPayloadFields.Corrections),
                 IdempotencyKey = OptionalString(payload, MemoryPayloadFields.IdempotencyKey),
             };
         }
@@ -111,6 +113,53 @@ public static class MemoryPayloadMapper
         }
 
         return new Value { StructValue = fields };
+    }
+
+    private static Value ToCorrectionsValue(IReadOnlyList<CorrectionEntry> corrections)
+    {
+        var list = new ListValue();
+        foreach (var correction in corrections)
+        {
+            var fields = new Struct();
+            fields.Fields.Add("at", Store(correction.At));
+            fields.Fields.Add("actor", ToValue(correction.Actor));
+            fields.Fields.Add("action", correction.Action.ToString());
+            fields.Fields.Add("reason", correction.Reason);
+            list.Values.Add(new Value { StructValue = fields });
+        }
+
+        return new Value { ListValue = list };
+    }
+
+    private static IReadOnlyList<CorrectionEntry> OptionalCorrections(IDictionary<string, Value> payload, string field)
+    {
+        if (!payload.TryGetValue(field, out var value) || value.KindCase == Value.KindOneofCase.NullValue)
+        {
+            return [];
+        }
+
+        if (value.KindCase != Value.KindOneofCase.ListValue)
+        {
+            throw new PayloadDecodeException($"Payload field '{field}' is not a list.");
+        }
+
+        return [.. value.ListValue.Values.Select(DecodeCorrection)];
+    }
+
+    private static CorrectionEntry DecodeCorrection(Value value)
+    {
+        if (value.KindCase != Value.KindOneofCase.StructValue)
+        {
+            throw new PayloadDecodeException($"Payload field '{MemoryPayloadFields.Corrections}' carries a non-struct entry.");
+        }
+
+        return new CorrectionEntry
+        {
+            At = ParseTimestamp(RequiredString(value.StructValue.Fields, "at"), MemoryPayloadFields.Corrections),
+            Actor = RequiredActor(value.StructValue.Fields, "actor"),
+            Action = Enum.Parse<CorrectionAction>(RequiredString(value.StructValue.Fields, "action")),
+            Reason = RequiredString(value.StructValue.Fields, "reason"),
+        };
     }
 
     private static MemoryActor RequiredActor(IDictionary<string, Value> payload, string field)

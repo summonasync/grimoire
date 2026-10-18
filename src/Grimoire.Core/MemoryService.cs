@@ -28,6 +28,8 @@ public sealed class MemoryService(
             return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
         }
 
+        await ValidateSourcesAsync(request, tome, cancellationToken);
+
         var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
         var duplicates = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
 
@@ -55,7 +57,7 @@ public sealed class MemoryService(
         Guid? supersededId;
         try
         {
-            supersededId = await SupersedeDuplicatesAsync(duplicates, record.Id, cancellationToken);
+            supersededId = await SupersedeDuplicatesAsync(duplicates, record, cancellationToken);
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
@@ -119,7 +121,12 @@ public sealed class MemoryService(
         return results;
     }
 
-    public async Task<bool> ForgetAsync(Guid id, string reason, CancellationToken cancellationToken, string? tome = null)
+    public async Task<bool> ForgetAsync(
+        Guid id,
+        string reason,
+        CancellationToken cancellationToken,
+        string? tome = null,
+        MemoryActor? actor = null)
     {
         if (string.IsNullOrWhiteSpace(reason))
         {
@@ -133,12 +140,13 @@ public sealed class MemoryService(
             return false;
         }
 
-        await store.UpdateAsync(record with
+        var now = clock.UtcNow;
+        await store.UpdateAsync(CorrectionTrail.Append(record with
         {
             Status = MemoryStatus.Tombstoned,
             TombstoneReason = reason,
-            TombstonedAt = clock.UtcNow,
-        }, cancellationToken);
+            TombstonedAt = now,
+        }, now, actor ?? MemoryActor.Human, CorrectionAction.Forget, reason), cancellationToken);
 
         return true;
     }
@@ -323,7 +331,7 @@ public sealed class MemoryService(
                 original.ProjectId,
                 original.Scope == MemoryScope.Session ? original.SessionId : null), self.Vector, original.Id, cancellationToken);
 
-            await SupersedeDuplicatesAsync(duplicates, original.Id, cancellationToken);
+            await SupersedeDuplicatesAsync(duplicates, original, cancellationToken);
             return true;
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
@@ -332,20 +340,44 @@ public sealed class MemoryService(
         }
     }
 
-    private async Task<Guid?> SupersedeDuplicatesAsync(IReadOnlyList<MemoryRecord> duplicates, Guid successorId, CancellationToken cancellationToken)
+    private async Task<Guid?> SupersedeDuplicatesAsync(IReadOnlyList<MemoryRecord> duplicates, MemoryRecord successor, CancellationToken cancellationToken)
     {
         Guid? supersededId = null;
         foreach (var duplicate in duplicates)
         {
             supersededId ??= duplicate.Id;
-            await store.UpdateAsync(duplicate with
+            await store.UpdateAsync(CorrectionTrail.Append(duplicate with
             {
                 Status = MemoryStatus.Superseded,
-                SupersededBy = successorId,
-            }, cancellationToken);
+                SupersededBy = successor.Id,
+            }, clock.UtcNow, successor.Actor, CorrectionAction.Supersede, $"superseded by {successor.Id}"), cancellationToken);
         }
 
         return supersededId;
+    }
+
+    private async Task ValidateSourcesAsync(RememberRequest request, string tome, CancellationToken cancellationToken)
+    {
+        if (request.Sources.Count == 0)
+        {
+            return;
+        }
+
+        var missing = new List<Guid>();
+        foreach (var source in request.Sources.Distinct())
+        {
+            var record = await store.GetAsync(source, cancellationToken);
+            if (record is null || record.Tome != tome)
+            {
+                missing.Add(source);
+            }
+        }
+
+        if (missing.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Source memories do not exist in tome '{tome}': {string.Join(", ", missing)}.", nameof(request.Sources));
+        }
     }
 
     private async Task<long> CountIdempotencyConflictsAsync(CancellationToken cancellationToken)

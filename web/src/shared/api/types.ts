@@ -9,6 +9,15 @@ export interface MemoryActor {
   vendor: string | null;
 }
 
+export type CorrectionAction = "patch" | "restore" | "supersede" | "forget";
+
+export interface CorrectionEntry {
+  at: string;
+  actor: MemoryActor;
+  action: CorrectionAction;
+  reason: string;
+}
+
 export interface MemoryRecord {
   id: string;
   content: string;
@@ -29,6 +38,7 @@ export interface MemoryRecord {
   tombstoneReason: string | null;
   tombstonedAt: string | null;
   sources: string[];
+  corrections: CorrectionEntry[];
 }
 
 export interface PersonaDocument {

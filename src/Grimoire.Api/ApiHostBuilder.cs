@@ -54,7 +54,8 @@ public static class ApiHostBuilder
         app.UseStructuredErrors();
         app.MapMemoryEndpoints(
             memories,
-            new MemoryEditor(store, embeddings),
+            new MemoryEditor(store, embeddings, clock),
+            new CorrectionService(store, clock, engineOptions),
             new MemoryQueryRunner(store, embeddings),
             store,
             tomeResolver);

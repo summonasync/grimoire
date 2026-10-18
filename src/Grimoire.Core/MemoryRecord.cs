@@ -40,5 +40,7 @@ public sealed record MemoryRecord
 
     public IReadOnlyList<Guid> Sources { get; init; } = [];
 
+    public IReadOnlyList<CorrectionEntry> Corrections { get; init; } = [];
+
     public string? IdempotencyKey { get; init; }
 }

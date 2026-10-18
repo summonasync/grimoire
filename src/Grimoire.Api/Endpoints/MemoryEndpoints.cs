@@ -15,6 +15,7 @@ internal static class MemoryEndpoints
         this WebApplication app,
         MemoryService memories,
         MemoryEditor editor,
+        CorrectionService corrections,
         MemoryQueryRunner queryRunner,
         IMemoryStore store,
         ApiTomeResolver tomes)
@@ -92,6 +93,11 @@ internal static class MemoryEndpoints
 
         app.MapPatch("/api/memories/{id:guid}", async (Guid id, PatchMemoryRequest request, CancellationToken cancellationToken) =>
         {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A patch reason is required.");
+            }
+
             try
             {
                 var updated = await editor.EditAsync(id, request, cancellationToken);
@@ -148,6 +154,67 @@ internal static class MemoryEndpoints
 
             return await store.GetAsync(id, cancellationToken) is { } forgotten
                 ? Results.Ok(forgotten)
+                : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+        });
+
+        app.MapPost("/api/memories/{id:guid}/restore", async (Guid id, RestoreMemoryRequest request, CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A restore reason is required.");
+            }
+
+            if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is null)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+            }
+
+            if (record.Tome != tome)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{tome}'.");
+            }
+
+            var result = await corrections.RestoreAsync(id, request.Reason, cancellationToken, tome, MemoryActor.Human);
+            return result.Record is { } current
+                ? Results.Ok(new RestoreMemoryResponse(current, tome, result.Restored, result.Superseder))
+                : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+        });
+
+        app.MapGet("/api/memories/{id:guid}/history", async (Guid id, string? tome, CancellationToken cancellationToken) =>
+        {
+            if (tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var resolved = await tomes.ResolveAsync(tome, cancellationToken);
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is null)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+            }
+
+            if (record.Tome != resolved)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{resolved}'.");
+            }
+
+            var history = await corrections.HistoryAsync(id, cancellationToken, resolved);
+            return history.Found
+                ? Results.Ok(new HistoryResponse(resolved, history.Chain))
                 : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
         });
     }

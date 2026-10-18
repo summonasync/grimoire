@@ -38,5 +38,7 @@ public static class MemoryPayloadFields
 
     public const string Sources = "sources";
 
+    public const string Corrections = "corrections";
+
     public const string IdempotencyKey = "idempotencyKey";
 }

@@ -401,6 +401,7 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
         {
             content = "new note about indexing",
+            reason = "reword",
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -424,6 +425,7 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         {
             tags = new[] { "after" },
             importance = 1.5,
+            reason = "retagged",
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -443,7 +445,7 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         factory.Reset();
         var record = factory.Store.Seed("identical content", [1f, 0f]);
 
-        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "identical content" });
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "identical content", reason = "no-op touch" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         factory.Embeddings.Requests.ShouldBeEmpty();
@@ -475,7 +477,7 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     {
         factory.Reset();
 
-        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{Guid.NewGuid()}", new { content = "x" });
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{Guid.NewGuid()}", new { content = "x", reason = "why" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
@@ -486,7 +488,7 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         factory.Reset();
         var record = factory.Store.Seed("gone", [1f, 0f], status: MemoryStatus.Tombstoned, tombstoneReason: "gone");
 
-        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "revive" });
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "revive", reason = "revive attempt" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await ReadError(response)).code.ShouldBe("not_editable");
@@ -512,6 +514,51 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var response = await factory.NewClient().PatchAsJsonAsync("/api/memories/not-a-guid", new { content = "x" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Patch_WithoutReason_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("note", [1f, 0f]);
+
+        var missing = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "changed" });
+        var blank = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new { content = "changed", reason = "   " });
+
+        missing.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        blank.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(missing)).code.ShouldBe("invalid_reason");
+        (await ReadError(blank)).code.ShouldBe("invalid_reason");
+        factory.Store.Records.Single().Content.ShouldBe("note");
+        factory.Store.Records.Single().Corrections.ShouldBe([]);
+    }
+
+    [Fact]
+    public async Task Patch_WithReason_AppendsTrailLineVisibleOnDetail()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("old fact", [1f, 0f]);
+        factory.Clock.Advance(TimeSpan.FromMinutes(5));
+        factory.Embeddings.Vectors["new fact"] = [0.9f, 0.1f];
+
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            content = "new fact",
+            reason = "the value moved",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var patched = await ReadFromJsonAsync<MemoryRecord>(response);
+        var line = patched!.Corrections.Single();
+        line.Action.ShouldBe(CorrectionAction.Patch);
+        line.Reason.ShouldBe("the value moved");
+        line.Actor.ShouldBe(MemoryActor.Human);
+        line.At.ShouldBe(factory.Clock.UtcNow);
+
+        var detail = await ReadFromJsonAsync<MemoryRecord>(
+            await factory.NewClient().GetAsync($"/api/memories/{record.Id}"));
+        detail!.Corrections.Select(correction => correction.Action).ShouldBe([CorrectionAction.Patch]);
+        factory.Store.Vectors[record.Id].ShouldBe([0.9f, 0.1f]);
     }
 
     [Fact]
@@ -651,6 +698,229 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await ReadError(response)).code.ShouldBe("not_found");
         factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Restore_SupersededRecord_ActivatesOriginalAndReportsSuperseder()
+    {
+        factory.Reset();
+        var successor = factory.Store.Seed("deploy moved to monday", [1f, 0f], createdAt: FakeClock.DefaultStart.AddHours(1));
+        var original = factory.Store.Seed(
+            "deploy on friday",
+            [1f, 0f],
+            createdAt: FakeClock.DefaultStart,
+            status: MemoryStatus.Superseded);
+        factory.Store.Seed(original with { SupersededBy = successor.Id }, [1f, 0f]);
+        factory.Clock.Advance(TimeSpan.FromHours(2));
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{original.Id}/restore", new { reason = "friday was right" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await ReadFromJsonAsync<RestoreMemoryResponse>(response);
+        body!.Restored.ShouldBeTrue();
+        body.Tome.ShouldBe(TomeKey.DefaultTome);
+        body.Record.Status.ShouldBe(MemoryStatus.Active);
+        body.Superseder.ShouldNotBeNull();
+        body.Superseder.Id.ShouldBe(successor.Id);
+        body.Superseder.Status.ShouldBe(MemoryStatus.Tombstoned);
+        body.Superseder.TombstoneReason.ShouldBe($"restored {original.Id}");
+        factory.Store.Records.Single(stored => stored.Status == MemoryStatus.Active).Id.ShouldBe(original.Id);
+    }
+
+    [Fact]
+    public async Task Restore_TombstonedRecord_ClearsTombstoneAndAppendsTrail()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed(
+            "retracted note",
+            [1f, 0f],
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "wrong call",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Clock.Advance(TimeSpan.FromHours(1));
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "it was true after all" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await ReadFromJsonAsync<RestoreMemoryResponse>(response);
+        body!.Restored.ShouldBeTrue();
+        body.Superseder.ShouldBeNull();
+        body.Record.TombstoneReason.ShouldBeNull();
+        body.Record.TombstonedAt.ShouldBeNull();
+        body.Record.Corrections.Single().Action.ShouldBe(CorrectionAction.Restore);
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Restore_ActiveRecord_IsNoOpReportingRestoredFalse()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("still true", [1f, 0f]);
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "double check" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await ReadFromJsonAsync<RestoreMemoryResponse>(response);
+        body!.Restored.ShouldBeFalse();
+        body.Superseder.ShouldBeNull();
+        body.Record.Id.ShouldBe(record.Id);
+        factory.Store.UpdateCount.ShouldBe(0);
+        factory.Store.Records.Single().Corrections.ShouldBe([]);
+    }
+
+    [Fact]
+    public async Task Restore_Unknown_Returns404()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{Guid.NewGuid()}/restore", new { reason = "gone" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+    }
+
+    [Fact]
+    public async Task Restore_WithIdFromAnotherTome_Returns404WithoutTouchingIt()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed(
+            "alpha note",
+            [1f, 0f],
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart,
+            tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "bring it back" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Tombstoned);
+        factory.Store.Records.Single().TombstoneReason.ShouldBe("gone");
+    }
+
+    [Fact]
+    public async Task Restore_WithTomeParameter_RestoresWithinThatTome()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed(
+            "alpha retraction",
+            [1f, 0f],
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart,
+            tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "undone", tome = "alpha" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await ReadFromJsonAsync<RestoreMemoryResponse>(response);
+        body!.Tome.ShouldBe("alpha");
+        body.Restored.ShouldBeTrue();
+        body.Record.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Restore_WithoutReason_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("note", [1f, 0f]);
+
+        var blank = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "  " });
+        var missing = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { });
+
+        blank.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        missing.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(blank)).code.ShouldBe("invalid_reason");
+        (await ReadError(missing)).code.ShouldBe("invalid_request");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Restore_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("note", [1f, 0f]);
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/restore", new { reason = "undone", tome = "Not Valid!!" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task History_ReturnsFullChainOldestFirst()
+    {
+        factory.Reset();
+        var successor = factory.Store.Seed("deploy moved to monday", [1f, 0f], createdAt: FakeClock.DefaultStart.AddHours(-1));
+        var original = factory.Store.Seed(
+            "deploy on friday",
+            [1f, 0f],
+            createdAt: FakeClock.DefaultStart.AddHours(-2),
+            status: MemoryStatus.Superseded);
+        factory.Store.Seed(original with { SupersededBy = successor.Id }, [1f, 0f]);
+
+        var fromOriginal = await ReadFromJsonAsync<HistoryResponse>(
+            await factory.NewClient().GetAsync($"/api/memories/{original.Id}/history"));
+        var fromSuccessor = await ReadFromJsonAsync<HistoryResponse>(
+            await factory.NewClient().GetAsync($"/api/memories/{successor.Id}/history"));
+
+        fromOriginal!.Tome.ShouldBe(TomeKey.DefaultTome);
+        fromOriginal.Chain.Select(entry => entry.Id).ShouldBe([original.Id, successor.Id]);
+        fromOriginal.Chain[0].Status.ShouldBe(MemoryStatus.Superseded);
+        fromOriginal.Chain[0].BodyPreview.ShouldBe("deploy on friday");
+        fromOriginal.Chain[1].Status.ShouldBe(MemoryStatus.Active);
+        fromOriginal.Chain[1].BodyPreview.ShouldBe("deploy moved to monday");
+        fromSuccessor!.Chain.Select(entry => entry.Id).ShouldBe([original.Id, successor.Id]);
+    }
+
+    [Fact]
+    public async Task History_Unknown_Returns404()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/api/memories/{Guid.NewGuid()}/history");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+    }
+
+    [Fact]
+    public async Task History_WithIdFromAnotherTome_Returns404()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().GetAsync($"/api/memories/{record.Id}/history");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+    }
+
+    [Fact]
+    public async Task History_WithTomeParameter_FollowsThatTome()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().GetAsync($"/api/memories/{record.Id}/history?tome=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var history = await ReadFromJsonAsync<HistoryResponse>(response);
+        history!.Tome.ShouldBe("alpha");
+        history.Chain.Select(entry => entry.Id).ShouldBe([record.Id]);
+    }
+
+    [Fact]
+    public async Task History_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/api/memories/{Guid.NewGuid()}/history?tome={Uri.EscapeDataString("Not Valid!!")}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
     }
 
     private void RaceOnGet(int atCall, Action mutate)

@@ -2,7 +2,10 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { MemoryRecord } from "@/shared/api/types";
+import { MemoryCorrectionsTrail } from "./memory-corrections-trail";
 import { MemoryEditForm } from "./memory-edit-form";
+import { MemoryHistorySection } from "./memory-history-section";
+import { MemoryRestoreControl } from "./memory-restore-control";
 import { MemoryStatusBadge } from "./memory-status-badge";
 import { MemoryTombstoneControl } from "./memory-tombstone-control";
 
@@ -122,16 +125,16 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
           </div>
         )}
 
-        {record.status !== "tombstoned" && (
-          <div className="mt-6 space-y-4 border-t border-border pt-4">
-            {editing ? (
-              <MemoryEditForm
-                record={record}
-                onDone={() => setEditing(false)}
-                onCancel={() => setEditing(false)}
-              />
-            ) : (
-              record.status === "active" && (
+        <div className="mt-6 space-y-4 border-t border-border pt-4">
+          {editing ? (
+            <MemoryEditForm
+              record={record}
+              onDone={() => setEditing(false)}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <>
+              {record.status === "active" && (
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
@@ -139,11 +142,15 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
                 >
                   Edit
                 </button>
-              )
-            )}
-            <MemoryTombstoneControl record={record} />
-          </div>
-        )}
+              )}
+              {record.status !== "tombstoned" && <MemoryTombstoneControl record={record} />}
+              {record.status !== "active" && <MemoryRestoreControl record={record} />}
+            </>
+          )}
+        </div>
+
+        <MemoryCorrectionsTrail corrections={record.corrections} />
+        <MemoryHistorySection record={record} />
       </aside>
     </div>
   );
