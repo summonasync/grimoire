@@ -18,6 +18,7 @@ internal sealed class StatsCommand(CliEnvironment environment)
         environment.Output.WriteLine($"Superseded: {stats.Superseded}");
         environment.Output.WriteLine($"Tombstoned: {stats.Tombstoned}");
         environment.Output.WriteLine($"Pending compaction: {stats.PendingCompaction}");
+        environment.Output.WriteLine($"Idempotency conflicts: {stats.IdempotencyConflicts}");
         return ExitCodes.Ok;
     }
 

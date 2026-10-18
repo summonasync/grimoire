@@ -16,6 +16,8 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public List<IReadOnlyList<Guid>> Deleted { get; } = [];
 
+    public Exception? UpdateFailure { get; set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public MemoryRecord Add(
@@ -67,6 +69,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public Task UpdateAsync(MemoryRecord record, CancellationToken cancellationToken)
     {
+        if (UpdateFailure is not null)
+        {
+            throw UpdateFailure;
+        }
+
         if (!_points.TryGetValue(record.Id, out var point))
         {
             throw new KeyNotFoundException($"No stored point for '{record.Id}'.");
@@ -176,6 +183,16 @@ public sealed class RecordingMemoryStore : IMemoryStore
         if (filter.TombstonedBefore is not null)
         {
             query = query.Where(point => point.Record.TombstonedAt is not null && point.Record.TombstonedAt <= filter.TombstonedBefore);
+        }
+
+        if (filter.IdempotencyKey is not null)
+        {
+            query = query.Where(point => point.Record.IdempotencyKey == filter.IdempotencyKey);
+        }
+
+        if (filter.CreatedAfter is not null)
+        {
+            query = query.Where(point => point.Record.CreatedAt >= filter.CreatedAfter);
         }
 
         if (filter.Limit is not null)

@@ -19,6 +19,7 @@ public sealed class MemoryPayloadMapperTests
         payload.ShouldNotContainKey(MemoryPayloadFields.SupersededBy);
         payload.ShouldNotContainKey(MemoryPayloadFields.TombstoneReason);
         payload.ShouldNotContainKey(MemoryPayloadFields.TombstonedAt);
+        payload.ShouldNotContainKey(MemoryPayloadFields.IdempotencyKey);
         payload[MemoryPayloadFields.Status].StringValue.ShouldBe("Active");
         payload[MemoryPayloadFields.Tags].ListValue.Values.Count.ShouldBe(0);
     }
@@ -31,6 +32,14 @@ public sealed class MemoryPayloadMapperTests
 
         actor["alias"].StringValue.ShouldBe("human");
         actor.ShouldNotContainKey("vendor");
+    }
+
+    [Fact]
+    public void ToPayload_WithIdempotencyKey_WritesItToPayload()
+    {
+        var payload = MemoryPayloadMapper.ToPayload(TestMemories.Create("keyed", idempotencyKey: "key-9"));
+
+        payload[MemoryPayloadFields.IdempotencyKey].StringValue.ShouldBe("key-9");
     }
 
     [Fact]
@@ -61,6 +70,7 @@ public sealed class MemoryPayloadMapperTests
         record.SupersededBy.ShouldBeNull();
         record.TombstoneReason.ShouldBeNull();
         record.TombstonedAt.ShouldBeNull();
+        record.IdempotencyKey.ShouldBeNull();
     }
 
     [Fact]

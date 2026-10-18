@@ -22,6 +22,10 @@ public sealed record MemoryFilter
 
     public int? Limit { get; init; }
 
+    public string? IdempotencyKey { get; init; }
+
+    public DateTimeOffset? CreatedAfter { get; init; }
+
     public bool IsEmpty =>
         Scopes.Count == 0 &&
         Kind is null &&
@@ -31,5 +35,7 @@ public sealed record MemoryFilter
         ProjectId is null &&
         SessionId is null &&
         ExpiresBefore is null &&
-        TombstonedBefore is null;
+        TombstonedBefore is null &&
+        IdempotencyKey is null &&
+        CreatedAfter is null;
 }

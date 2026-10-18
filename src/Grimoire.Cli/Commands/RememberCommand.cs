@@ -45,6 +45,17 @@ internal sealed class RememberCommand(CliEnvironment environment)
         }
 
         environment.Output.WriteLine($"Remembered {result.Record.Id} ({request.Scope}/{request.Kind} by {request.Actor})");
+
+        if (result.IdempotentReplay)
+        {
+            environment.Output.WriteLine("Replayed an existing record; nothing new was embedded or superseded.");
+        }
+
+        if (result.MaintenancePending)
+        {
+            environment.Output.WriteLine("Committed, but duplicate maintenance is pending; replay the same command to converge the store.");
+        }
+
         return ExitCodes.Ok;
     }
 

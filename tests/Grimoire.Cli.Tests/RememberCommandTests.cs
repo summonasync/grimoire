@@ -73,6 +73,34 @@ public sealed class RememberCommandTests : IDisposable
         _host.Store.Upserted.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Remember_IdenticalRetry_ReportsReplayWithoutNewWrite()
+    {
+        await _host.RunAsync("remember", "wip idea", "--scope", "global");
+
+        var code = await _host.RunAsync("remember", "wip idea", "--scope", "global");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Replayed an existing record");
+        _host.Store.Upserted.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Remember_MaintenanceFailsAfterCommit_ReportsPendingAndExitsOk()
+    {
+        await _host.RunAsync("remember", "prefers dark mode");
+        _host.Store.UpdateFailure = new HttpRequestException("supersede update failed");
+
+        var code = await _host.RunAsync("remember", "chose qdrant");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("Remembered");
+        output.ShouldContain("duplicate maintenance is pending");
+        _host.Store.Upserted.Count.ShouldBe(2);
+        _host.Store.Records.Count(record => record.Status == MemoryStatus.Active).ShouldBe(2);
+    }
+
     [Theory]
     [InlineData("--scope", "galactic")]
     [InlineData("--kind", "rumor")]

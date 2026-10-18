@@ -53,6 +53,11 @@ public static class MemoryPayloadMapper
             payload[MemoryPayloadFields.TombstonedAt] = Store(tombstonedAt);
         }
 
+        if (record.IdempotencyKey is { } idempotencyKey)
+        {
+            payload[MemoryPayloadFields.IdempotencyKey] = idempotencyKey;
+        }
+
         return payload;
     }
 
@@ -80,6 +85,7 @@ public static class MemoryPayloadMapper
                 TombstoneReason = OptionalString(payload, MemoryPayloadFields.TombstoneReason),
                 TombstonedAt = OptionalTimestamp(payload, MemoryPayloadFields.TombstonedAt),
                 Sources = [.. OptionalStrings(payload, MemoryPayloadFields.Sources).Select(Guid.Parse)],
+                IdempotencyKey = OptionalString(payload, MemoryPayloadFields.IdempotencyKey),
             };
         }
         catch (PayloadDecodeException)

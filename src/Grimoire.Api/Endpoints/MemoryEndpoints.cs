@@ -59,7 +59,11 @@ internal static class MemoryEndpoints
 
                 return Results.Created(
                     $"/api/memories/{result.Record.Id}",
-                    new CreateMemoryResponse(result.Record, result.SupersededId));
+                    new CreateMemoryResponse(
+                        result.Record,
+                        result.SupersededId,
+                        result.IdempotentReplay,
+                        result.MaintenancePending));
             }
             catch (ArgumentException ex)
             {

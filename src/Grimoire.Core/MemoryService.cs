@@ -18,6 +18,15 @@ public sealed class MemoryService(
         }
 
         var now = clock.UtcNow;
+        var key = IdempotencyKey.Compute(request);
+
+        var replay = await FindReplayAsync(key, now, cancellationToken);
+        if (replay is not null)
+        {
+            var converged = await ConvergeSupersedesAsync(replay, cancellationToken);
+            return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
+        }
+
         var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
         var duplicates = await ProbeDuplicatesAsync(request, vector, cancellationToken);
 
@@ -36,19 +45,19 @@ public sealed class MemoryService(
             LastAccessedAt = now,
             ExpiresAt = request.Scope == MemoryScope.Session ? now.AddHours(_options.SessionTtlHours) : null,
             Sources = [.. request.Sources],
+            IdempotencyKey = key,
         };
 
         await store.UpsertAsync(record, vector, cancellationToken);
 
-        Guid? supersededId = null;
-        foreach (var duplicate in duplicates)
+        Guid? supersededId;
+        try
         {
-            supersededId ??= duplicate.Id;
-            await store.UpdateAsync(duplicate with
-            {
-                Status = MemoryStatus.Superseded,
-                SupersededBy = record.Id,
-            }, cancellationToken);
+            supersededId = await SupersedeDuplicatesAsync(duplicates, record.Id, cancellationToken);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            return new RememberResult { Record = record, MaintenancePending = true };
         }
 
         return new RememberResult { Record = record, SupersededId = supersededId };
@@ -190,6 +199,7 @@ public sealed class MemoryService(
             Tombstoned = tombstoned,
             ActiveByScope = activeByScope,
             PendingCompaction = pending,
+            IdempotencyConflicts = await CountIdempotencyConflictsAsync(cancellationToken),
         };
     }
 
@@ -211,21 +221,105 @@ public sealed class MemoryService(
 
     private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(RememberRequest request, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
-        var filter = new MemoryFilter
-        {
-            Scopes = [request.Scope],
-            Kind = request.Kind,
-            Status = MemoryStatus.Active,
-            ProjectId = request.ProjectId,
-            SessionId = request.Scope == MemoryScope.Session ? request.SessionId : null,
-            ExcludeTags = [PersonaSectionExtensions.PersonaTag],
-        };
+        return await ProbeDuplicatesAsync(DuplicateProbeFilter(
+            request.Scope,
+            request.Kind,
+            request.ProjectId,
+            request.Scope == MemoryScope.Session ? request.SessionId : null), vector, excludeId: null, cancellationToken);
+    }
 
+    private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(MemoryFilter filter, ReadOnlyMemory<float> vector, Guid? excludeId, CancellationToken cancellationToken)
+    {
         var matches = await store.SearchAsync(vector, filter, DuplicateProbeLimit, cancellationToken);
 
         return matches
             .Where(match => match.Similarity >= _options.DedupSimilarityThreshold)
             .Select(match => match.Record)
+            .Where(record => excludeId is null || record.Id != excludeId)
             .ToArray();
+    }
+
+    private MemoryFilter DuplicateProbeFilter(MemoryScope scope, MemoryKind kind, string? projectId, string? sessionId) => new()
+    {
+        Scopes = [scope],
+        Kind = kind,
+        Status = MemoryStatus.Active,
+        ProjectId = projectId,
+        SessionId = sessionId,
+        ExcludeTags = [PersonaSectionExtensions.PersonaTag],
+    };
+
+    private async Task<MemoryRecord?> FindReplayAsync(string key, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var candidates = await store.ListAsync(new MemoryFilter
+        {
+            Status = MemoryStatus.Active,
+            IdempotencyKey = key,
+            CreatedAfter = now.AddHours(-_options.IdempotencyWindowHours),
+        }, cancellationToken);
+
+        return candidates.MinBy(record => (record.CreatedAt, record.Id));
+    }
+
+    private async Task<bool> ConvergeSupersedesAsync(MemoryRecord original, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var points = await store.FetchAsync(new MemoryFilter
+            {
+                Status = MemoryStatus.Active,
+                IdempotencyKey = original.IdempotencyKey,
+            }, cancellationToken);
+
+            var self = points.FirstOrDefault(point => point.Record.Id == original.Id);
+            if (self is null)
+            {
+                return true;
+            }
+
+            var duplicates = await ProbeDuplicatesAsync(DuplicateProbeFilter(
+                original.Scope,
+                original.Kind,
+                original.ProjectId,
+                original.Scope == MemoryScope.Session ? original.SessionId : null), self.Vector, original.Id, cancellationToken);
+
+            await SupersedeDuplicatesAsync(duplicates, original.Id, cancellationToken);
+            return true;
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<Guid?> SupersedeDuplicatesAsync(IReadOnlyList<MemoryRecord> duplicates, Guid successorId, CancellationToken cancellationToken)
+    {
+        Guid? supersededId = null;
+        foreach (var duplicate in duplicates)
+        {
+            supersededId ??= duplicate.Id;
+            await store.UpdateAsync(duplicate with
+            {
+                Status = MemoryStatus.Superseded,
+                SupersededBy = successorId,
+            }, cancellationToken);
+        }
+
+        return supersededId;
+    }
+
+    private async Task<long> CountIdempotencyConflictsAsync(CancellationToken cancellationToken)
+    {
+        var recent = await store.ListAsync(new MemoryFilter
+        {
+            Status = MemoryStatus.Active,
+            CreatedAfter = clock.UtcNow.AddHours(-_options.IdempotencyWindowHours),
+        }, cancellationToken);
+
+        return recent
+            .Select(record => record.IdempotencyKey)
+            .OfType<string>()
+            .GroupBy(key => key)
+            .Sum(group => group.Count() - 1);
     }
 }

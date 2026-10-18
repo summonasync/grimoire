@@ -1,5 +1,6 @@
 using Grimoire.Core;
 using Grimoire.Infrastructure.Memory;
+using Grpc.Core;
 using Qdrant.Client.Grpc;
 
 namespace Grimoire.Infrastructure.Tests.Fakes;
@@ -9,6 +10,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     private readonly Dictionary<Guid, StoredPoint> _points = [];
 
     public bool CollectionExists { get; set; }
+
+    public RpcException? Failure { get; set; }
 
     public int CreateCollectionCount { get; private set; }
 
@@ -40,8 +43,15 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
         _points[id] = new StoredPoint(new Dictionary<string, Value>(payload ?? new Dictionary<string, Value>()), vector);
     }
 
-    public Task<bool> CollectionExistsAsync(string collection, CancellationToken cancellationToken) =>
-        Task.FromResult(CollectionExists);
+    public Task<bool> CollectionExistsAsync(string collection, CancellationToken cancellationToken)
+    {
+        if (Failure is { } failure)
+        {
+            return Task.FromException<bool>(failure);
+        }
+
+        return Task.FromResult(CollectionExists);
+    }
 
     public Task<CollectionInfo> GetCollectionInfoAsync(string collection, CancellationToken cancellationToken)
     {
@@ -165,6 +175,12 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     public Task<long> CountAsync(string collection, Filter filter, CancellationToken cancellationToken)
     {
         CountedFilters.Add(filter);
+
+        if (Failure is { } failure)
+        {
+            return Task.FromException<long>(failure);
+        }
+
         return Task.FromResult((long)Matching(filter).Count);
     }
 

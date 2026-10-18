@@ -13,4 +13,6 @@ public sealed record MemoryEngineOptions
     public CompactionOptions Compaction { get; init; } = new();
 
     public int RecallOversampling { get; init; } = 3;
+
+    public double IdempotencyWindowHours { get; init; } = 24;
 }

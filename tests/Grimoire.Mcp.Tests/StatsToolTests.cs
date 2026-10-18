@@ -17,6 +17,7 @@ public sealed class StatsToolTests
         payload.GetProperty("superseded").GetInt64().ShouldBe(0);
         payload.GetProperty("tombstoned").GetInt64().ShouldBe(0);
         payload.GetProperty("pendingCompaction").GetInt64().ShouldBe(0);
+        payload.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(0);
     }
 
     [Fact]
@@ -62,6 +63,23 @@ public sealed class StatsToolTests
         payload.GetProperty("pendingCompaction").GetInt64().ShouldBe(3);
         payload.GetProperty("activeByScope").GetProperty("Project").GetInt64().ShouldBe(5);
         payload.GetProperty("activeByScope").GetProperty("Session").GetInt64().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Stats_CountsActiveDuplicatesAsIdempotencyConflicts()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        foreach (var index in new[] { 1, 2 })
+        {
+            await session.Store.UpsertAsync(
+                Journal(Guid.NewGuid(), $"crashed write {index}", session.Clock.UtcNow) with { IdempotencyKey = "shared-key" },
+                new float[] { 1, 0, 0 },
+                CancellationToken.None);
+        }
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.Payload().GetProperty("idempotencyConflicts").GetInt64().ShouldBe(1);
     }
 
     private static MemoryRecord Journal(Guid id, string content, DateTimeOffset accessed)

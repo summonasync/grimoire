@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Sockets;
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Tests.Fakes;
@@ -26,29 +28,42 @@ public sealed class OllamaEmbeddingProviderTests
     }
 
     [Fact]
-    public async Task Embed_WhenEndpointUnreachable_ThrowsTypedUnavailableError()
+    public async Task Embed_WhenEndpointUnreachable_ThrowsUpstreamUnavailable()
     {
         var handler = new FakeOllamaHandler(_ => throw new HttpRequestException("connection refused", inner: null));
         var provider = Provider(handler);
 
-        var exception = await Should.ThrowAsync<EmbeddingUnavailableException>(
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
             () => provider.EmbedAsync("hello", CancellationToken.None));
 
-        exception.Message.ShouldContain("unreachable");
+        exception.Upstream.ShouldBe("ollama");
         exception.InnerException.ShouldBeOfType<HttpRequestException>();
+        exception.InnerException!.Message.ShouldBe("connection refused");
     }
 
     [Fact]
-    public async Task Embed_WhenRequestTimesOut_ThrowsTypedUnavailableError()
+    public async Task Embed_WhenSocketFails_ThrowsUpstreamUnavailable()
+    {
+        var handler = new FakeOllamaHandler(_ => throw new SocketException((int)SocketError.ConnectionRefused));
+        var provider = Provider(handler);
+
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
+            () => provider.EmbedAsync("hello", CancellationToken.None));
+
+        exception.InnerException.ShouldBeOfType<SocketException>();
+    }
+
+    [Fact]
+    public async Task Embed_WhenRequestTimesOut_ThrowsUpstreamUnavailable()
     {
         var handler = new FakeOllamaHandler(_ => throw new TaskCanceledException("timed out", new TimeoutException()));
         var provider = Provider(handler);
 
-        var exception = await Should.ThrowAsync<EmbeddingUnavailableException>(
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
             () => provider.EmbedAsync("hello", CancellationToken.None));
 
-        exception.Message.ShouldContain("timed out");
         exception.InnerException.ShouldBeOfType<TaskCanceledException>();
+        exception.InnerException!.InnerException.ShouldBeOfType<TimeoutException>();
     }
 
     [Fact]

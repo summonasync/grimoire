@@ -2,4 +2,8 @@ using Grimoire.Core;
 
 namespace Grimoire.Api.Contracts;
 
-public sealed record CreateMemoryResponse(MemoryRecord Record, Guid? SupersededId);
+public sealed record CreateMemoryResponse(
+    MemoryRecord Record,
+    Guid? SupersededId,
+    bool IdempotentReplay = false,
+    bool MaintenancePending = false);

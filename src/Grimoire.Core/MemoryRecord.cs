@@ -37,4 +37,6 @@ public sealed record MemoryRecord
     public DateTimeOffset? TombstonedAt { get; init; }
 
     public IReadOnlyList<Guid> Sources { get; init; } = [];
+
+    public string? IdempotencyKey { get; init; }
 }

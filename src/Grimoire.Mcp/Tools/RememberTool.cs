@@ -115,6 +115,8 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 Tags = result.Record.Tags,
                 SupersededExisting = result.SupersededExisting,
                 SupersededMemoryId = result.SupersededId,
+                IdempotentReplay = result.IdempotentReplay,
+                MaintenancePending = result.MaintenancePending,
                 BodyChars = content.Length,
                 CreatedAt = result.Record.CreatedAt,
             });

@@ -35,4 +35,6 @@ public static class MemoryPayloadFields
     public const string TombstonedAt = "tombstonedAt";
 
     public const string Sources = "sources";
+
+    public const string IdempotencyKey = "idempotencyKey";
 }

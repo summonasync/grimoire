@@ -1,5 +1,4 @@
 using Grimoire.Core;
-using Grimoire.Infrastructure.Embeddings;
 
 namespace Grimoire.Cli.Tests.Fakes;
 
@@ -15,7 +14,7 @@ public sealed class StubEmbeddings(IReadOnlyDictionary<string, float[]> vectors)
 
         if (text == UnavailableText)
         {
-            throw new EmbeddingUnavailableException($"Ollama endpoint is unreachable for '{text}'.", new HttpRequestException("connection refused"));
+            throw new UpstreamUnavailableException("ollama", new HttpRequestException("connection refused"));
         }
 
         if (!vectors.TryGetValue(text, out var vector))

@@ -15,6 +15,8 @@ internal static class UsageWriter
         }
 
         output.WriteLine();
+        output.WriteLine("Exit codes: 0 ok, 1 runtime, 2 usage, 3 config, 4 dependency, 5 not found, 6 upstream unavailable (nothing was written; replay the same command).");
+        output.WriteLine();
         output.WriteLine("Run 'grimoire help <command>' for command details. Config: ~/.grimoire/config.json");
     }
 

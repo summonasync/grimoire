@@ -11,10 +11,12 @@ internal sealed class StatsTool(MemoryService memories)
     public const string Title = "Get memory stats";
 
     public const string Description =
-        "Report store health: active, superseded and tombstoned counts, active records per scope, and " +
-        "pendingCompaction (journal entries clustered and waiting to be distilled into facts). Call it to check " +
-        "the store is reachable after a failed memory call, to size the compaction backlog before running " +
-        "memory_compact_candidates, or when the human asks what memory currently holds.";
+        "Report store health: active, superseded and tombstoned counts, active records per scope, " +
+        "pendingCompaction (journal entries clustered and waiting to be distilled into facts), and " +
+        "idempotencyConflicts (active duplicates whose supersede maintenance never finished; 0 is healthy, " +
+        "replaying the same write converges them). Call it to check the store is reachable after a failed " +
+        "memory call, to size the compaction backlog before running memory_compact_candidates, or when the " +
+        "human asks what memory currently holds.";
 
     public Task<CallToolResult> GetStats(CancellationToken cancellationToken = default)
     {
@@ -29,6 +31,7 @@ internal sealed class StatsTool(MemoryService memories)
                 Tombstoned = stats.Tombstoned,
                 ActiveByScope = stats.ActiveByScope,
                 PendingCompaction = stats.PendingCompaction,
+                IdempotencyConflicts = stats.IdempotencyConflicts,
             });
         }, cancellationToken);
     }

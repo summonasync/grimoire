@@ -41,6 +41,7 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.GetCount = 0;
         Store.OnGetAsync = null;
         Embeddings.Requests.Clear();
+        Embeddings.Failure = null;
     }
 
     public HttpClient NewClient()

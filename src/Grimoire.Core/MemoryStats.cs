@@ -11,4 +11,6 @@ public sealed record MemoryStats
     public required IReadOnlyDictionary<MemoryScope, long> ActiveByScope { get; init; }
 
     public required long PendingCompaction { get; init; }
+
+    public required long IdempotencyConflicts { get; init; }
 }

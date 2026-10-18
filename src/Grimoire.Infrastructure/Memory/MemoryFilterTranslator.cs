@@ -42,6 +42,11 @@ internal static class MemoryFilterTranslator
             translated.Must.Add(Conditions.MatchKeyword(MemoryPayloadFields.SessionId, sessionId));
         }
 
+        if (filter.IdempotencyKey is { } idempotencyKey)
+        {
+            translated.Must.Add(Conditions.MatchKeyword(MemoryPayloadFields.IdempotencyKey, idempotencyKey));
+        }
+
         if (filter.ExpiresBefore is { } expiresBefore)
         {
             translated.Must.Add(Conditions.DatetimeRange(
@@ -54,6 +59,13 @@ internal static class MemoryFilterTranslator
             translated.Must.Add(Conditions.DatetimeRange(
                 MemoryPayloadFields.TombstonedAt,
                 lte: tombstonedBefore.UtcDateTime));
+        }
+
+        if (filter.CreatedAfter is { } createdAfter)
+        {
+            translated.Must.Add(Conditions.DatetimeRange(
+                MemoryPayloadFields.CreatedAt,
+                gte: createdAfter.UtcDateTime));
         }
 
         return translated;

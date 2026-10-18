@@ -220,6 +220,41 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_WithTypedUpstreamFailure_Returns503WithoutRawDiagnostics()
+    {
+        factory.Reset();
+        factory.Embeddings.Failure = new UpstreamUnavailableException("ollama", new HttpRequestException("connection refused"));
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new { content = "offline note", scope = "global" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("upstream_unavailable");
+        message.ShouldContain("ollama");
+        message.ShouldContain("Nothing was written");
+        message.ShouldNotContain("connection refused");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_IdenticalRetry_ReportsIdempotentReplay()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["one true decision"] = [1f, 0f];
+        var client = factory.NewClient();
+
+        var first = await client.PostAsJsonAsync("/api/memories", new { content = "one true decision", scope = "global" });
+        var second = await client.PostAsJsonAsync("/api/memories", new { content = "one true decision", scope = "global" });
+
+        first.StatusCode.ShouldBe(HttpStatusCode.Created);
+        second.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(second);
+        body.GetProperty("idempotentReplay").GetBoolean().ShouldBeTrue();
+        body.GetProperty("maintenancePending").GetBoolean().ShouldBeFalse();
+        factory.Store.Records.ShouldHaveSingleItem();
+    }
+
+    [Fact]
     public async Task Post_WithMissingContent_Returns400()
     {
         factory.Reset();

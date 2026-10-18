@@ -13,6 +13,8 @@ public sealed class QdrantCollectionBootstrapper(IQdrantVectorDb db, string coll
         (MemoryPayloadFields.ProjectId, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.SessionId, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.ExpiresAt, PayloadSchemaType.Datetime),
+        (MemoryPayloadFields.CreatedAt, PayloadSchemaType.Datetime),
+        (MemoryPayloadFields.IdempotencyKey, PayloadSchemaType.Keyword),
     ];
 
     public async Task EnsureAsync(EmbeddingFingerprint expected, CancellationToken cancellationToken)

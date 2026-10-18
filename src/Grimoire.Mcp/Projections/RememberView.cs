@@ -22,6 +22,10 @@ internal sealed record RememberView
 
     public Guid? SupersededMemoryId { get; init; }
 
+    public required bool IdempotentReplay { get; init; }
+
+    public required bool MaintenancePending { get; init; }
+
     public required int BodyChars { get; init; }
 
     public required DateTimeOffset CreatedAt { get; init; }

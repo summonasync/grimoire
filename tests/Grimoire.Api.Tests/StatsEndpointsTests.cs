@@ -34,5 +34,24 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("activeByScope").GetProperty("project").GetInt64().ShouldBe(2);
         body.GetProperty("activeByScope").GetProperty("session").GetInt64().ShouldBe(1);
         body.GetProperty("pendingCompaction").GetInt64().ShouldBe(0);
+        body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Get_CountsActiveIdempotencyDuplicates()
+    {
+        factory.Reset();
+        foreach (var content in new[] { "crashed write a", "crashed write b" })
+        {
+            factory.Store.Seed(
+                TestMemories.Create(content, scope: MemoryScope.Global) with { IdempotencyKey = "shared-key" },
+                [1f, 0f]);
+        }
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(1);
     }
 }

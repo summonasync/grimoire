@@ -120,14 +120,17 @@ public sealed class CliApplicationTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_EmbeddingOffline_ExitsDependency()
+    public async Task RunAsync_TypedUpstreamFailure_ExitsUpstreamUnavailableWithoutWriting()
     {
         _host.Embeddings.UnavailableText = "deploy";
 
-        var code = await _host.RunAsync("recall", "deploy");
+        var code = await _host.RunAsync("remember", "deploy");
 
-        code.ShouldBe(ExitCodes.Dependency);
-        _host.Output.ToString().ShouldContain("error [dependency]");
+        code.ShouldBe(ExitCodes.UpstreamUnavailable);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [upstream_unavailable]");
+        output.ShouldContain("Nothing was written");
+        _host.Store.Upserted.ShouldBeEmpty();
     }
 
     [Fact]

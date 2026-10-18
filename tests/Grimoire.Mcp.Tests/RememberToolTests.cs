@@ -246,6 +246,77 @@ public sealed class RememberToolTests
     }
 
     [Fact]
+    public async Task Remember_TypedUpstreamFailure_MapsByTypeWithoutRawDiagnostics()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Failure = new UpstreamUnavailableException("ollama", new HttpRequestException("connection refused"));
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "Worth remembering",
+            ["scope"] = "Global",
+        });
+
+        var (code, message, _) = result.Error();
+        code.ShouldBe(ToolErrorCodes.UpstreamUnavailable);
+        message.ShouldContain("ollama");
+        message.ShouldContain("Nothing was written");
+        message.ShouldNotContain("connection refused");
+        session.Store.Points.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_IdenticalRetry_ReplaysOriginalWithoutNewWrite()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var request = new Dictionary<string, object?>
+        {
+            ["content"] = "Ship on Fridays",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+        };
+        var first = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>(request));
+        var second = await session.Client.CallToolAsync("memory_remember", request);
+
+        var firstId = first.Payload().GetProperty("memoryId").GetGuid();
+        var payload = second.Payload();
+        payload.GetProperty("idempotentReplay").GetBoolean().ShouldBeTrue();
+        payload.GetProperty("maintenancePending").GetBoolean().ShouldBeFalse();
+        payload.GetProperty("memoryId").GetGuid().ShouldBe(firstId);
+        session.Store.Points.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Remember_CommittedWithFailedMaintenance_ReportsPendingWithoutFailing()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("decision v1", VectorA);
+        session.Embeddings.Register("decision v2", VectorNearA);
+
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v1",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+        });
+        session.Store.UpdateFailure = new InvalidOperationException("supersede update failed");
+
+        var second = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v2",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+        });
+
+        second.ShouldSucceed();
+        var payload = second.Payload();
+        payload.GetProperty("maintenancePending").GetBoolean().ShouldBeTrue();
+        payload.GetProperty("idempotentReplay").GetBoolean().ShouldBeFalse();
+        session.Store.Points.Count(point => point.Record.Status == MemoryStatus.Active).ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Remember_WhenEmbeddingFailsUnexpectedly_ReturnsInternalError()
     {
         await using var session = await McpTestSession.StartAsync();

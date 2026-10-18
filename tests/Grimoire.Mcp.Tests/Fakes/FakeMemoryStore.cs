@@ -10,6 +10,8 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public List<IReadOnlyList<Guid>> DeletedBatches { get; } = [];
 
+    public Exception? UpdateFailure { get; set; }
+
     public async Task UpsertAsync(MemoryRecord record, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
         await Task.Yield();
@@ -18,6 +20,11 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public Task UpdateAsync(MemoryRecord record, CancellationToken cancellationToken)
     {
+        if (UpdateFailure is not null)
+        {
+            throw UpdateFailure;
+        }
+
         if (!_points.TryGetValue(record.Id, out var point))
         {
             throw new InvalidOperationException($"Update of unknown point {record.Id}.");
@@ -128,6 +135,16 @@ internal sealed class FakeMemoryStore : IMemoryStore
         }
 
         if (filter.TombstonedBefore is not null && (record.TombstonedAt is null || record.TombstonedAt > filter.TombstonedBefore))
+        {
+            return false;
+        }
+
+        if (filter.IdempotencyKey is not null && record.IdempotencyKey != filter.IdempotencyKey)
+        {
+            return false;
+        }
+
+        if (filter.CreatedAfter is not null && record.CreatedAt < filter.CreatedAfter)
         {
             return false;
         }

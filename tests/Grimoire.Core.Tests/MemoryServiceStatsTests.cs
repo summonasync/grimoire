@@ -29,6 +29,7 @@ public sealed class MemoryServiceStatsTests
         stats.Superseded.ShouldBe(0);
         stats.Tombstoned.ShouldBe(0);
         stats.PendingCompaction.ShouldBe(0);
+        stats.IdempotencyConflicts.ShouldBe(0);
         foreach (var pair in stats.ActiveByScope)
         {
             pair.Value.ShouldBe(0);
@@ -95,6 +96,43 @@ public sealed class MemoryServiceStatsTests
         stats.PendingCompaction.ShouldBe(0);
     }
 
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_ZeroOnHealthyStore()
+    {
+        Seed("original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a");
+        Seed("unrelated", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-b");
+        Seed("keyless", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_CountsOrphansOfDuplicateGroup()
+    {
+        Seed("original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart);
+        Seed("orphan one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddMinutes(1));
+        Seed("orphan two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddMinutes(2));
+        Seed("healthy other", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-b", created: FakeClock.DefaultStart.AddMinutes(3));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Stats_IdempotencyConflicts_IgnoresInactiveAndStaleRecords()
+    {
+        Seed("active original", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a");
+        Seed("superseded twin", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Superseded, idempotencyKey: "key-a", supersededBy: Guid.NewGuid());
+        Seed("stale orphan", MemoryScope.Global, MemoryKind.Journal, MemoryStatus.Active, idempotencyKey: "key-a", created: FakeClock.DefaultStart.AddDays(-2));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.IdempotencyConflicts.ShouldBe(0);
+    }
+
     private void Seed(
         string content,
         MemoryScope scope,
@@ -104,7 +142,9 @@ public sealed class MemoryServiceStatsTests
         DateTimeOffset? accessed = null,
         Guid? supersededBy = null,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string? idempotencyKey = null,
+        DateTimeOffset? created = null)
     {
         var memoryVector = vector ?? [1f, 0f, 0f];
         var record = TestMemories.Create(
@@ -116,7 +156,9 @@ public sealed class MemoryServiceStatsTests
             status: status,
             supersededBy: supersededBy,
             tombstoneReason: tombstoneReason,
-            tombstonedAt: tombstonedAt);
+            tombstonedAt: tombstonedAt,
+            idempotencyKey: idempotencyKey,
+            created: created);
         _store.Seed(record, memoryVector);
     }
 }

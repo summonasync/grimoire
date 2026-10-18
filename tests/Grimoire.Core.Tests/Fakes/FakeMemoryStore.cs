@@ -132,6 +132,16 @@ public sealed class FakeMemoryStore : IMemoryStore
             query = query.Where(point => point.Record.TombstonedAt is not null && point.Record.TombstonedAt <= filter.TombstonedBefore);
         }
 
+        if (filter.IdempotencyKey is not null)
+        {
+            query = query.Where(point => point.Record.IdempotencyKey == filter.IdempotencyKey);
+        }
+
+        if (filter.CreatedAfter is not null)
+        {
+            query = query.Where(point => point.Record.CreatedAt >= filter.CreatedAfter);
+        }
+
         if (filter.Limit is not null)
         {
             query = query.Take(filter.Limit.Value);

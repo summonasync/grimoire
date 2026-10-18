@@ -50,9 +50,9 @@ public sealed class InitCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Ok);
         _db.CreateCollectionCount.ShouldBe(1);
         _db.CreatedDimensions.ShouldBe(768);
-        _db.CreatedIndexes.Count.ShouldBe(7);
-        _db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(6);
-        _db.CreatedIndexes.ShouldContain(index => index.Type == PayloadSchemaType.Datetime);
+        _db.CreatedIndexes.Count.ShouldBe(9);
+        _db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(7);
+        _db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Datetime).ShouldBe(2);
         _db.Upserted.ShouldHaveSingleItem()[0].Payload[EmbeddingFingerprint.ModelField].StringValue.ShouldBe("nomic-embed-text");
     }
 
@@ -68,7 +68,7 @@ public sealed class InitCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok);
         _db.CreateCollectionCount.ShouldBe(0);
-        _db.CreatedIndexes.Count.ShouldBe(7);
+        _db.CreatedIndexes.Count.ShouldBe(9);
     }
 
     [Fact]
