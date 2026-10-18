@@ -15,6 +15,12 @@ internal static class CliServices
         services.AddSingleton(sp => new QdrantCollectionBootstrapper(
             sp.GetRequiredService<IQdrantVectorDb>(),
             options.Qdrant.Collection));
+        services.AddSingleton(sp => new EmbeddingReindexer(
+            sp.GetRequiredService<IQdrantVectorDb>(),
+            options.Qdrant.Collection,
+            sp.GetRequiredService<QdrantCollectionBootstrapper>(),
+            sp.GetRequiredService<IEmbeddingProvider>(),
+            sp.GetRequiredService<MemoryEngineOptions>().ReindexBatchSize));
         services.AddSingleton<IMemoryStore>(sp => new QdrantMemoryStore(
             sp.GetRequiredService<IQdrantVectorDb>(),
             options.Qdrant.Collection,
@@ -25,12 +31,16 @@ internal static class CliServices
             options.Embedding));
         services.AddSingleton<IClock>(SystemClock.Instance);
         services.AddSingleton(EngineOptionsMapper.ToEngineOptions(options.Memory, options.DefaultTome));
+        services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.Serve.GcIntervalMinutes) });
+        services.AddSingleton<IGcStateStore>(new GcStateFileStore());
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
         services.AddSingleton<MemoryService>(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<IClock>(),
-            sp.GetRequiredService<MemoryEngineOptions>()));
+            sp.GetRequiredService<MemoryEngineOptions>(),
+            sp.GetRequiredService<GcOptions>(),
+            sp.GetRequiredService<IGcStateStore>()));
         services.AddSingleton<PersonaService>(sp => new PersonaService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

@@ -29,6 +29,42 @@ public sealed class StatsCommandTests : IDisposable
         output.ShouldContain("Superseded: 0");
         output.ShouldContain("Tombstoned: 1");
         output.ShouldContain("Idempotency conflicts: 0");
+        output.ShouldContain("GC: unknown (gc state file does not exist yet), stale: true");
+    }
+
+    [Fact]
+    public async Task Stats_RendersTheGcHeartbeatLine()
+    {
+        _host.GcState.Current = new GcState
+        {
+            LastAttemptAt = _host.Clock.UtcNow.AddMinutes(-10),
+            LastSuccessAt = _host.Clock.UtcNow.AddMinutes(-10),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        };
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain(
+            $"GC: last attempt {FormatMoment(_host.Clock.UtcNow.AddMinutes(-10))}, " +
+            $"last success {FormatMoment(_host.Clock.UtcNow.AddMinutes(-10))}, " +
+            "removed 2 expired / 1 tombstones, last error: none, stale: false");
+    }
+
+    [Fact]
+    public async Task Stats_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
+    {
+        _host.GcState.Current = new GcState
+        {
+            LastAttemptAt = _host.Clock.UtcNow.AddHours(-5),
+            LastSuccessAt = _host.Clock.UtcNow.AddHours(-5),
+        };
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("stale: true");
     }
 
     [Fact]
@@ -96,6 +132,8 @@ public sealed class StatsCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
         host.Output.ToString().ShouldContain("Tome: platform-work (claim file)");
     }
+
+    private static string FormatMoment(DateTimeOffset moment) => moment.ToString("u");
 
     private void Seed(
         string content,

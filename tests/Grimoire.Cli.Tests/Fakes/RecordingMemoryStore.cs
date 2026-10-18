@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Grimoire.Core;
 
 namespace Grimoire.Cli.Tests.Fakes;
@@ -12,11 +13,15 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public List<MemoryRecord> Upserted { get; } = [];
 
+    public List<IReadOnlyList<MemoryPoint>> BatchUpserted { get; } = [];
+
     public List<MemoryRecord> Updated { get; } = [];
 
     public List<IReadOnlyList<Guid>> Deleted { get; } = [];
 
     public Exception? UpdateFailure { get; set; }
+
+    public Exception? ListFailure { get; set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
@@ -60,6 +65,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public void Seed(MemoryRecord record, params float[] vector) => _points[record.Id] = new StoredPoint(record, vector);
 
+    public void Clear() => _points.Clear();
+
+    public float[] VectorOf(Guid id) => _points[id].Vector;
+
+
     public Task UpsertAsync(MemoryRecord record, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
     {
         Upserted.Add(record);
@@ -91,6 +101,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        if (ListFailure is not null)
+        {
+            throw ListFailure;
+        }
+
         ListedFilters.Add(filter);
         IReadOnlyList<MemoryRecord> records = Matching(filter).Select(point => point.Record).ToList();
         return Task.FromResult(records);
@@ -131,6 +146,28 @@ public sealed class RecordingMemoryStore : IMemoryStore
         foreach (var id in ids)
         {
             _points.Remove(id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        foreach (var point in _points.Values)
+        {
+            yield return new MemoryPoint { Record = point.Record, Vector = point.Vector };
+        }
+    }
+
+    public Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        BatchUpserted.Add([.. points]);
+
+        foreach (var point in points)
+        {
+            _points[point.Record.Id] = new StoredPoint(point.Record, point.Vector.ToArray());
         }
 
         return Task.CompletedTask;

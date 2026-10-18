@@ -53,6 +53,9 @@ internal static class CommandCatalog
     private static readonly FlagSpec WebRoot = new(
         "web-root", "path", "Static SPA export directory. Default: ~/.grimoire/web");
 
+    private static readonly FlagSpec Gzip = FlagSpec.Switch(
+        "gzip", "Write the export through gzip; the default export path gets .jsonl.gz.");
+
     private static readonly FlagSpec Agent = new(
         "agent", "alias", "Claim this directory for an agent: rewrite the managed grimoire:actor block in AGENTS.md.");
 
@@ -146,6 +149,26 @@ internal static class CommandCatalog
             Name = "gc",
             Summary = "Hard-delete expired session memories and aged tombstones.",
             Syntax = "gc",
+        },
+        new CommandSpec
+        {
+            Name = "reindex",
+            Summary = "Re-embed every active memory with the configured embedding model. Resumable: an interrupted run leaves the store read-refused until reindex completes.",
+            Syntax = "reindex",
+        },
+        new CommandSpec
+        {
+            Name = "export",
+            Summary = "Dump every memory — all statuses and tomes, vectors included — to a JSONL file stamped with the embedding fingerprint.",
+            Syntax = "export [path]",
+            Flags = [Gzip],
+        },
+        new CommandSpec
+        {
+            Name = "import",
+            Summary = "Restore a store export: validates the embedding fingerprint against the configured model, then upserts records with ids, statuses, timestamps and vectors preserved. Re-running an import is safe.",
+            Syntax = "import <path>",
+            MinPositional = 1,
         },
         new CommandSpec
         {

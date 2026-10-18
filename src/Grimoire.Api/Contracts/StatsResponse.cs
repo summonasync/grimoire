@@ -10,4 +10,5 @@ public sealed record StatsResponse(
     IReadOnlyDictionary<MemoryScope, long> ActiveByScope,
     long PendingCompaction,
     long IdempotencyConflicts,
-    IReadOnlyDictionary<string, TomeStats> ByTome);
+    IReadOnlyDictionary<string, TomeStats> ByTome,
+    GcState Gc);

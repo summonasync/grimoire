@@ -21,6 +21,63 @@ public sealed class StatsToolTests
     }
 
     [Fact]
+    public async Task Stats_ReportsTheGcHeartbeatWithStaleness()
+    {
+        await using var session = await McpTestSession.StartAsync(gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) });
+        session.Gc.Current = new GcState
+        {
+            LastAttemptAt = session.Clock.UtcNow.AddMinutes(-10),
+            LastSuccessAt = session.Clock.UtcNow.AddMinutes(-10),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        };
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var gc = result.Payload().GetProperty("gc");
+        gc.GetProperty("stale").GetBoolean().ShouldBeFalse();
+        gc.GetProperty("lastSuccessAt").GetDateTimeOffset().ShouldBe(session.Clock.UtcNow.AddMinutes(-10));
+        gc.GetProperty("removedExpired").GetInt32().ShouldBe(2);
+        gc.GetProperty("removedTombstones").GetInt32().ShouldBe(1);
+        gc.GetProperty("isUnknown").GetBoolean().ShouldBeFalse();
+        gc.TryGetProperty("lastError", out _).ShouldBeFalse();
+        gc.TryGetProperty("unknownReason", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Stats_FlagsStaleWhenTheHeartbeatIsOlderThanTwiceTheSweepInterval()
+    {
+        await using var session = await McpTestSession.StartAsync(gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) });
+        session.Gc.Current = new GcState
+        {
+            LastAttemptAt = session.Clock.UtcNow.AddHours(-5),
+            LastSuccessAt = session.Clock.UtcNow.AddHours(-5),
+        };
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var gc = result.Payload().GetProperty("gc");
+        gc.GetProperty("stale").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Stats_SurfacesAnUnreadableHeartbeatAsUnknownWithoutFailing()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Gc.Current = GcState.Unknown("gc state file is not valid JSON: boom");
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var gc = result.Payload().GetProperty("gc");
+        gc.GetProperty("stale").GetBoolean().ShouldBeTrue();
+        gc.GetProperty("unknownReason").GetString().ShouldBe("gc state file is not valid JSON: boom");
+        gc.TryGetProperty("lastSuccessAt", out _).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Stats_ReflectsCountsPerStatusScopeAndPendingCompaction()
     {
         await using var session = await McpTestSession.StartAsync();

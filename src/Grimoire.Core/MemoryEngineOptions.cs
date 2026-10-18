@@ -21,4 +21,6 @@ public sealed record MemoryEngineOptions
     public int BriefMaxTotalChars { get; init; } = 8000;
 
     public int BriefMaxEntryChars { get; init; } = 400;
+
+    public int ReindexBatchSize { get; init; } = 64;
 }

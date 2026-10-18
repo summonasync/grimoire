@@ -55,8 +55,14 @@ internal static class TestMemories
         };
     }
 
-    public static MemoryService Service(IMemoryStore store, FakeEmbeddingProvider embeddings, FakeClock clock, MemoryEngineOptions? options = null)
-        => new(store, embeddings, clock, options);
+    public static MemoryService Service(
+        IMemoryStore store,
+        FakeEmbeddingProvider embeddings,
+        FakeClock clock,
+        MemoryEngineOptions? options = null,
+        GcOptions? gcOptions = null,
+        IGcStateStore? gcState = null)
+        => new(store, embeddings, clock, options, gcOptions, gcState);
 
     public static CorrectionService Corrections(IMemoryStore store, FakeClock clock, MemoryEngineOptions? options = null)
         => new(store, clock, options);

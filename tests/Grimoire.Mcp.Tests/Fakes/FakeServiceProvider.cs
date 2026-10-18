@@ -11,7 +11,9 @@ internal sealed class FakeServiceProvider : IServiceProvider
         IEmbeddingProvider embeddings,
         IClock clock,
         MemoryEngineOptions? engineOptions = null,
-        IActorClaimProvider? claims = null)
+        IActorClaimProvider? claims = null,
+        GcOptions? gcOptions = null,
+        IGcStateStore? gcState = null)
     {
         _services = new Dictionary<Type, object>
         {
@@ -19,6 +21,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(IEmbeddingProvider)] = embeddings,
             [typeof(IClock)] = clock,
             [typeof(IActorClaimProvider)] = claims ?? new FakeActorClaimProvider(),
+            [typeof(GcOptions)] = gcOptions ?? new GcOptions(),
+            [typeof(IGcStateStore)] = gcState ?? new FakeGcStateStore(),
         };
 
         if (engineOptions is not null)

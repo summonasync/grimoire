@@ -41,6 +41,8 @@ public sealed class GrimoireApiFactory : IDisposable
 
     public FakeClock Clock { get; } = new();
 
+    public FakeGcStateStore GcState { get; } = new();
+
     public void Reset()
     {
         Store.Clear();
@@ -50,6 +52,7 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.OnGetAsync = null;
         Embeddings.Requests.Clear();
         Embeddings.Failure = null;
+        GcState.Reset();
     }
 
     public HttpClient NewClient()
@@ -96,6 +99,8 @@ public sealed class GrimoireApiFactory : IDisposable
         services.AddSingleton<IMemoryStore>(Store);
         services.AddSingleton<IEmbeddingProvider>(Embeddings);
         services.AddSingleton<IClock>(Clock);
+        services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(60) });
+        services.AddSingleton<IGcStateStore>(GcState);
         if (_engineOptions is not null)
         {
             services.AddSingleton(_engineOptions);

@@ -1,3 +1,4 @@
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Tests.Fakes;
@@ -49,28 +50,48 @@ public sealed class QdrantCollectionBootstrapperTests
     }
 
     [Fact]
-    public async Task Ensure_WithDifferentModel_ThrowsTypedError()
+    public async Task Ensure_WithDifferentModel_ThrowsReindexRequiredWithHint()
     {
         var db = new FakeQdrantVectorDb();
         var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        var exception = await Should.ThrowAsync<EmbeddingFingerprintException>(
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
             () => bootstrapper.EnsureAsync(EmbeddingFingerprint.From("bge-small", 4), CancellationToken.None));
 
         exception.Message.ShouldContain("nomic-embed-text");
         exception.Message.ShouldContain("bge-small");
+        exception.Message.ShouldContain("run `grimoire reindex`");
     }
 
     [Fact]
-    public async Task Ensure_WithDifferentDimensions_ThrowsTypedError()
+    public async Task Ensure_WithDifferentDimensions_ThrowsReindexRequired()
     {
         var db = new FakeQdrantVectorDb();
         var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        await Should.ThrowAsync<EmbeddingFingerprintException>(
+        await Should.ThrowAsync<ReindexRequiredException>(
             () => bootstrapper.EnsureAsync(EmbeddingFingerprint.From("nomic-embed-text", 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Ensure_AfterBeginReindex_RefusesUntilCompleted()
+    {
+        var db = new FakeQdrantVectorDb();
+        var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
+        await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
+        var target = EmbeddingFingerprint.From("bge-small", 4);
+
+        await bootstrapper.BeginReindexAsync(target, CancellationToken.None);
+
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => bootstrapper.EnsureAsync(target, CancellationToken.None));
+        exception.Message.ShouldContain("in progress");
+        exception.Message.ShouldContain("run `grimoire reindex`");
+
+        await bootstrapper.CompleteReindexAsync(target, CancellationToken.None);
+        await bootstrapper.EnsureAsync(target, CancellationToken.None);
     }
 
     [Fact]

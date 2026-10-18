@@ -22,7 +22,11 @@ public static class ApiHostBuilder
         var embeddings = services.GetRequiredService<IEmbeddingProvider>();
         var clock = services.GetRequiredService<IClock>();
         var engineOptions = services.GetService<MemoryEngineOptions>() ?? new MemoryEngineOptions();
-        var memories = services.GetService<MemoryService>() ?? new MemoryService(store, embeddings, clock, engineOptions);
+        var gcOptions = services.GetService<GcOptions>()
+            ?? new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.GcIntervalMinutes) };
+        var gcState = services.GetService<IGcStateStore>();
+        var memories = services.GetService<MemoryService>()
+            ?? new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
         var persona = services.GetService<PersonaService>() ?? new PersonaService(store, embeddings, clock);
 
         var builder = WebApplication.CreateBuilder();
@@ -41,7 +45,8 @@ public static class ApiHostBuilder
         builder.Services.AddHostedService(_ => new GcSweeper(
             memories.GcAsync,
             clock,
-            TimeSpan.FromMinutes(options.GcIntervalMinutes)));
+            TimeSpan.FromMinutes(options.GcIntervalMinutes),
+            gcState));
 
         var tomeResolver = new ApiTomeResolver(
             new TomeResolver(engineOptions),

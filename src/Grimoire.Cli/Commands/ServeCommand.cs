@@ -1,7 +1,9 @@
 using Grimoire.Api;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Infrastructure.Configuration;
+using Grimoire.Infrastructure.Memory;
 using Grimoire.Mcp;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Grimoire.Cli.Commands;
 
@@ -13,6 +15,10 @@ internal sealed class ServeCommand(CliEnvironment environment)
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
+        await services.GetRequiredService<QdrantCollectionBootstrapper>().EnsureAsync(
+            EmbeddingFingerprint.From(config.Embedding.Model, config.Embedding.Dimensions),
+            cancellationToken);
+
         var options = BuildHostOptions(
             config,
             invocation.Value("web-root"),

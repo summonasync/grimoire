@@ -10,6 +10,9 @@ internal static class ToolErrorMapper
             ToolErrorCodes.UpstreamUnavailable,
             $"Upstream '{upstream.Upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +
             "Nothing was written by this call. Check the service and its configuration, then retry."),
+        ReindexRequiredException reindexRequired => new ToolError(
+            ToolErrorCodes.ReindexRequired,
+            FirstLine(reindexRequired.Message)),
         ArgumentException argumentException => new ToolError(
             ToolErrorCodes.InvalidRequest,
             FirstLine(argumentException.Message),

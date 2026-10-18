@@ -72,7 +72,7 @@ public sealed class InitCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task Init_FingerprintMismatch_ExitsDependency()
+    public async Task Init_FingerprintMismatch_ExitsReindexRequired()
     {
         _db.CollectionExists = true;
         var marker = new PointStruct { Id = EmbeddingFingerprint.MarkerPointId, Vectors = new float[768] };
@@ -86,8 +86,10 @@ public sealed class InitCommandTests : IDisposable
 
         var code = await host.RunAsync("init");
 
-        code.ShouldBe(ExitCodes.Dependency);
-        host.Output.ToString().ShouldContain("other-model");
+        code.ShouldBe(ExitCodes.ReindexRequired);
+        var output = host.Output.ToString();
+        output.ShouldContain("other-model");
+        output.ShouldContain("run `grimoire reindex`");
     }
 
     [Fact]

@@ -10,5 +10,7 @@ internal static class ToolErrorCodes
 
     public const string UpstreamUnavailable = "upstream_unavailable";
 
+    public const string ReindexRequired = "reindex_required";
+
     public const string InternalError = "internal_error";
 }

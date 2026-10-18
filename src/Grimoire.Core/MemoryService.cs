@@ -4,11 +4,17 @@ public sealed class MemoryService(
     IMemoryStore store,
     IEmbeddingProvider embeddings,
     IClock clock,
-    MemoryEngineOptions? options = null)
+    MemoryEngineOptions? options = null,
+    GcOptions? gcOptions = null,
+    IGcStateStore? gcStateStore = null)
 {
     private const int DuplicateProbeLimit = 5;
 
     private readonly MemoryEngineOptions _options = options ?? new();
+
+    private readonly GcOptions _gcOptions = gcOptions ?? new();
+
+    private readonly IGcStateStore? _gcStateStore = gcStateStore;
 
     public async Task<RememberResult> RememberAsync(RememberRequest request, CancellationToken cancellationToken)
     {
@@ -214,7 +220,17 @@ public sealed class MemoryService(
             PendingCompaction = pending,
             IdempotencyConflicts = await CountIdempotencyConflictsAsync(cancellationToken),
             ByTome = await CountByTomeAsync(cancellationToken),
+            Gc = await GcHeartbeatAsync(cancellationToken),
         };
+    }
+
+    private async Task<GcState> GcHeartbeatAsync(CancellationToken cancellationToken)
+    {
+        var state = _gcStateStore is null
+            ? GcState.Unknown("gc state store is not configured")
+            : await _gcStateStore.ReadAsync(cancellationToken);
+
+        return state with { Stale = state.IsStale(_gcOptions.StalenessThreshold, clock.UtcNow) };
     }
 
     public async Task<IReadOnlyList<CompactionCandidateGroup>> GetCompactionCandidatesAsync(

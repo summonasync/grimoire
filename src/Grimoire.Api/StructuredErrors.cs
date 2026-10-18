@@ -32,6 +32,14 @@ internal static class StructuredErrors
                     $"Upstream '{ex.Upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +
                     "Nothing was written by this call. Check the service and its configuration, then retry.");
             }
+            catch (ReindexRequiredException ex)
+            {
+                await WriteAsync(
+                    context,
+                    StatusCodes.Status409Conflict,
+                    "reindex_required",
+                    ex.Message);
+            }
         });
     }
 

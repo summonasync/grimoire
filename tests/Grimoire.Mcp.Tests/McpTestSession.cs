@@ -23,6 +23,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeMemoryStore store,
         FakeEmbeddingProvider embeddings,
         FakeClock clock,
+        FakeGcStateStore gcState,
         McpClient client,
         Channel<JsonRpcMessage> clientToServer,
         Channel<JsonRpcMessage> serverToClient,
@@ -32,6 +33,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         Store = store;
         Embeddings = embeddings;
         Clock = clock;
+        Gc = gcState;
         Client = client;
         _clientToServer = clientToServer;
         _serverToClient = serverToClient;
@@ -45,17 +47,22 @@ internal sealed class McpTestSession : IAsyncDisposable
 
     public FakeClock Clock { get; }
 
+    public FakeGcStateStore Gc { get; }
+
     public McpClient Client { get; }
 
     public static async Task<McpTestSession> StartAsync(
         McpHostOptions? hostOptions = null,
         MemoryEngineOptions? engineOptions = null,
-        IActorClaimProvider? claims = null)
+        IActorClaimProvider? claims = null,
+        GcOptions? gcOptions = null,
+        FakeGcStateStore? gcState = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
-        var services = new FakeServiceProvider(store, embeddings, clock, engineOptions, claims);
+        var gc = gcState ?? new FakeGcStateStore();
+        var services = new FakeServiceProvider(store, embeddings, clock, engineOptions, claims, gcOptions, gc);
         var options = hostOptions ?? new McpHostOptions();
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
@@ -74,7 +81,7 @@ internal sealed class McpTestSession : IAsyncDisposable
             ClientInfo = new Implementation { Name = ClientName, Version = "0.1.0" },
         })).WaitAsync(TimeSpan.FromSeconds(15));
 
-        return new McpTestSession(store, embeddings, clock, client, clientToServer, serverToClient, serverRun, cancellation);
+        return new McpTestSession(store, embeddings, clock, gc, client, clientToServer, serverToClient, serverRun, cancellation);
     }
 
     public async ValueTask DisposeAsync()

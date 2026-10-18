@@ -13,22 +13,34 @@ internal static class TestServices
         FakeClock clock,
         MemoryEngineOptions? options = null,
         RecordingVectorDb? db = null,
-        IActorClaimProvider? claims = null)
+        IActorClaimProvider? claims = null,
+        GcOptions? gcOptions = null,
+        IGcStateStore? gcState = null)
     {
         var vectorDb = db ?? new RecordingVectorDb();
         var services = new ServiceCollection();
         services.AddSingleton<IQdrantVectorDb>(vectorDb);
         services.AddSingleton(new QdrantCollectionBootstrapper(vectorDb, "grimoire"));
+        services.AddSingleton(sp => new EmbeddingReindexer(
+            sp.GetRequiredService<IQdrantVectorDb>(),
+            "grimoire",
+            sp.GetRequiredService<QdrantCollectionBootstrapper>(),
+            sp.GetRequiredService<IEmbeddingProvider>(),
+            sp.GetRequiredService<MemoryEngineOptions>().ReindexBatchSize));
         services.AddSingleton<IMemoryStore>(store);
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());
         services.AddSingleton(options ?? TunedOptions());
+        services.AddSingleton(gcOptions ?? new GcOptions());
+        services.AddSingleton(gcState ?? new FakeGcStateStore());
         services.AddSingleton(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<IClock>(),
-            sp.GetRequiredService<MemoryEngineOptions>()));
+            sp.GetRequiredService<MemoryEngineOptions>(),
+            sp.GetRequiredService<GcOptions>(),
+            sp.GetRequiredService<IGcStateStore>()));
         services.AddSingleton(sp => new PersonaService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

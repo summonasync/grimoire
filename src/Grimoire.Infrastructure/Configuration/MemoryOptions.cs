@@ -9,4 +9,6 @@ public sealed record MemoryOptions
     public RecencyHalfLifeOptions RecencyHalfLifeDays { get; init; } = new();
 
     public double TombstoneRetentionDays { get; init; } = 30;
+
+    public int ReindexBatchSize { get; init; } = 64;
 }

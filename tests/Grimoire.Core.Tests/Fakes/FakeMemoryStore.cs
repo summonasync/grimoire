@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Grimoire.Core.Tests.Fakes;
 
 public sealed class FakeMemoryStore : IMemoryStore
@@ -78,6 +80,26 @@ public sealed class FakeMemoryStore : IMemoryStore
         foreach (var id in ids)
         {
             _points.Remove(id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        foreach (var point in _points.Values)
+        {
+            yield return new MemoryPoint { Record = point.Record, Vector = point.Vector };
+        }
+    }
+
+    public Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken)
+    {
+        foreach (var point in points)
+        {
+            _points[point.Record.Id] = new StoredPoint(point.Record, point.Vector.ToArray());
         }
 
         return Task.CompletedTask;

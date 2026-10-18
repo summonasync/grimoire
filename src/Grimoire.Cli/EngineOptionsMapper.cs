@@ -18,5 +18,6 @@ internal static class EngineOptionsMapper
             PersonalDays = options.RecencyHalfLifeDays.Personal,
         },
         TombstoneRetentionDays = options.TombstoneRetentionDays,
+        ReindexBatchSize = Math.Max(1, options.ReindexBatchSize),
     };
 }

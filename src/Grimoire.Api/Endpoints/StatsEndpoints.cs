@@ -27,7 +27,8 @@ internal static class StatsEndpoints
                 stats.ActiveByScope,
                 stats.PendingCompaction,
                 stats.IdempotencyConflicts,
-                stats.ByTome));
+                stats.ByTome,
+                stats.Gc));
         });
     }
 }

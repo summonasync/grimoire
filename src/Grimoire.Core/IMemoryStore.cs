@@ -17,4 +17,18 @@ public interface IMemoryStore
     Task<long> CountAsync(MemoryFilter filter, CancellationToken cancellationToken);
 
     Task DeleteAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ops enumeration of the whole store: every status, every tome, vectors included,
+    /// service marker points excluded, no ordering guarantee; pages internally so neither
+    /// side buffers the store. Used by export-class sweeps, not by filtered reads.
+    /// </summary>
+    IAsyncEnumerable<MemoryPoint> EnumerateAllAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Batch upsert of record+vector pairs that keeps ids, statuses and timestamps as
+    /// recorded and stores vectors as-is. Import path: callers must have validated the
+    /// vectors against the configured embedding model.
+    /// </summary>
+    Task UpsertBatchAsync(IReadOnlyList<MemoryPoint> points, CancellationToken cancellationToken);
 }

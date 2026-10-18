@@ -12,8 +12,10 @@ internal static class ToolCatalog
         var embeddings = Require<IEmbeddingProvider>(services);
         var clock = Require<IClock>(services);
         var engineOptions = services.GetService(typeof(MemoryEngineOptions)) as MemoryEngineOptions;
+        var gcOptions = services.GetService(typeof(GcOptions)) as GcOptions;
+        var gcState = services.GetService(typeof(IGcStateStore)) as IGcStateStore;
 
-        var memories = new MemoryService(store, embeddings, clock, engineOptions);
+        var memories = new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);

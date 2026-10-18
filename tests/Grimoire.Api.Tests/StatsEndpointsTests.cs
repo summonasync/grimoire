@@ -37,6 +37,49 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(0);
         body.GetProperty("tome").GetString().ShouldBe("default");
         body.GetProperty("byTome").GetProperty("default").GetProperty("active").GetInt64().ShouldBe(3);
+        body.GetProperty("gc").GetProperty("stale").GetBoolean().ShouldBeTrue();
+        body.GetProperty("gc").GetProperty("unknownReason").GetString().ShouldBe("gc state file does not exist yet");
+    }
+
+    [Fact]
+    public async Task Get_CarriesTheGcHeartbeatWithTheStaleFlag()
+    {
+        factory.Reset();
+        factory.GcState.Current = new GcState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-1),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-1),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        };
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var gc = body.GetProperty("gc");
+        gc.GetProperty("stale").GetBoolean().ShouldBeFalse();
+        gc.GetProperty("lastSuccessAt").GetDateTimeOffset().ShouldBe(FakeClock.DefaultStart.AddHours(-1));
+        gc.GetProperty("removedExpired").GetInt32().ShouldBe(2);
+        gc.GetProperty("removedTombstones").GetInt32().ShouldBe(1);
+        gc.GetProperty("lastError").ValueKind.ShouldBe(JsonValueKind.Null);
+        gc.GetProperty("unknownReason").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Get_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
+    {
+        factory.Reset();
+        factory.GcState.Current = new GcState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-5),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-5),
+        };
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("gc").GetProperty("stale").GetBoolean().ShouldBeTrue();
     }
 
     [Fact]

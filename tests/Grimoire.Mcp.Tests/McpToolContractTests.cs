@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Grimoire.Core;
 using Grimoire.Mcp;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -136,7 +137,13 @@ public sealed class McpToolContractTests
     [Fact]
     public async Task OutputShapes_MatchTheFrozenSnapshots()
     {
-        await using var session = await McpTestSession.StartAsync();
+        await using var session = await McpTestSession.StartAsync(gcState: new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = new DateTimeOffset(2026, 10, 17, 12, 30, 0, TimeSpan.Zero),
+            LastSuccessAt = new DateTimeOffset(2026, 10, 17, 12, 30, 0, TimeSpan.Zero),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        }));
         var results = await ToolSurfaceProbes.RunAsync(session);
 
         foreach (var tool in ToolNames)

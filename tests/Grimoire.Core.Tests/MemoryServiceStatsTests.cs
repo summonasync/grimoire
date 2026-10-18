@@ -30,10 +30,63 @@ public sealed class MemoryServiceStatsTests
         stats.Tombstoned.ShouldBe(0);
         stats.PendingCompaction.ShouldBe(0);
         stats.IdempotencyConflicts.ShouldBe(0);
+        stats.Gc.IsUnknown.ShouldBeTrue();
+        stats.Gc.UnknownReason.ShouldBe("gc state store is not configured");
+        stats.Gc.Stale.ShouldBeTrue();
         foreach (var pair in stats.ActiveByScope)
         {
             pair.Value.ShouldBe(0);
         }
+    }
+
+    [Fact]
+    public async Task Stats_ReportsTheGcHeartbeatFreshEnoughToNotBeStale()
+    {
+        var gcState = new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = _clock.UtcNow.AddMinutes(-10),
+            LastSuccessAt = _clock.UtcNow.AddMinutes(-5),
+            RemovedExpired = 2,
+            RemovedTombstones = 1,
+        });
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) }, gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.IsUnknown.ShouldBeFalse();
+        stats.Gc.LastSuccessAt.ShouldBe(_clock.UtcNow.AddMinutes(-5));
+        stats.Gc.RemovedExpired.ShouldBe(2);
+        stats.Gc.RemovedTombstones.ShouldBe(1);
+        stats.Gc.LastError.ShouldBeNull();
+        stats.Gc.Stale.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Stats_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
+    {
+        var gcState = new FakeGcStateStore(new GcState
+        {
+            LastAttemptAt = _clock.UtcNow.AddHours(-3),
+            LastSuccessAt = _clock.UtcNow.AddHours(-3),
+        });
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) }, gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.Stale.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Stats_SurfacesAnUnreadableHeartbeatAsUnknownButNotACrash()
+    {
+        var gcState = new FakeGcStateStore(GcState.Unknown("gc state file is not valid JSON: boom"));
+        var service = TestMemories.Service(_store, new FakeEmbeddingProvider(new Dictionary<string, float[]>()), _clock, gcOptions: new GcOptions(), gcState: gcState);
+
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.Gc.IsUnknown.ShouldBeTrue();
+        stats.Gc.UnknownReason.ShouldBe("gc state file is not valid JSON: boom");
+        stats.Gc.Stale.ShouldBeTrue();
     }
 
     [Fact]

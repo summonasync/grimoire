@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Report store health: active, superseded and tombstoned counts, active records per scope, pendingCompaction (journal entries clustered and waiting to be distilled into facts), and idempotencyConflicts (active duplicates whose supersede maintenance never finished; 0 is healthy, replaying the same write converges them). Counts span the whole store; byTome splits active and tombstoned per tome and tome names the one your tools resolve to. Call it to check the store is reachable after a failed memory call, to size the compaction backlog before running memory_compact_candidates, or when the human asks what memory currently holds. upstream_unavailable here means the store itself is unreachable - no counts could be read.",
+    "description": "Report store health: active, superseded and tombstoned counts, active records per scope, pendingCompaction (journal entries clustered and waiting to be distilled into facts), idempotencyConflicts (active duplicates whose supersede maintenance never finished; 0 is healthy, replaying the same write converges them), and gc (the host-side sweep heartbeat: lastAttemptAt, lastSuccessAt, what the last sweep removed, lastError of the failed attempt; stale=true once the last success is older than two sweep intervals or the heartbeat is unreadable, meaning expired records may be piling up). Counts span the whole store; byTome splits active and tombstoned per tome and tome names the one your tools resolve to. Call it to check the store is reachable after a failed memory call, to size the compaction backlog before running memory_compact_candidates, or when the human asks what memory currently holds. upstream_unavailable here means the store itself is unreachable - no counts could be read.",
     "destructive": false,
     "idempotent": true,
     "input": {
@@ -36,6 +36,14 @@
         "active": "number",
         "tombstoned": "number"
       }
+    },
+    "gc": {
+      "isUnknown": "boolean",
+      "lastAttemptAt": "string",
+      "lastSuccessAt": "string",
+      "removedExpired": "number",
+      "removedTombstones": "number",
+      "stale": "boolean"
     },
     "idempotencyConflicts": "number",
     "pendingCompaction": "number",

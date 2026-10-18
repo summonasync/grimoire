@@ -60,6 +60,11 @@ internal static class CliApplication
             Report(env, "upstream_unavailable", UnavailableMessage(ex.Upstream));
             return ExitCodes.UpstreamUnavailable;
         }
+        catch (ReindexRequiredException ex)
+        {
+            Report(env, "reindex_required", ex.Message);
+            return ExitCodes.ReindexRequired;
+        }
         catch (Exception ex) when (ex is EmbeddingFingerprintException or RpcException)
         {
             Report(env, "dependency", ex.Message);
@@ -95,6 +100,9 @@ internal static class CliApplication
             "scry" => new Commands.ScryCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "forget" => new Commands.ForgetCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "gc" => new Commands.GcCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "reindex" => new Commands.ReindexCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "export" => new Commands.ExportCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "import" => new Commands.ImportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "persona" => new Commands.PersonaCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "stats" => new Commands.StatsCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "config" => new Commands.ConfigCommand(env).RunAsync(invocation, config, services, cancellationToken),

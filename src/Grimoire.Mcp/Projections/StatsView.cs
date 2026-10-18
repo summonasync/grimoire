@@ -19,4 +19,6 @@ internal sealed record StatsView
     public required long IdempotencyConflicts { get; init; }
 
     public required IReadOnlyDictionary<string, TomeStats> ByTome { get; init; }
+
+    public required GcState Gc { get; init; }
 }

@@ -22,6 +22,7 @@ internal sealed class StatsCommand(CliEnvironment environment)
         environment.Output.WriteLine($"Tombstoned: {stats.Tombstoned}");
         environment.Output.WriteLine($"Pending compaction: {stats.PendingCompaction}");
         environment.Output.WriteLine($"Idempotency conflicts: {stats.IdempotencyConflicts}");
+        environment.Output.WriteLine($"GC: {GcText(stats.Gc)}");
         environment.Output.WriteLine($"Tome: {identity.Tome} ({SourceText(identity.Source)})");
         environment.Output.WriteLine($"Per tome: {PerTome(stats)}");
         return ExitCodes.Ok;
@@ -30,6 +31,18 @@ internal sealed class StatsCommand(CliEnvironment environment)
     private static string ScopeBreakdown(MemoryStats stats) => string.Join(
         ", ",
         MemoryScopes.All.Select(scope => $"{scope.ToString().ToLowerInvariant()}: {stats.ActiveByScope.GetValueOrDefault(scope)}"));
+
+    private static string GcText(GcState gc) => gc.IsUnknown
+        ? $"unknown ({gc.UnknownReason}), stale: {FormatFlag(gc.Stale)}"
+        : $"last attempt {Timestamp(gc.LastAttemptAt)}, last success {Timestamp(gc.LastSuccessAt)}, " +
+          $"removed {FormatCount(gc.RemovedExpired)} expired / {FormatCount(gc.RemovedTombstones)} tombstones, " +
+          $"last error: {gc.LastError ?? "none"}, stale: {FormatFlag(gc.Stale)}";
+
+    private static string Timestamp(DateTimeOffset? moment) => moment?.ToString("u") ?? "never";
+
+    private static string FormatCount(int? count) => count?.ToString() ?? "?";
+
+    private static string FormatFlag(bool flag) => flag ? "true" : "false";
 
     private static string PerTome(MemoryStats stats) => stats.ByTome.Count == 0
         ? "(none)"
