@@ -1,4 +1,0 @@
-<?xml version="1.0"?>
-<TestSequence>
-  <Test Name="Grimoire.Mcp.Tests.DiagnosticProbe.SingleSession_StartsAndListsTools" DisplayName="Grimoire.Mcp.Tests.DiagnosticProbe.SingleSession_StartsAndListsTools" Source="/mnt/Ubuntu-Dev/Projects/AI-Tools/Grimoire/tests/Grimoire.Mcp.Tests/bin/Debug/net10.0/Grimoire.Mcp.Tests.dll" Completed="False" />
-</TestSequence>
