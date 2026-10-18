@@ -21,12 +21,13 @@ public sealed class QdrantVectorDb : IQdrantVectorDb
         _client.GetCollectionInfoAsync(collection, cancellationToken);
 
     public Task CreateCollectionAsync(string collection, int dimensions, CancellationToken cancellationToken) =>
+        // Qdrant rejects zero shard/replication/consistency factors outright; 1/1/1 matches every server default.
         _client.CreateCollectionAsync(
             collection,
             new VectorParams { Size = (ulong)dimensions, Distance = Distance.Cosine },
-            0,
-            0,
-            0,
+            1,
+            1,
+            1,
             false,
             null,
             null,

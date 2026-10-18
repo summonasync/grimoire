@@ -75,6 +75,28 @@ public sealed class ConfigCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Config_SetTypeIncompatibleValue_RestoresPreviousFile()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_host.ConfigPath)!);
+        const string original = "{\n  \"serve\": { \"port\": 5080 }\n}";
+        File.WriteAllText(_host.ConfigPath, original);
+
+        var code = await _host.RunAsync("config", "set", "serve.port", "2.5");
+
+        code.ShouldBe(ExitCodes.Config);
+        File.ReadAllText(_host.ConfigPath).ShouldBe(original);
+    }
+
+    [Fact]
+    public async Task Config_SetTypeIncompatibleValueOnMissingFile_DeletesCreatedFile()
+    {
+        var code = await _host.RunAsync("config", "set", "serve.port", "2.5");
+
+        code.ShouldBe(ExitCodes.Config);
+        File.Exists(_host.ConfigPath).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Config_SetSectionInsteadOfValue_Fails()
     {
         var code = await _host.RunAsync("config", "set", "qdrant", "oops");
