@@ -1,0 +1,12 @@
+bin/
+obj/
+node_modules/
+web/out/
+web/.next/
+*.user
+.vs/
+.idea/
+dist/
+*.DotSettings.user
+.claude/settings.local.json
+TestResults/

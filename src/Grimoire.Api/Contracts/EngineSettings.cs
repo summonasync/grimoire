@@ -1,0 +1,11 @@
+using Grimoire.Core;
+
+namespace Grimoire.Api.Contracts;
+
+public sealed record EngineSettings(
+    double SessionTtlHours,
+    double DedupSimilarityThreshold,
+    double TombstoneRetentionDays,
+    int RecallOversampling,
+    RecencyHalfLives RecencyHalfLives,
+    CompactionOptions Compaction);
