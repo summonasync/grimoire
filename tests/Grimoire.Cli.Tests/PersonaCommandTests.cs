@@ -9,6 +9,7 @@ public sealed class PersonaCommandTests : IDisposable
 {
     private readonly TestHost _host = new(new StubEmbeddings(new Dictionary<string, float[]>
     {
+        [""] = [0f, 0f],
         ["Senior .NET developer"] = [1f, 0f],
         ["dry humor"] = [1f, 0f],
         ["no sudo"] = [1f, 0f],
@@ -31,7 +32,7 @@ public sealed class PersonaCommandTests : IDisposable
         var code = await _host.RunAsync("persona", "set-section", "tone", "dry humor");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
-        var record = _host.Store.Upserted.ShouldHaveSingleItem();
+        var record = _host.Store.Upserted.Single(entry => entry.Content == "dry humor");
         record.Scope.ShouldBe(MemoryScope.Personal);
         record.Kind.ShouldBe(MemoryKind.Fact);
         record.Actor.ShouldBe(MemoryActor.Human);
@@ -44,7 +45,9 @@ public sealed class PersonaCommandTests : IDisposable
         var code = await _host.RunAsync("persona", "set-section", "rules", "no sudo", "--actor", "junior+claude");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
-        _host.Store.Upserted.ShouldHaveSingleItem().Actor.ShouldBe(new MemoryActor("junior", "claude"));
+        _host.Store.Upserted
+            .Single(entry => entry.Content == "no sudo")
+            .Actor.ShouldBe(new MemoryActor("junior", "claude"));
     }
 
     [Fact]

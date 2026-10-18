@@ -130,5 +130,23 @@ public sealed class CliApplicationTests : IDisposable
         _host.Output.ToString().ShouldContain("error [dependency]");
     }
 
+    [Fact]
+    public async Task RunAsync_ServeLaunchesApiHostAgainstFakesAndExitsCleanly()
+    {
+        using var host = new TestHost();
+        var code = await CliApplication.RunAsync(["serve", "--web-root", Path.GetTempPath()], host.Env, new CancellationToken(canceled: true));
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+    }
+
+    [Fact]
+    public async Task RunAsync_McpLaunchesMcpHostAgainstFakesAndExitsCleanly()
+    {
+        using var host = new TestHost();
+        var code = await CliApplication.RunAsync(["mcp"], host.Env, new CancellationToken(canceled: true));
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+    }
+
     public void Dispose() => _host.Dispose();
 }

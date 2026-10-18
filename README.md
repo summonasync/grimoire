@@ -48,7 +48,7 @@ Wire an agent to the memory (stdio MCP):
   "grimoire": {
     "command": "grimoire",
     "args": ["mcp"],
-    "env": { "GRIMOIRE_ACTOR": "dan@claude" }
+    "env": { "GRIMOIRE_ACTOR": "dan+claude" }
   }
 }
 ```
