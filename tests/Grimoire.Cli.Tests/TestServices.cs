@@ -31,6 +31,11 @@ internal static class TestServices
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<IClock>()));
+        services.AddSingleton(sp => new BriefService(
+            sp.GetRequiredService<IMemoryStore>(),
+            sp.GetRequiredService<PersonaService>(),
+            sp.GetRequiredService<IClock>(),
+            sp.GetRequiredService<MemoryEngineOptions>()));
         return services.BuildServiceProvider();
     }
 

@@ -9,6 +9,7 @@ public sealed class McpToolContractTests
 {
     private static readonly string[] ToolNames =
     [
+        "memory_brief",
         "memory_compact_candidates",
         "memory_forget",
         "memory_list",
@@ -28,6 +29,7 @@ public sealed class McpToolContractTests
         data.Add("memory_persona_get", ["identity, tone, preferences, rules", "were never filled"]);
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill"]);
         data.Add("memory_stats", ["pendingCompaction", "memory_compact_candidates"]);
+        data.Add("memory_brief", ["session start", "omitted", "tombstone", "cold start", "upstream_unavailable"]);
         return data;
     }
 
@@ -41,6 +43,7 @@ public sealed class McpToolContractTests
         data.Add("memory_persona_get", [], []);
         data.Add("memory_compact_candidates", [], []);
         data.Add("memory_stats", [], []);
+        data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit"]);
         return data;
     }
 
@@ -63,11 +66,13 @@ public sealed class McpToolContractTests
         data.Add("memory_recall", "limit", "integer");
         data.Add("memory_forget", "memoryId", "string");
         data.Add("memory_list", "limit", "integer");
+        data.Add("memory_brief", "scopes", "array");
+        data.Add("memory_brief", "factsPerScope", "integer");
         return data;
     }
 
     [Fact]
-    public async Task ExposesExactlyTheSevenContractedTools()
+    public async Task ExposesExactlyTheEightContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 

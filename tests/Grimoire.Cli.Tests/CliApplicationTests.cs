@@ -46,6 +46,15 @@ public sealed class CliApplicationTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_RoutesBriefAgainstFakes()
+    {
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("facts: (empty)");
+    }
+
+    [Fact]
     public async Task RunAsync_RoutesForgetByIdAgainstFakes()
     {
         var record = _host.Store.Add("deploy on friday", [1f, 0f]);

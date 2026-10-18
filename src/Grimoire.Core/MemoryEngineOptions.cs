@@ -15,4 +15,8 @@ public sealed record MemoryEngineOptions
     public int RecallOversampling { get; init; } = 3;
 
     public double IdempotencyWindowHours { get; init; } = 24;
+
+    public int BriefMaxTotalChars { get; init; } = 8000;
+
+    public int BriefMaxEntryChars { get; init; } = 400;
 }

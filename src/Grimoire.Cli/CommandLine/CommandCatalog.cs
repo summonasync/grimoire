@@ -35,6 +35,18 @@ internal static class CommandCatalog
     private static readonly FlagSpec Limit = new(
         "limit", "n", "Maximum number of results.");
 
+    private static readonly FlagSpec ProjectFilter = new(
+        "project", "id", "Restrict the brief to one project's memories.");
+
+    private static readonly FlagSpec FactsPerScope = new(
+        "facts-per-scope", "n", "Top facts per scope. Default: 5.");
+
+    private static readonly FlagSpec JournalPerScope = new(
+        "journal-per-scope", "n", "Recent journal entries per scope. Default: 5.");
+
+    private static readonly FlagSpec TombstoneLimit = new(
+        "tombstone-limit", "n", "Tombstoned records in the digest. Default: 10.");
+
     private static readonly FlagSpec Reason = new(
         "reason", "text", "Tombstone reason. Default: 'forgotten via grimoire cli'.");
 
@@ -85,6 +97,13 @@ internal static class CommandCatalog
             Summary = "List memories. Defaults to active records.",
             Syntax = "list",
             Flags = [Scope, Tag, Status, Limit],
+        },
+        new CommandSpec
+        {
+            Name = "brief",
+            Summary = "Render the agent startup brief: persona, top facts, recent journal, tombstones.",
+            Syntax = "brief",
+            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit],
         },
         new CommandSpec
         {

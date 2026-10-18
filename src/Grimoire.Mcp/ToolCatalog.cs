@@ -15,6 +15,7 @@ internal static class ToolCatalog
 
         var memories = new MemoryService(store, embeddings, clock, engineOptions);
         var persona = new PersonaService(store, embeddings, clock);
+        var brief = new BriefService(store, persona, clock, engineOptions);
         var actors = new MemoryActorProvider(options.Actor, clientInfo);
 
         return
@@ -24,6 +25,7 @@ internal static class ToolCatalog
             Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories).Forget, readOnly: false, destructive: true, idempotent: true),
             Build(ListTool.Name, ListTool.Title, ListTool.Description, new ListTool(memories).List, readOnly: true, destructive: false, idempotent: true),
             Build(PersonaGetTool.Name, PersonaGetTool.Title, PersonaGetTool.Description, new PersonaGetTool(persona).Get, readOnly: true, destructive: false, idempotent: true),
+            Build(BriefTool.Name, BriefTool.Title, BriefTool.Description, new BriefTool(brief).Brief, readOnly: true, destructive: false, idempotent: true),
             Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store).GetCandidates, readOnly: true, destructive: false, idempotent: true),
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories).GetStats, readOnly: true, destructive: false, idempotent: true),
         ];

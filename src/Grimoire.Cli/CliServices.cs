@@ -34,6 +34,11 @@ internal static class CliServices
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<IClock>()));
+        services.AddSingleton<BriefService>(sp => new BriefService(
+            sp.GetRequiredService<IMemoryStore>(),
+            sp.GetRequiredService<PersonaService>(),
+            sp.GetRequiredService<IClock>(),
+            sp.GetRequiredService<MemoryEngineOptions>()));
         return services.BuildServiceProvider();
     }
 }
