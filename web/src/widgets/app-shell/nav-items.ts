@@ -1,11 +1,13 @@
-export interface NavItem {
-  href: string;
+import type { TabId } from "@/shared/navigation/tabs";
+
+export interface TabItem {
+  id: TabId;
   label: string;
 }
 
-export const navItems: NavItem[] = [
-  { href: "/memories", label: "Memories" },
-  { href: "/persona", label: "Persona" },
-  { href: "/settings", label: "Settings" },
-  { href: "/stats", label: "Stats" },
+export const tabItems: TabItem[] = [
+  { id: "memories", label: "Memories" },
+  { id: "persona", label: "Persona" },
+  { id: "settings", label: "Settings" },
+  { id: "stats", label: "Stats" },
 ];

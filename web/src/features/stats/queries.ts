@@ -8,5 +8,6 @@ export function statsQueryOptions() {
   return {
     queryKey: statsKeys.all,
     queryFn: fetchStats,
+    staleTime: 0,
   };
 }

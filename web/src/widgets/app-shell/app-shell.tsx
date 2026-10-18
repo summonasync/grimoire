@@ -1,9 +1,19 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { NavLink } from "./nav-link";
-import { navItems } from "./nav-items";
+import { cn } from "@/shared/lib/cn";
+import { useHashTab } from "@/shared/lib/use-hash-tab";
+import type { TabId } from "@/shared/navigation/tabs";
+import { tabItems } from "./nav-items";
 import { ThemeToggle } from "./theme-toggle";
 
-export function AppShell({ children }: { children: ReactNode }) {
+interface AppShellProps {
+  tabs: Record<TabId, ReactNode>;
+}
+
+export function AppShell({ tabs }: AppShellProps) {
+  const active = useHashTab("memories");
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -15,18 +25,29 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <div className="flex flex-1 flex-col sm:flex-row">
         <nav
-          aria-label="Primary"
+          aria-label="Console sections"
           className="border-b border-border px-3 py-2 sm:w-44 sm:shrink-0 sm:border-b-0 sm:border-r sm:py-4"
         >
           <ul className="flex gap-1 sm:flex-col">
-            {navItems.map((item) => (
-              <li key={item.href}>
-                <NavLink item={item} />
+            {tabItems.map((item) => (
+              <li key={item.id}>
+                <a
+                  href={`#${item.id}`}
+                  aria-current={active === item.id ? "page" : undefined}
+                  className={cn(
+                    "block whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors",
+                    active === item.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted hover:bg-surface hover:text-foreground",
+                  )}
+                >
+                  {item.label}
+                </a>
               </li>
             ))}
           </ul>
         </nav>
-        <main className="min-w-0 flex-1 px-5 py-6">{children}</main>
+        <main className="min-w-0 flex-1 px-5 py-6">{tabs[active]}</main>
       </div>
     </div>
   );

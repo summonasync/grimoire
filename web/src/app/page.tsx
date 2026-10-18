@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ConsolePage } from "@/views/console/console-page";
 
 export default function HomePage() {
-  redirect("/memories");
+  return <ConsolePage />;
 }

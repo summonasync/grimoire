@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { QueryProvider } from "@/shared/providers/query-provider";
-import { AppShell } from "@/widgets/app-shell/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,9 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <body className="bg-background text-foreground antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
-        <QueryProvider>
-          <AppShell>{children}</AppShell>
-        </QueryProvider>
+        <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
   );

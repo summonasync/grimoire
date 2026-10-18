@@ -1,4 +1,3 @@
-import type { MemoryRecord } from "@/shared/api/types";
 import { buildMemoryListQuery, fetchMemories, fetchMemory } from "./api";
 import type { MemoryListParams } from "./types";
 

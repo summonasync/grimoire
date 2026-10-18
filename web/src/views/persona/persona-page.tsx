@@ -1,14 +1,14 @@
+import { PersonaEditor } from "@/features/persona";
 import { PageHeader } from "@/shared/ui/page-header";
-import { PagePlaceholder } from "@/shared/ui/page-placeholder";
 
 export function PersonaPage() {
   return (
     <>
       <PageHeader
         title="Persona"
-        description="Edit the persona document agents read through memory_persona_get."
+        description="Edit the persona document agents read through memory_persona_get. Saved as one whole document."
       />
-      <PagePlaceholder>The persona editor is not wired up yet.</PagePlaceholder>
+      <PersonaEditor />
     </>
   );
 }
