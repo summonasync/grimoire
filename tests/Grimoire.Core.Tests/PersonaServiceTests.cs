@@ -13,7 +13,6 @@ public sealed class PersonaServiceTests
         ["dry humor"] = [0f, 1f, 0f],
         ["dark theme everywhere"] = [0f, 0f, 1f],
         ["no meetings before noon"] = [1f, 1f, 0f],
-        [""] = [0f, 0f, 0f],
     };
 
     private readonly FakeMemoryStore _store = new();
@@ -132,8 +131,29 @@ public sealed class PersonaServiceTests
 
         await service.SetAsync(document, MemoryActor.Human, CancellationToken.None);
 
-        embeddings.Requests.ShouldBe(["senior .NET developer", "", "", ""]);
+        embeddings.Requests.ShouldBe(["senior .NET developer"]);
         var identity = _store.Records.Single(record => record.Tags.Contains(PersonaSection.Identity.SectionTag()));
         identity.Content.ShouldBe("senior .NET developer");
+        _store.Records.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Set_SparseDocument_LeavesUnsetSectionsUnstored()
+    {
+        var document = new PersonaDocument
+        {
+            Identity = "senior .NET developer",
+            Rules = "no meetings before noon",
+        };
+        var embeddings = new FakeEmbeddingProvider(Vectors);
+        var service = new PersonaService(_store, embeddings, _clock);
+
+        var stored = await service.SetAsync(document, MemoryActor.Human, CancellationToken.None);
+        var loaded = await service.GetAsync(CancellationToken.None);
+
+        stored.Tone.ShouldBeEmpty();
+        stored.Preferences.ShouldBeEmpty();
+        loaded.ShouldBe(document);
+        embeddings.Requests.ShouldBe(["senior .NET developer", "no meetings before noon"]);
     }
 }

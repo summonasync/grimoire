@@ -132,6 +132,16 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithReservedActorVariable_IsNotAConfigurationOverride()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_ACTOR", "dan+claude"), ("GRIMOIRE_SERVE__PORT", "6000")]);
+
+        var options = loader.Load();
+
+        options.Serve.Port.ShouldBe(6000);
+    }
+
+    [Fact]
     public void Load_WithNonNumericEnvironmentOverride_Throws()
     {
         var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORT", "loopback")]);

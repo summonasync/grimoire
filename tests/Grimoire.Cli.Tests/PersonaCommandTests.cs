@@ -67,6 +67,15 @@ public sealed class PersonaCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Persona_SetSectionEmptyText_ExitsUsage()
+    {
+        var code = await _host.RunAsync("persona", "set-section", "identity", "");
+
+        code.ShouldBe(ExitCodes.Usage);
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Persona_UnknownAction_ExitsUsage()
     {
         var code = await _host.RunAsync("persona", "rename");

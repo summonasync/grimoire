@@ -34,6 +34,12 @@ public sealed class PersonaService(IMemoryStore store, IEmbeddingProvider embedd
         foreach (var section in PersonaSectionExtensions.Sections)
         {
             var content = document.Read(section);
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                // Embedding providers reject empty prompts; an absent section simply stays absent.
+                continue;
+            }
+
             if (existing.TryGetValue(section, out var current) && current.Content == content)
             {
                 continue;

@@ -18,6 +18,9 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
 
     private const string EnvironmentPrefix = "GRIMOIRE_";
 
+    // Reserved for the faces (ActorResolver); never a configuration property.
+    private static readonly IReadOnlySet<string> ReservedVariables = new HashSet<string>(["GRIMOIRE_ACTOR"], StringComparer.OrdinalIgnoreCase);
+
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".grimoire",
@@ -30,7 +33,7 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
     {
         var root = JsonSerializer.SerializeToNode(new GrimoireOptions(), NodeOptions)!.AsObject();
         MergeFile(root);
-        ConfigMerger.ApplyOverrides(root, _environment, EnvironmentPrefix);
+        ConfigMerger.ApplyOverrides(root, NonReserved(_environment), EnvironmentPrefix);
         return Deserialize(root);
     }
 
@@ -91,4 +94,8 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
             .Cast<DictionaryEntry>()
             .Where(entry => entry.Value is string)
             .ToDictionary(entry => (string)entry.Key, entry => (string)entry.Value!);
+
+    private static IReadOnlyDictionary<string, string> NonReserved(IReadOnlyDictionary<string, string> overrides) => overrides
+        .Where(entry => !ReservedVariables.Contains(entry.Key))
+        .ToDictionary(entry => entry.Key, entry => entry.Value);
 }

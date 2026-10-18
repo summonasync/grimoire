@@ -49,6 +49,11 @@ internal sealed class PersonaCommand(CliEnvironment environment)
 
         var section = CliValues.Section(invocation.Spec, invocation.Positional[1]);
         var text = string.Join(" ", invocation.Positional.Skip(2));
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new UsageException("Persona section text must not be empty; clearing sections is not supported in v1.", invocation.Spec);
+        }
+
         var actor = ActorResolver.Resolve(environment, invocation.Value("actor"));
         var current = await persona.GetAsync(cancellationToken);
         await persona.SetAsync(current.WithSection(section, text), actor, cancellationToken);

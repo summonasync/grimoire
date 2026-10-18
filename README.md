@@ -12,10 +12,10 @@ One binary, three faces:
 | Web console | `grimoire serve` (loopback HTTP + SPA) | the human — browse, edit, tune |
 | CLI | `grimoire <command>` | scripts and quick queries |
 
-**Status**: MVP backend is done and reviewed (core, Qdrant adapters, MCP face,
-HTTP face — 261 tests green). CLI composition root and the web console are
-landing in the current sprint. Live work tracking happens on the Overmind
-board; this README describes the shipped shape plus the frozen contracts.
+**Status**: MVP complete and acceptance-verified end to end — all three faces
+(CLI, MCP stdio, loopback web console) round-trip against a live Qdrant +
+Ollama, 353 tests green. Live work tracking happens on the Overmind board;
+this README describes the shipped shape plus the frozen contracts.
 
 ## The name
 
@@ -36,7 +36,7 @@ docker compose -f deploy/docker-compose.yml up -d
 dotnet build Grimoire.sln
 dotnet test Grimoire.sln
 
-# 3. First run (lands with the CLI, current sprint)
+# 3. First run
 grimoire init     # writes ~/.grimoire/config.json, creates the collection
 grimoire serve    # web console on http://127.0.0.1:4770
 ```
@@ -131,7 +131,7 @@ Grimoire.sln
 │   ├── Grimoire.Mcp/              stdio MCP face (ModelContextProtocol SDK)
 │   ├── Grimoire.Api/              loopback Kestrel host, REST, GC sweep
 │   └── Grimoire.Cli/              entry exe — hosts both faces, CLI commands
-├── web/                           Next.js static-export console (in flight)
+├── web/                           Next.js static-export console, served by Grimoire.Api
 ├── tests/                         mirrors src/ — xUnit + Shouldly + NSubstitute
 ├── deploy/docker-compose.yml      qdrant + ollama
 └── audits/                        reviews, naming tournament, product strategy
