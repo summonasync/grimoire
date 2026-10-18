@@ -18,7 +18,8 @@ internal sealed class HistoryTool(CorrectionService corrections, MemoryActorProv
         "- predecessors and successors - ordered oldest to newest, each entry with status, tome, creation and " +
         "tombstone timestamps, tombstone reason, actor and a 120-character body preview. Read-only and " +
         "tome-scoped: an id that does not exist in the resolved tome returns found=false with an empty chain, not " +
-        "an error - pass tome to read the lineage in another tome you own.";
+        "an error - pass tome to read the lineage in another tome you own. upstream_unavailable means the store " +
+        "is unreachable; the call writes nothing.";
 
     public Task<CallToolResult> History(
         [Description("The id of the memory whose lineage you want, exactly as returned by a previous tool call.")]

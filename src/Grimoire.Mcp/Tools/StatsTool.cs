@@ -18,7 +18,8 @@ internal sealed class StatsTool(MemoryService memories, MemoryActorProvider acto
         "replaying the same write converges them). Counts span the whole store; byTome splits active and " +
         "tombstoned per tome and tome names the one your tools resolve to. Call it to check the store is " +
         "reachable after a failed memory call, to size the compaction backlog before running " +
-        "memory_compact_candidates, or when the human asks what memory currently holds.";
+        "memory_compact_candidates, or when the human asks what memory currently holds. upstream_unavailable " +
+        "here means the store itself is unreachable - no counts could be read.";
 
     public Task<CallToolResult> GetStats(
         [Description("Tome named in the response as yours; omit unless you want to declare another tome you own. Stats themselves always span the whole store.")]

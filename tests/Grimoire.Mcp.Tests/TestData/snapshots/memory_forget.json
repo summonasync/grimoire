@@ -1,0 +1,37 @@
+{
+  "contract": {
+    "description": "Tombstone a memory that is wrong, outdated or retracted, and get back whether it landed: memoryId, tome, forgotten and your reason on success. Nothing is hard-deleted: the record stays stored with a visible tombstone and your reason, but disappears from recall and from list's default (active) view. Call it when the human retracts a fact or reverses a decision (\"forget that, we do it differently now\"), and to retire journal entries after distilling them into facts. Use the exact memoryId from an earlier recall, list or compact-candidates result. A tombstone lands only in the resolved tome: an id that lives in another tome comes back forgotten=false - reads accept tome=, writes never cross. Forgetting an unknown or already-forgotten id also returns forgotten=false - do not retry. upstream_unavailable means the store is unreachable and no tombstone was applied.",
+    "destructive": true,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "memoryId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "memoryId",
+        "reason"
+      ]
+    },
+    "name": "memory_forget",
+    "readOnly": false,
+    "title": "Forget a memory"
+  },
+  "output": {
+    "forgotten": "boolean",
+    "memoryId": "string",
+    "reason": "string",
+    "tome": "string"
+  }
+}

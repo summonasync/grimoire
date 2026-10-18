@@ -19,7 +19,10 @@ internal sealed class RestoreTool(CorrectionService corrections, IMemoryStore st
         "active truth per fact remains. Repeating a restore is a safe no-op. An id that does not exist or lives in " +
         "another tome comes back restored=false - an honest answer, not an error; writes never cross tomes. The " +
         "response echoes the resolved tome and, when the record had a successor, where that superseder stands now. " +
-        "Every restore is recorded on the memory's correction trail with your reason, for the human to audit.";
+        "Every restore is recorded on the memory's correction trail with your reason, for the human to audit. " +
+        "upstream_unavailable means the store is unreachable and the reversal was not applied - the earlier " +
+        "correction stands. A crash between the two writes can leave the reversal half-applied; repeating the " +
+        "restore converges both sides.";
 
     public Task<CallToolResult> Restore(
         [Description("The id of the memory to bring back, exactly as returned by a previous tool call.")]

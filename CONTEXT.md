@@ -19,6 +19,15 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
   a directory), `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
   `stats`, `config`.
 
+The MCP tool surface is frozen by contract snapshots: `tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json`
+pins each tool's title, description, annotations, input schema and the output shape observed
+through the real transport, and `McpToolContractTests` turns any drift red — including a new
+tool without a snapshot and a stale snapshot for a removed tool. To change a tool
+intentionally: change the tool and update its snapshot in the same change (rerun the
+contract tests with `GRIMOIRE_UPDATE_TOOL_SNAPSHOTS=1` to regenerate), so review sees the
+contract diff in that JSON. The teaching-keyword pins in the same test class stay — they
+guard teaching quality the snapshots cannot express.
+
 All three faces are independent clients of one Qdrant instance (vectors + payload metadata).
 There is no internal hub and no IPC between faces — Qdrant is the single source of truth.
 `serve` is optional: the MCP and CLI faces work with only Qdrant running.

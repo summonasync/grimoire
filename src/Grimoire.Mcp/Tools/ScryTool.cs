@@ -20,8 +20,8 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
         "memories never cross tomes. Results are anonymous by default - attribution 'light' adds the author " +
         "alias, 'full' adds alias and vendor; the store always keeps full provenance, anonymity is presentation " +
         "only. Without tomes every other tome is searched; pass tomes to narrow. Tome keys must be kebab-case; an " +
-        "empty result means the other tomes hold nothing on the topic, not a failure. Scry is read-only and never " +
-        "writes into your tome.";
+        "empty result means the other tomes hold nothing on the topic, not a failure. upstream_unavailable means " +
+        "the embedding provider or store is unreachable; scry is read-only and never writes into your tome.";
 
     public Task<CallToolResult> Scry(
         [Description("What to look for. Phrasing may be approximate - scry is semantic, like recall.")]

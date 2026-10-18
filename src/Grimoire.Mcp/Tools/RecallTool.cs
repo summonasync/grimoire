@@ -14,9 +14,11 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
         "Search memory before you assume. Call it at session start (project and global scope) to load standing " +
         "context, before redoing work that may already have a decision on record, and whenever prior context would " +
         "change the answer: \"did we settle X\", \"what did the human say about Y\", \"why is this built this way\". " +
-        "Matches are ranked by similarity, recency and importance over active records, and reading them bumps their " +
-        "access stats so live knowledge stays fresh. Narrow with scope, projectId or tags instead of raising the " +
-        "limit, and pass tome to read another tome you own; memory_scry answers across tomes instead.";
+        "Returns ranked matches - id, content, scope, kind, tags, similarity and score - over active records only: " +
+        "superseded and tombstoned never surface. Reading a match bumps its access stats so live knowledge stays " +
+        "fresh. Narrow with scope, projectId or tags instead of raising the limit, and pass tome to read another " +
+        "tome you own; memory_scry answers across tomes instead. upstream_unavailable means the embedding provider " +
+        "or store is unreachable; the call is read-only and writes nothing.";
 
     public Task<CallToolResult> Recall(
         [Description("What to look for. Phrasing may be approximate - recall is semantic, not keyword match.")]

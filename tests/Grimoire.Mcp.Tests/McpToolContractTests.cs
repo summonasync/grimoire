@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Grimoire.Mcp;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -97,6 +98,107 @@ public sealed class McpToolContractTests
         var names = await session.Client.ListToolNames();
 
         names.OrderBy(name => name, StringComparer.Ordinal).ShouldBe(ToolNames);
+    }
+
+    public static TheoryData<string> Tools()
+    {
+        var data = new TheoryData<string>();
+        foreach (var name in ToolNames)
+        {
+            data.Add(name);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(Tools))]
+    public async Task Contract_MatchesTheFrozenSnapshot(string tool)
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var observed = ToolSnapshotJson.DescribeContract((await session.Client.ListToolMap())[tool]);
+
+        if (ToolSnapshotFiles.UpdateMode)
+        {
+            ToolSnapshotFiles.SaveContract(tool, observed);
+            return;
+        }
+
+        var pinned = ToolSnapshotJson.Canonical(ToolSnapshotFiles.LoadContract(tool));
+        var actual = ToolSnapshotJson.Canonical(observed);
+
+        actual.ShouldBe(pinned, customMessage:
+            $"tool contract drifted for '{tool}' — update tests/Grimoire.Mcp.Tests/TestData/snapshots/{tool}.json " +
+            "in the same change, or regenerate the snapshots with GRIMOIRE_UPDATE_TOOL_SNAPSHOTS=1");
+    }
+
+    [Fact]
+    public async Task OutputShapes_MatchTheFrozenSnapshots()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var results = await ToolSurfaceProbes.RunAsync(session);
+
+        foreach (var tool in ToolNames)
+        {
+            var observed = ToolSnapshotJson.DescribeShape(results[tool].Payload());
+
+            if (ToolSnapshotFiles.UpdateMode)
+            {
+                ToolSnapshotFiles.SaveShape(tool, observed);
+                continue;
+            }
+
+            var pinned = ToolSnapshotJson.Canonical(ToolSnapshotFiles.LoadShape(tool));
+            var actual = ToolSnapshotJson.Canonical(observed);
+
+            actual.ShouldBe(pinned, customMessage:
+                $"output shape drifted for '{tool}' — update tests/Grimoire.Mcp.Tests/TestData/snapshots/{tool}.json " +
+                "in the same change, or regenerate the snapshots with GRIMOIRE_UPDATE_TOOL_SNAPSHOTS=1");
+        }
+    }
+
+    [Fact]
+    public async Task ToolRoster_MatchesTheSnapshotDirectory()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var names = await session.Client.ListToolNames();
+        var (unpinned, orphans) = ToolSnapshotFiles.CompareRoster(names, ToolSnapshotFiles.PinnedToolNames());
+
+        unpinned.ShouldBe([], customMessage:
+            $"unpinned tools registered without a snapshot: {string.Join(", ", unpinned)} — " +
+            "add tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json in the same change");
+        orphans.ShouldBe([], customMessage:
+            $"orphan snapshots without a registered tool: {string.Join(", ", orphans)} — " +
+            "delete them or rename them to the surviving tool");
+    }
+
+    [Fact]
+    public void SnapshotDrift_TurnsTheContractPinRed()
+    {
+        var pinned = ToolSnapshotJson.Canonical(ToolSnapshotFiles.LoadContract("memory_restore"));
+        var tampered = (JsonObject)JsonNode.Parse(pinned)!;
+        tampered["idempotent"] = !tampered["idempotent"]!.GetValue<bool>();
+        var drifted = ToolSnapshotJson.Canonical(tampered);
+
+        Should.Throw<ShouldAssertException>(() => drifted.ShouldBe(pinned));
+    }
+
+    [Fact]
+    public void RosterGuard_TurnsUnpinnedToolsAndOrphanSnapshotsRed()
+    {
+        var (unpinned, orphans) = ToolSnapshotFiles.CompareRoster(
+            ["memory_list", "memory_hypothetical"], ["memory_list"]);
+
+        unpinned.ShouldBe(["memory_hypothetical"]);
+        orphans.ShouldBe([]);
+
+        var (unpinnedAfterRemoval, orphansAfterRemoval) = ToolSnapshotFiles.CompareRoster(
+            ["memory_list"], ["memory_list", "memory_ghost"]);
+
+        unpinnedAfterRemoval.ShouldBe([]);
+        orphansAfterRemoval.ShouldBe(["memory_ghost"]);
     }
 
     [Theory]

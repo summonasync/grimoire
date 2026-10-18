@@ -16,7 +16,8 @@ internal sealed class PersonaGetTool(PersonaService persona, MemoryActorProvider
         "persona is per-tome - each tome carries its own. Call it at session start before writing in the human's " +
         "voice or making style calls, and whenever a standing instruction might exist - check, don't guess. Empty " +
         "sections were never filled by the human: do not invent content for them, and do not write persona facts " +
-        "through memory_remember; the human edits persona in the Grimoire UI or CLI.";
+        "through memory_remember; the human edits persona in the Grimoire UI or CLI. upstream_unavailable means " +
+        "the store is unreachable; the call is read-only and writes nothing.";
 
     public Task<CallToolResult> Get(
         [Description("Tome whose persona to read; omit for your resolved tome.")]

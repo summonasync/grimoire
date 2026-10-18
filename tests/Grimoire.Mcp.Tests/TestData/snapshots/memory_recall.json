@@ -1,0 +1,87 @@
+{
+  "contract": {
+    "description": "Search memory before you assume. Call it at session start (project and global scope) to load standing context, before redoing work that may already have a decision on record, and whenever prior context would change the answer: \"did we settle X\", \"what did the human say about Y\", \"why is this built this way\". Returns ranked matches - id, content, scope, kind, tags, similarity and score - over active records only: superseded and tombstoned never surface. Reading a match bumps its access stats so live knowledge stays fresh. Narrow with scope, projectId or tags instead of raising the limit, and pass tome to read another tome you own; memory_scry answers across tomes instead. upstream_unavailable means the embedding provider or store is unreachable; the call is read-only and writes nothing.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "kind": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "default": 5,
+          "type": "integer"
+        },
+        "projectId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query": {
+          "type": "string"
+        },
+        "scope": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "name": "memory_recall",
+    "readOnly": true,
+    "title": "Recall memories"
+  },
+  "output": {
+    "count": "number",
+    "matches": {
+      "arrayOf": {
+        "actor": "string",
+        "content": "string",
+        "createdAt": "string",
+        "kind": "string",
+        "lastAccessedAt": "string",
+        "memoryId": "string",
+        "projectId": "string",
+        "scope": "string",
+        "score": "number",
+        "similarity": "number",
+        "tags": {
+          "arrayOf": "string"
+        }
+      }
+    },
+    "tome": "string"
+  }
+}

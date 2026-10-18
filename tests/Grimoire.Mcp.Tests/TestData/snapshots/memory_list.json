@@ -1,0 +1,88 @@
+{
+  "contract": {
+    "description": "Browse stored memories by filter, newest first - no semantic ranking. Returns full records: id, content, scope, kind, status, actor, tags, importance, access stats, supersededBy and tombstone reason where present. Defaults to active records; pass status to audit superseded or tombstoned entries, for example to confirm a fact was already retracted before re-asserting it. Pass tome to audit another tome you own. Prefer memory_recall for meaning-based lookup. upstream_unavailable means the store is unreachable; the call is read-only and writes nothing.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "kind": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "default": 50,
+          "type": "integer"
+        },
+        "projectId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "default": "Active",
+          "type": "string"
+        },
+        "tags": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": []
+    },
+    "name": "memory_list",
+    "readOnly": true,
+    "title": "List memories"
+  },
+  "output": {
+    "count": "number",
+    "memories": {
+      "arrayOf": {
+        "accessCount": "number",
+        "actor": "string",
+        "bodyChars": "number",
+        "content": "string",
+        "createdAt": "string",
+        "importance": "number",
+        "kind": "string",
+        "lastAccessedAt": "string",
+        "memoryId": "string",
+        "projectId": "string",
+        "scope": "string",
+        "status": "string",
+        "tags": {
+          "arrayOf": "string"
+        }
+      }
+    },
+    "tome": "string"
+  }
+}

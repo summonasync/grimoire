@@ -12,10 +12,12 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
     public const string Title = "List memories";
 
     public const string Description =
-        "Browse stored memories by filter, newest first - no semantic ranking. Defaults to active records; pass " +
-        "status to audit superseded or tombstoned entries, for example to confirm a fact was already retracted " +
-        "before re-asserting it. Pass tome to audit another tome you own. Prefer memory_recall for meaning-based " +
-        "lookup.";
+        "Browse stored memories by filter, newest first - no semantic ranking. Returns full records: id, content, " +
+        "scope, kind, status, actor, tags, importance, access stats, supersededBy and tombstone reason where " +
+        "present. Defaults to active records; pass status to audit superseded or tombstoned entries, for example " +
+        "to confirm a fact was already retracted before re-asserting it. Pass tome to audit another tome you own. " +
+        "Prefer memory_recall for meaning-based lookup. upstream_unavailable means the store is unreachable; the " +
+        "call is read-only and writes nothing.";
 
     public Task<CallToolResult> List(
         [Description("Restrict to one scope.")]
