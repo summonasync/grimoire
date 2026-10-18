@@ -15,6 +15,7 @@ public static class MemoryPayloadMapper
             [MemoryPayloadFields.Kind] = record.Kind.ToString(),
             [MemoryPayloadFields.Status] = record.Status.ToString(),
             [MemoryPayloadFields.Actor] = ToValue(record.Actor),
+            [MemoryPayloadFields.Tome] = record.Tome,
             [MemoryPayloadFields.Tags] = record.Tags.ToArray(),
             [MemoryPayloadFields.Importance] = record.Importance,
             [MemoryPayloadFields.CreatedAt] = Store(record.CreatedAt),
@@ -73,6 +74,7 @@ public static class MemoryPayloadMapper
                 Kind = RequiredEnum<MemoryKind>(payload, MemoryPayloadFields.Kind),
                 Status = RequiredEnum<MemoryStatus>(payload, MemoryPayloadFields.Status),
                 Actor = RequiredActor(payload, MemoryPayloadFields.Actor),
+                Tome = DecodeTome(payload),
                 ProjectId = OptionalString(payload, MemoryPayloadFields.ProjectId),
                 SessionId = OptionalString(payload, MemoryPayloadFields.SessionId),
                 Tags = OptionalStrings(payload, MemoryPayloadFields.Tags),
@@ -119,6 +121,24 @@ public static class MemoryPayloadMapper
         }
 
         return new MemoryActor(RequiredString(value.StructValue.Fields, "alias"), OptionalString(value.StructValue.Fields, "vendor"));
+    }
+
+    private static string DecodeTome(IDictionary<string, Value> payload)
+    {
+        var raw = OptionalString(payload, MemoryPayloadFields.Tome);
+        if (raw is null)
+        {
+            return TomeKey.DefaultTome;
+        }
+
+        try
+        {
+            return TomeKey.Normalize(raw);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new PayloadDecodeException($"Payload field '{MemoryPayloadFields.Tome}' carries an invalid tome key '{raw}'.", ex);
+        }
     }
 
     private static string RequiredString(IDictionary<string, Value> payload, string field)

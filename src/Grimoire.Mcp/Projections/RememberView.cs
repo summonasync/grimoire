@@ -12,6 +12,8 @@ internal sealed record RememberView
 
     public required string Actor { get; init; }
 
+    public required string Tome { get; init; }
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }

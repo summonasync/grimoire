@@ -87,6 +87,7 @@ public sealed class CompactCandidatesToolTests
             Scope = MemoryScope.Project,
             Kind = MemoryKind.Journal,
             Actor = MemoryActor.Human,
+            Tome = McpTestSession.ClientActor,
             ProjectId = "grimoire",
             CreatedAt = accessed,
             LastAccessedAt = accessed,

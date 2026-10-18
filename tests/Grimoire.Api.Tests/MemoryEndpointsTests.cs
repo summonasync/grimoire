@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Grimoire.Api.Contracts;
 using Grimoire.Api.Tests.Fakes;
 using Grimoire.Core;
 using Shouldly;
@@ -59,6 +60,64 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var records = await GetRecords(factory.NewClient(), "/api/memories?status=superseded,active");
 
         records.Select(record => record.Status).ShouldBe(new[] { MemoryStatus.Active, MemoryStatus.Superseded }, ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task List_WithTomeParam_FiltersAndEchoesTheTome()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/memories?tome=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var list = await ReadList(response);
+        list.Tome.ShouldBe("alpha");
+        list.Count.ShouldBe(1);
+        list.Items.Single().Content.ShouldBe("alpha note");
+    }
+
+    [Fact]
+    public async Task List_WithoutTomeParam_DefaultsToTheResolvedTome()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Store.Seed("eng note", [1f, 0f], tome: "eng");
+        tomeFactory.Store.Seed("other tome note", [1f, 0f], tome: "alpha");
+
+        var response = await tomeFactory.NewClient().GetAsync("/api/memories");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var list = await ReadList(response);
+        list.Tome.ShouldBe("eng");
+        list.Items.Select(record => record.Content).ShouldBe(["eng note"]);
+    }
+
+    [Theory]
+    [InlineData("Not Valid!!")]
+    [InlineData("___")]
+    public async Task List_WithGarbageTome_Returns400(string tome)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/api/memories?tome={Uri.EscapeDataString(tome)}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
+    [Fact]
+    public async Task List_WithQuery_HonorsTome()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["vector"] = [1f, 0f];
+        factory.Store.Seed("alpha vector note", [1f, 0f], tome: "alpha", kind: MemoryKind.Fact);
+        factory.Store.Seed("home vector note", [1f, 0f], kind: MemoryKind.Fact);
+
+        var list = await ReadList(await factory.NewClient().GetAsync("/api/memories?query=vector&tome=alpha"));
+
+        list.Tome.ShouldBe("alpha");
+        list.Items.Select(record => record.Content).ShouldBe(["alpha vector note"]);
     }
 
     [Theory]
@@ -206,6 +265,61 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         stored.Actor.IsHuman.ShouldBeTrue();
         stored.Content.ShouldBe("prefers karake over grype");
         response.Headers.Location!.OriginalString.ShouldBe($"/api/memories/{stored.Id}");
+    }
+
+    [Fact]
+    public async Task Post_LandsInTheTomeResolvedFromEnvironment()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+        tomeFactory.Embeddings.Vectors["prefers wingman over squad"] = [1f, 0f];
+
+        var response = await tomeFactory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "prefers wingman over squad",
+            scope = "global",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("tome").GetString().ShouldBe("eng");
+        tomeFactory.Store.Records.Single().Tome.ShouldBe("eng");
+    }
+
+    [Fact]
+    public async Task Post_WithExplicitTome_NormalizesAndLandsThere()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["claude ships on fridays"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "claude ships on fridays",
+            scope = "global",
+            tome = "Alpha Prime",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("tome").GetString().ShouldBe("alpha-prime");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha-prime");
+    }
+
+    [Fact]
+    public async Task Post_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "anywhere but here",
+            scope = "global",
+            tome = "Not Valid!!",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.ShouldBeEmpty();
     }
 
     [Fact]
@@ -453,6 +567,48 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Forget_WithTomeParameter_TombstonesWithinThatTome()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("alpha retraction", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            $"/api/memories/{record.Id}/forget",
+            new { reason = "retracted", tome = "alpha" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Tombstoned);
+    }
+
+    [Fact]
+    public async Task Forget_WithIdFromAnotherTome_Returns404WithoutTouchingIt()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("alpha retraction", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync($"/api/memories/{record.Id}/forget", new { reason = "retracted" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Forget_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("note", [1f, 0f]);
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            $"/api/memories/{record.Id}/forget",
+            new { reason = "retracted", tome = "Not Valid!!" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
     public async Task Forget_TombstonedByOtherFaceAfterPrecheck_Returns409()
     {
         factory.Reset();
@@ -520,12 +676,18 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
             tombstonedAt: FakeClock.DefaultStart);
     }
 
+    private static async Task<MemoryListResponse> ReadList(HttpResponseMessage response)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        return (await JsonSerializer.DeserializeAsync<MemoryListResponse>(stream, TestJson.Options))!;
+    }
+
     private static async Task<IReadOnlyList<MemoryRecord>> GetRecords(HttpClient client, string path)
     {
         using var response = await client.GetAsync(path);
         response.EnsureSuccessStatusCode();
-        var records = await ReadFromJsonAsync<MemoryRecord[]>(response);
-        return records!;
+        var list = await ReadFromJsonAsync<MemoryListResponse>(response);
+        return list!.Items;
     }
 
     private static async Task<T?> ReadFromJsonAsync<T>(HttpResponseMessage response)

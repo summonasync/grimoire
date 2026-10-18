@@ -22,6 +22,8 @@ internal sealed class CliEnvironment
 
     public IServiceProvider? Services { get; init; }
 
+    public string WorkingDirectory { get; init; } = Environment.CurrentDirectory;
+
     public string? Variable(string name) =>
         Variables is null ? Environment.GetEnvironmentVariable(name) : Variables.TryGetValue(name, out var value) ? value : null;
 }

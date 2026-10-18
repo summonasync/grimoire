@@ -2,6 +2,8 @@ namespace Grimoire.Mcp.Projections;
 
 internal sealed record BriefView
 {
+    public required string Tome { get; init; }
+
     public required BriefPersonaSection Persona { get; init; }
 
     public required BriefItemsSection<BriefFactItem> Facts { get; init; }
@@ -11,4 +13,6 @@ internal sealed record BriefView
     public required BriefItemsSection<BriefJournalItem> Journal { get; init; }
 
     public required IReadOnlyList<string> Omitted { get; init; }
+
+    public string? Hint { get; init; }
 }

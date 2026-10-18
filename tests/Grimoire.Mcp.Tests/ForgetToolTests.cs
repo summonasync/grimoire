@@ -115,4 +115,58 @@ public sealed class ForgetToolTests
         result.Payload().GetProperty("forgotten").GetBoolean().ShouldBeFalse();
         session.Store.Points.Single().Record.TombstoneReason.ShouldBe("first retraction");
     }
+
+    [Fact]
+    public async Task Forget_CrossTomeId_IsRefusedHonestlyAndEchoesTheTargetTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var remembered = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision to retract",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+            ["tome"] = "alpha",
+        });
+        var memoryId = remembered.Payload().GetProperty("memoryId").GetGuid();
+
+        var result = await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = memoryId.ToString(),
+            ["reason"] = "cross tome attempt",
+            ["tome"] = "beta",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("forgotten").GetBoolean().ShouldBeFalse();
+        payload.GetProperty("tome").GetString().ShouldBe("beta");
+        session.Store.Points.Single().Record.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Forget_TomeParam_TombstonesWithinTheNamedTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var remembered = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision to retract",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+            ["tome"] = "alpha",
+        });
+        var memoryId = remembered.Payload().GetProperty("memoryId").GetGuid();
+
+        var result = await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = memoryId.ToString(),
+            ["reason"] = "retracted in its own tome",
+            ["tome"] = "alpha",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("forgotten").GetBoolean().ShouldBeTrue();
+        payload.GetProperty("tome").GetString().ShouldBe("alpha");
+        session.Store.Points.Single().Record.Status.ShouldBe(MemoryStatus.Tombstoned);
+    }
 }

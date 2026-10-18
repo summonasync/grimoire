@@ -26,6 +26,7 @@ export function StatsPage() {
   const stats = useQuery(statsQueryOptions());
   const health = useQuery(healthQueryOptions());
   const scopes = stats.data ? Object.entries(stats.data.activeByScope) : [];
+  const tomeRows = stats.data ? Object.entries(stats.data.byTome) : [];
 
   return (
     <>
@@ -43,6 +44,8 @@ export function StatsPage() {
       ) : (
         stats.data && (
           <div className="space-y-4">
+            <p className="text-xs text-muted">Resolved tome: {stats.data.tome}</p>
+
             <div
               className={
                 stats.data.pendingCompaction > 0
@@ -61,10 +64,14 @@ export function StatsPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatsTile label="Active" value={stats.data.active} />
               <StatsTile label="Superseded" value={stats.data.superseded} />
               <StatsTile label="Tombstoned" value={stats.data.tombstoned} />
+              <StatsTile
+                label="Idempotency conflicts"
+                value={stats.data.idempotencyConflicts}
+              />
             </div>
 
             <div className="rounded-lg border border-border bg-surface p-4">
@@ -77,6 +84,25 @@ export function StatsPage() {
                   </div>
                 ))}
               </dl>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <h2 className="text-sm font-semibold">By tome</h2>
+              {tomeRows.length === 0 ? (
+                <p className="mt-2 text-xs text-muted">No tome breakdown reported yet.</p>
+              ) : (
+                <dl className="mt-2 divide-y divide-border">
+                  {tomeRows.map(([tome, counts]) => (
+                    <div key={tome} className="flex items-center justify-between py-2 text-sm">
+                      <dt className="text-muted">{tome}</dt>
+                      <dd className="font-medium">
+                        {counts.active.toLocaleString()} active ·{" "}
+                        {counts.tombstoned.toLocaleString()} tombstoned
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </div>
           </div>
         )

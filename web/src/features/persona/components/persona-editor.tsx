@@ -72,6 +72,11 @@ export function PersonaEditor() {
             Discard changes
           </button>
         )}
+        {editor.savedTome && (
+          <span className="rounded bg-background px-1.5 py-0.5 text-xs font-medium text-foreground">
+            tome {editor.savedTome}
+          </span>
+        )}
         <span aria-live="polite" className="text-xs text-muted">
           {editor.isSaving ? "Saving…" : editor.isSaved ? "All changes saved" : editor.isDirty ? "Unsaved changes" : ""}
         </span>

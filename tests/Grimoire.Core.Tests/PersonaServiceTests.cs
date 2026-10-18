@@ -10,9 +10,11 @@ public sealed class PersonaServiceTests
     {
         ["senior .NET developer"] = [1f, 0f, 0f],
         ["principal .NET developer"] = [1f, 0.2f, 0f],
+        ["junior .NET developer"] = [0.8f, 0.6f, 0f],
         ["dry humor"] = [0f, 1f, 0f],
         ["dark theme everywhere"] = [0f, 0f, 1f],
         ["no meetings before noon"] = [1f, 1f, 0f],
+        ["sleep well"] = [0.6f, 0.8f, 0f],
     };
 
     private readonly FakeMemoryStore _store = new();
@@ -155,5 +157,79 @@ public sealed class PersonaServiceTests
         stored.Preferences.ShouldBeEmpty();
         loaded.ShouldBe(document);
         embeddings.Requests.ShouldBe(["senior .NET developer", "no meetings before noon"]);
+    }
+
+    [Fact]
+    public async Task Set_WithoutTome_StoresUnderDefaultTome()
+    {
+        await _service.SetAsync(new PersonaDocument { Identity = "senior .NET developer" }, MemoryActor.Human, CancellationToken.None);
+
+        _store.Records.ShouldAllBe(record => record.Tome == TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public async Task Set_ExplicitTome_IsNormalizedOnRecords()
+    {
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "senior .NET developer" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "Product Assistants");
+
+        _store.Records.ShouldAllBe(record => record.Tome == "product-assistants");
+    }
+
+    [Fact]
+    public async Task Get_SeparatesDocumentsByTome()
+    {
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "senior .NET developer", Tone = "dry humor" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "alpha");
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "junior .NET developer", Rules = "sleep well" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "beta");
+
+        var alpha = await _service.GetAsync(CancellationToken.None, "alpha");
+        var beta = await _service.GetAsync(CancellationToken.None, "beta");
+        var unscoped = await _service.GetAsync(CancellationToken.None);
+
+        alpha.Identity.ShouldBe("senior .NET developer");
+        alpha.Tone.ShouldBe("dry humor");
+        alpha.Rules.ShouldBeEmpty();
+        beta.Identity.ShouldBe("junior .NET developer");
+        beta.Rules.ShouldBe("sleep well");
+        beta.Tone.ShouldBeEmpty();
+        unscoped.Identity.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Set_UpdatesOnlyOwnTomeDocument()
+    {
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "senior .NET developer" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "alpha");
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "junior .NET developer" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "beta");
+
+        await _service.SetAsync(
+            new PersonaDocument { Identity = "principal .NET developer" },
+            MemoryActor.Human,
+            CancellationToken.None,
+            "alpha");
+
+        _store.Records.Count.ShouldBe(2);
+        var alpha = await _service.GetAsync(CancellationToken.None, "alpha");
+        var beta = await _service.GetAsync(CancellationToken.None, "beta");
+        alpha.Identity.ShouldBe("principal .NET developer");
+        beta.Identity.ShouldBe("junior .NET developer");
     }
 }

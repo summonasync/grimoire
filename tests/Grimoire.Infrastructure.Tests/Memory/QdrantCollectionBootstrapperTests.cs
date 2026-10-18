@@ -20,10 +20,10 @@ public sealed class QdrantCollectionBootstrapperTests
         db.CreateCollectionCount.ShouldBe(1);
         db.CreatedDimensions.ShouldBe(4);
         db.CreatedIndexes.Select(index => index.Field).ShouldBe(
-            ["scope", "kind", "status", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
+            ["scope", "kind", "status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
             ignoreOrder: true);
         db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Datetime).ShouldBe(2);
-        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(7);
+        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
         db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
         db.PayloadOf(EmbeddingFingerprint.MarkerPointId)[EmbeddingFingerprint.ModelField].StringValue
             .ShouldBe("nomic-embed-text");
@@ -111,9 +111,9 @@ public sealed class QdrantCollectionBootstrapperTests
 
         await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
 
-        db.CreatedIndexes.Count.ShouldBe(existing + 7);
+        db.CreatedIndexes.Count.ShouldBe(existing + 8);
         db.CreatedIndexes.Skip(existing).Select(index => index.Field).ShouldBe(
-            ["status", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"], ignoreOrder: true);
+            ["status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"], ignoreOrder: true);
     }
 
     private static EmbeddingFingerprint Fingerprint() => EmbeddingFingerprint.From("nomic-embed-text", 4);

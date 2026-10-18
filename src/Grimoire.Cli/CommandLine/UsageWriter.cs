@@ -30,7 +30,9 @@ internal static class UsageWriter
             return;
         }
 
-        var left = spec.Flags.Select(flag => $"  --{flag.Name} <{flag.ValueName}>").ToList();
+        var left = spec.Flags
+            .Select(flag => flag.ValueName.Length == 0 ? $"  --{flag.Name}" : $"  --{flag.Name} <{flag.ValueName}>")
+            .ToList();
         var width = left.Max(text => text.Length);
         output.WriteLine();
         output.WriteLine("Options:");

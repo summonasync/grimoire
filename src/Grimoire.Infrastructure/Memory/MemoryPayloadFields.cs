@@ -10,6 +10,8 @@ public static class MemoryPayloadFields
 
     public const string Actor = "actor";
 
+    public const string Tome = "tome";
+
     public const string ProjectId = "projectId";
 
     public const string SessionId = "sessionId";

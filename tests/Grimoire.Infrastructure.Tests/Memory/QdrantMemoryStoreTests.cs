@@ -272,6 +272,73 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
+    public async Task List_WithTomeFilter_IsolatesTomes()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var alpha = await SeedAsync(store, TestMemories.Create("alpha", tome: "alpha"));
+        var fallback = await SeedAsync(store, TestMemories.Create("fallback"));
+
+        (await ListIdsAsync(store, new MemoryFilter { Tome = "alpha" })).ShouldBe([alpha.Id]);
+        (await ListIdsAsync(store, new MemoryFilter { Tome = TomeKey.DefaultTome })).ShouldBe([fallback.Id]);
+    }
+
+    [Fact]
+    public async Task List_WithLegacyPointWithoutPayloadTome_ResolvesItIntoDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var modern = await SeedAsync(store, TestMemories.Create("modern"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var defaults = await store.ListAsync(new MemoryFilter { Tome = TomeKey.DefaultTome }, CancellationToken.None);
+        var alpha = await store.ListAsync(new MemoryFilter { Tome = "alpha" }, CancellationToken.None);
+
+        defaults.Select(record => record.Id).ShouldBe(new[] { modern.Id, legacy.Id }, ignoreOrder: true);
+        defaults.Single(record => record.Id == legacy.Id).Tome.ShouldBe(TomeKey.DefaultTome);
+        alpha.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Count_WithTomeFilter_GroupsLegacyPointsIntoDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("modern default"));
+        await SeedAsync(store, TestMemories.Create("modern alpha", tome: "alpha"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var defaultCount = await store.CountAsync(new MemoryFilter { Tome = TomeKey.DefaultTome }, CancellationToken.None);
+        var alphaCount = await store.CountAsync(new MemoryFilter { Tome = "alpha" }, CancellationToken.None);
+
+        defaultCount.ShouldBe(2);
+        alphaCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Get_WithLegacyPointWithoutPayloadTome_DecodesAsDefaultTome()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("modern"));
+        var legacy = TestMemories.Create("legacy");
+        var payload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        payload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], payload);
+
+        var loaded = await store.GetAsync(legacy.Id, CancellationToken.None);
+
+        loaded.ShouldNotBeNull();
+        loaded.Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
     public async Task List_WithExpiresBeforeBoundary_IncludesEqualTimestamp()
     {
         var db = new FakeQdrantVectorDb();
@@ -415,10 +482,10 @@ public sealed class QdrantMemoryStoreTests
         db.CreateCollectionCount.ShouldBe(1);
         db.CreatedDimensions.ShouldBe(4);
         db.CreatedIndexes.Select(index => index.Field).ShouldBe(
-            ["scope", "kind", "status", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
+            ["scope", "kind", "status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
             ignoreOrder: true);
         db.CreatedIndexes.ShouldContain(index => index.Type == PayloadSchemaType.Datetime);
-        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(7);
+        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
         db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
     }
 

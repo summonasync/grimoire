@@ -13,12 +13,14 @@ internal sealed class TestHost : IDisposable
         StubEmbeddings? embeddings = null,
         MemoryEngineOptions? options = null,
         RecordingVectorDb? db = null,
-        IReadOnlyDictionary<string, string>? configEnvironment = null)
+        IReadOnlyDictionary<string, string>? configEnvironment = null,
+        IActorClaimProvider? claims = null,
+        IReadOnlyDictionary<string, string>? variables = null)
     {
         Store = new RecordingMemoryStore();
         Embeddings = embeddings ?? new StubEmbeddings(new Dictionary<string, float[]>());
         Clock = new FakeClock();
-        Services = TestServices.Build(Store, Embeddings, Clock, options, db);
+        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims);
         ConfigPath = Path.Combine(_directory, "config.json");
         Output = new StringWriter();
         Env = new CliEnvironment
@@ -28,6 +30,8 @@ internal sealed class TestHost : IDisposable
             Output = Output,
             Error = Output,
             Services = Services,
+            Variables = variables,
+            WorkingDirectory = _directory,
         };
     }
 

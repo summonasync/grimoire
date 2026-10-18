@@ -18,7 +18,8 @@ public sealed class MemoryService(
         }
 
         var now = clock.UtcNow;
-        var key = IdempotencyKey.Compute(request);
+        var tome = ResolveTome(request.Tome);
+        var key = IdempotencyKey.Compute(request, tome);
 
         var replay = await FindReplayAsync(key, now, cancellationToken);
         if (replay is not null)
@@ -28,7 +29,7 @@ public sealed class MemoryService(
         }
 
         var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
-        var duplicates = await ProbeDuplicatesAsync(request, vector, cancellationToken);
+        var duplicates = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
 
         var record = new MemoryRecord
         {
@@ -37,6 +38,7 @@ public sealed class MemoryService(
             Scope = request.Scope,
             Kind = request.Kind,
             Actor = request.Actor,
+            Tome = tome,
             ProjectId = request.ProjectId,
             SessionId = request.SessionId,
             Tags = [.. request.Tags],
@@ -84,6 +86,8 @@ public sealed class MemoryService(
             Kind = query.Kind,
             Status = MemoryStatus.Active,
             Tags = query.Tags,
+            Tome = query.Tomes.Count == 0 ? ResolveTome(query.Tome) : null,
+            Tomes = NormalizeTomes(query.Tomes),
             ProjectId = query.ProjectId,
             SessionId = query.SessionId,
         };
@@ -115,15 +119,16 @@ public sealed class MemoryService(
         return results;
     }
 
-    public async Task<bool> ForgetAsync(Guid id, string reason, CancellationToken cancellationToken)
+    public async Task<bool> ForgetAsync(Guid id, string reason, CancellationToken cancellationToken, string? tome = null)
     {
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new ArgumentException("A tombstone reason is required.", nameof(reason));
         }
 
+        var resolved = ResolveTome(tome);
         var record = await store.GetAsync(id, cancellationToken);
-        if (record is null || record.Status == MemoryStatus.Tombstoned)
+        if (record is null || record.Tome != resolved || record.Status == MemoryStatus.Tombstoned)
         {
             return false;
         }
@@ -140,7 +145,7 @@ public sealed class MemoryService(
 
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
-        return store.ListAsync(filter, cancellationToken);
+        return store.ListAsync(filter with { Tome = ResolveTome(filter.Tome) }, cancellationToken);
     }
 
     public async Task<GcResult> GcAsync(CancellationToken cancellationToken)
@@ -188,7 +193,7 @@ public sealed class MemoryService(
             }, cancellationToken);
         }
 
-        var journal = await FetchCompactableJournalAsync(cancellationToken);
+        var journal = await FetchCompactableJournalAsync(ResolveTome(null), cancellationToken);
         var pending = CompactionPlanner.Plan(journal, clock.UtcNow, _options.Compaction)
             .Sum(group => group.MemoryIds.Count);
 
@@ -200,28 +205,61 @@ public sealed class MemoryService(
             ActiveByScope = activeByScope,
             PendingCompaction = pending,
             IdempotencyConflicts = await CountIdempotencyConflictsAsync(cancellationToken),
+            ByTome = await CountByTomeAsync(cancellationToken),
         };
     }
 
-    public async Task<IReadOnlyList<CompactionCandidateGroup>> GetCompactionCandidatesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CompactionCandidateGroup>> GetCompactionCandidatesAsync(
+        CancellationToken cancellationToken,
+        string? tome = null)
     {
-        var journal = await FetchCompactableJournalAsync(cancellationToken);
+        var journal = await FetchCompactableJournalAsync(ResolveTome(tome), cancellationToken);
         return CompactionPlanner.Plan(journal, clock.UtcNow, _options.Compaction);
     }
 
-    private async Task<IReadOnlyList<MemoryPoint>> FetchCompactableJournalAsync(CancellationToken cancellationToken)
+    private string ResolveTome(string? tome) => TomeKey.Normalize(tome ?? _options.DefaultTome);
+
+    private static IReadOnlyList<string> NormalizeTomes(IReadOnlyList<string> tomes) => tomes.Count == 0
+        ? []
+        : [.. tomes.Select(TomeKey.Normalize).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)];
+
+    private async Task<IReadOnlyList<MemoryPoint>> FetchCompactableJournalAsync(string tome, CancellationToken cancellationToken)
     {
         return await store.FetchAsync(new MemoryFilter
         {
             Scopes = MemoryScopes.LongTerm,
             Kind = MemoryKind.Journal,
             Status = MemoryStatus.Active,
+            Tome = tome,
         }, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(RememberRequest request, ReadOnlyMemory<float> vector, CancellationToken cancellationToken)
+    private async Task<IReadOnlyDictionary<string, TomeStats>> CountByTomeAsync(CancellationToken cancellationToken)
+    {
+        var active = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
+        var tombstoned = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Tombstoned }, cancellationToken);
+
+        return active.Select(record => record.Tome)
+            .Concat(tombstoned.Select(record => record.Tome))
+            .Distinct()
+            .OrderBy(tome => tome, StringComparer.Ordinal)
+            .ToDictionary(
+                tome => tome,
+                tome => new TomeStats
+                {
+                    Active = active.Count(record => record.Tome == tome),
+                    Tombstoned = tombstoned.Count(record => record.Tome == tome),
+                });
+    }
+
+    private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(
+        RememberRequest request,
+        string tome,
+        ReadOnlyMemory<float> vector,
+        CancellationToken cancellationToken)
     {
         return await ProbeDuplicatesAsync(DuplicateProbeFilter(
+            tome,
             request.Scope,
             request.Kind,
             request.ProjectId,
@@ -239,11 +277,12 @@ public sealed class MemoryService(
             .ToArray();
     }
 
-    private MemoryFilter DuplicateProbeFilter(MemoryScope scope, MemoryKind kind, string? projectId, string? sessionId) => new()
+    private MemoryFilter DuplicateProbeFilter(string tome, MemoryScope scope, MemoryKind kind, string? projectId, string? sessionId) => new()
     {
         Scopes = [scope],
         Kind = kind,
         Status = MemoryStatus.Active,
+        Tome = tome,
         ProjectId = projectId,
         SessionId = sessionId,
         ExcludeTags = [PersonaSectionExtensions.PersonaTag],
@@ -278,6 +317,7 @@ public sealed class MemoryService(
             }
 
             var duplicates = await ProbeDuplicatesAsync(DuplicateProbeFilter(
+                original.Tome,
                 original.Scope,
                 original.Kind,
                 original.ProjectId,

@@ -43,6 +43,22 @@ public sealed class MemoryPayloadMapperTests
     }
 
     [Fact]
+    public void ToPayload_WithTome_WritesConcreteValue()
+    {
+        var payload = MemoryPayloadMapper.ToPayload(TestMemories.Create("tomed", tome: "alpha"));
+
+        payload[MemoryPayloadFields.Tome].StringValue.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public void ToPayload_WithDefaultTome_StillWritesTheField()
+    {
+        var payload = MemoryPayloadMapper.ToPayload(TestMemories.Create("plain"));
+
+        payload[MemoryPayloadFields.Tome].StringValue.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
     public void ToRecord_WithMissingOptionalFields_UsesDefaults()
     {
         var payload = new Dictionary<string, Value>
@@ -71,6 +87,58 @@ public sealed class MemoryPayloadMapperTests
         record.TombstoneReason.ShouldBeNull();
         record.TombstonedAt.ShouldBeNull();
         record.IdempotencyKey.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ToRecord_WithAbsentTome_DecodesAsDefaultTome()
+    {
+        var payload = LegacyPayload();
+
+        var record = MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload);
+
+        record.Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public void ToRecord_WithExplicitNullTome_DecodesAsDefaultTome()
+    {
+        var payload = LegacyPayload();
+        payload[MemoryPayloadFields.Tome] = new Value { NullValue = NullValue.NullValue };
+
+        var record = MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload);
+
+        record.Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public void ToRecord_WithNonNormalizedTome_NormalizesTheKey()
+    {
+        var payload = LegacyPayload();
+        payload[MemoryPayloadFields.Tome] = "Shared Library";
+
+        var record = MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload);
+
+        record.Tome.ShouldBe("shared-library");
+    }
+
+    [Fact]
+    public void ToRecord_WithInvalidTome_ThrowsTypedError()
+    {
+        var payload = LegacyPayload();
+        payload[MemoryPayloadFields.Tome] = "Not A Tome!!";
+
+        Should.Throw<PayloadDecodeException>(() => MemoryPayloadMapper.ToRecord(Guid.NewGuid(), payload))
+            .Message.ShouldContain("tome");
+    }
+
+    [Fact]
+    public void ToRecord_AfterToPayload_RoundTripsTheTome()
+    {
+        var record = TestMemories.Create("round trip", tome: "alpha");
+
+        var decoded = MemoryPayloadMapper.ToRecord(record.Id, new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(record)));
+
+        decoded.Tome.ShouldBe("alpha");
     }
 
     [Fact]
@@ -134,6 +202,13 @@ public sealed class MemoryPayloadMapperTests
     {
         var payload = MemoryPayloadMapper.ToPayload(TestMemories.Create("body", projectId: "p1"));
         return new Dictionary<string, Value>(payload);
+    }
+
+    private static Dictionary<string, Value> LegacyPayload()
+    {
+        var payload = FullPayload();
+        payload.Remove(MemoryPayloadFields.Tome);
+        return payload;
     }
 
     private static Value Actor(string alias, string? vendor)

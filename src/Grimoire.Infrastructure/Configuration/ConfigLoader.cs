@@ -18,8 +18,9 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
 
     private const string EnvironmentPrefix = "GRIMOIRE_";
 
-    // Reserved for the faces (ActorResolver); never a configuration property.
-    private static readonly IReadOnlySet<string> ReservedVariables = new HashSet<string>(["GRIMOIRE_ACTOR"], StringComparer.OrdinalIgnoreCase);
+    // Reserved for the faces (actor and tome resolution); never a configuration property.
+    private static readonly IReadOnlySet<string> ReservedVariables = new HashSet<string>(
+        ["GRIMOIRE_ACTOR", "GRIMOIRE_TOME"], StringComparer.OrdinalIgnoreCase);
 
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

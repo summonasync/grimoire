@@ -27,7 +27,8 @@ internal static class TestMemories
         DateTimeOffset? tombstonedAt = null,
         IReadOnlyList<Guid>? sources = null,
         Guid? id = null,
-        string? idempotencyKey = null)
+        string? idempotencyKey = null,
+        string? tome = null)
     {
         var moment = created ?? Moment;
 
@@ -38,6 +39,7 @@ internal static class TestMemories
             Scope = scope,
             Kind = kind,
             Actor = actor ?? Agent,
+            Tome = tome ?? TomeKey.DefaultTome,
             ProjectId = projectId,
             SessionId = sessionId,
             Tags = tags ?? [],

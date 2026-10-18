@@ -53,13 +53,33 @@ internal static class CommandCatalog
     private static readonly FlagSpec WebRoot = new(
         "web-root", "path", "Static SPA export directory. Default: ~/.grimoire/web");
 
+    private static readonly FlagSpec Agent = new(
+        "agent", "alias", "Claim this directory for an agent: rewrite the managed grimoire:actor block in AGENTS.md.");
+
+    private static readonly FlagSpec ClaimTome = new(
+        "tome", "key", "Tome key for the claim block. Default: the alias as a tome key.");
+
+    private static readonly FlagSpec Tome = new(
+        "tome", "key",
+        "Tome key for this operation. Default: GRIMOIRE_TOME, then the GRIMOIRE_ACTOR alias, then the AGENTS.md claim, then the configured default tome.");
+
+    private static readonly FlagSpec Tomes = new(
+        "tomes", "a,b", "Comma-separated tome keys to search. Default: every tome except your own.");
+
+    private static readonly FlagSpec IncludeJournal = FlagSpec.Switch(
+        "include-journal", "Opt into other tomes' journal entries; facts alone are searched by default.");
+
+    private static readonly FlagSpec Attribution = new(
+        "attribution", "none|light|full", "Actor fields on results: none, light (alias) or full (alias+vendor). Default: none.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
         {
             Name = "init",
-            Summary = "Write the default config when missing and prepare the Qdrant collection.",
+            Summary = "Write the default config when missing, prepare the Qdrant collection, and with --agent claim this directory in AGENTS.md.",
             Syntax = "init",
+            Flags = [Agent, ClaimTome],
         },
         new CommandSpec
         {
@@ -81,7 +101,7 @@ internal static class CommandCatalog
             Summary = "Store a memory.",
             Syntax = "remember <text>",
             MinPositional = 1,
-            Flags = [Scope, Kind, Tags, Importance, Ttl, Session, Project, Actor],
+            Flags = [Scope, Kind, Tags, Importance, Ttl, Session, Project, Actor, Tome],
         },
         new CommandSpec
         {
@@ -107,6 +127,14 @@ internal static class CommandCatalog
         },
         new CommandSpec
         {
+            Name = "scry",
+            Summary = "Search other tomes anonymously: facts by default, journal opt-in, session never.",
+            Syntax = "scry <query>",
+            MinPositional = 1,
+            Flags = [Tomes, IncludeJournal, Attribution, Limit],
+        },
+        new CommandSpec
+        {
             Name = "forget",
             Summary = "Tombstone a memory by id or by its best query match.",
             Syntax = "forget <id|query>",
@@ -124,7 +152,7 @@ internal static class CommandCatalog
             Name = "persona",
             Summary = "Show or edit the persona document read by agents.",
             Syntax = "persona [show | set-section <identity|tone|preferences|rules> <text>]",
-            Flags = [Actor],
+            Flags = [Actor, Tome],
         },
         new CommandSpec
         {

@@ -2,6 +2,8 @@ namespace Grimoire.Core;
 
 public sealed record MemoryEngineOptions
 {
+    public string DefaultTome { get; init; } = TomeKey.DefaultTome;
+
     public double SessionTtlHours { get; init; } = 24;
 
     public double DedupSimilarityThreshold { get; init; } = 0.92;

@@ -154,6 +154,55 @@ public sealed class RecallToolTests
         matches.ShouldNotContain(match => match.GetProperty("content").GetString() == "retracted decision");
     }
 
+    [Fact]
+    public async Task Recall_TomeParam_ReadsAnotherTomeAndEchoesIt()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha squad decision",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tome"] = "alpha",
+        });
+
+        var own = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+        });
+
+        own.ShouldSucceed();
+        own.Payload().GetProperty("count").GetInt32().ShouldBe(0);
+        own.Payload().GetProperty("tome").GetString().ShouldBe(McpTestSession.ClientActor);
+
+        var cross = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["tome"] = "alpha",
+        });
+
+        cross.ShouldSucceed();
+        cross.Payload().GetProperty("count").GetInt32().ShouldBe(1);
+        cross.Payload().GetProperty("tome").GetString().ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Recall_InvalidTome_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tome"] = "home/tome",
+        });
+
+        var (code, _, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tome");
+    }
+
     private static async Task<CallToolResult> Remember(McpTestSession session, string content, string projectId)
     {
         return await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>

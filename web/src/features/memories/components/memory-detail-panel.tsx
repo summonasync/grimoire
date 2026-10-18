@@ -76,6 +76,7 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <MetaItem label="Scope">{record.scope}</MetaItem>
           <MetaItem label="Kind">{record.kind}</MetaItem>
+          <MetaItem label="Tome">{record.tome}</MetaItem>
           <MetaItem label="Actor">
             {record.actor.alias}
             {record.actor.vendor ? ` · ${record.actor.vendor}` : ""}

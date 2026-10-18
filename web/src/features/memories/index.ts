@@ -29,6 +29,7 @@ export type {
   CreateMemoryInput,
   CreateMemoryResult,
   MemoryListParams,
+  MemoryListResult,
   MemoryStatusFilter,
   PatchMemoryInput,
 } from "./types";

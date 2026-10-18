@@ -82,6 +82,32 @@ public sealed class StatsToolTests
         result.Payload().GetProperty("idempotencyConflicts").GetInt64().ShouldBe(1);
     }
 
+    [Fact]
+    public async Task Stats_EchoesTheResolvedTomeAndPerTomeCounts()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "own tome note",
+            ["scope"] = "Global",
+        });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha squad note",
+            ["scope"] = "Global",
+            ["tome"] = "alpha",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("tome").GetString().ShouldBe(McpTestSession.ClientActor);
+        payload.GetProperty("byTome").GetProperty(McpTestSession.ClientActor).GetProperty("active").GetInt64().ShouldBe(1);
+        payload.GetProperty("byTome").GetProperty("alpha").GetProperty("active").GetInt64().ShouldBe(1);
+        payload.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(0);
+    }
+
     private static MemoryRecord Journal(Guid id, string content, DateTimeOffset accessed)
     {
         return new MemoryRecord

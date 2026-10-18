@@ -20,7 +20,8 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         "project (requires projectId) for one codebase; global for cross-project truths about the human and their " +
         "tooling; personal only for identity-level traits - the persona itself is human-curated, never write it " +
         "here. A near-duplicate write in the same scope and kind supersedes the older record; the response names " +
-        "the replaced id. Never store secrets or tokens.";
+        "the replaced id. Writes are tome-bound: the memory lands in your resolved tome, or in the tome you pass. " +
+        "Never store secrets or tokens.";
 
     public Task<CallToolResult> Remember(
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]
@@ -37,6 +38,8 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         string[]? tags = null,
         [Description("0..1, default 0.5. Higher survives recency decay longer; use 0.9+ for hard decisions and rules.")]
         double importance = 0.5,
+        [Description("Tome the memory belongs to. Writes are tome-bound: passing tome is how a write lands in another tome you own; omit it to write into your resolved tome. The response echoes where the memory landed.")]
+        string? tome = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -90,14 +93,21 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 nameof(kind))));
         }
 
+        if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
+        {
+            return Task.FromResult(ToolResults.Failure(tomeError));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
             var result = await memories.RememberAsync(new RememberRequest
             {
                 Content = content,
                 Scope = scope,
                 Kind = kind,
                 Actor = actors.GetActor(),
+                Tome = resolvedTome,
                 ProjectId = projectId,
                 SessionId = sessionId,
                 Tags = tags ?? [],
@@ -110,6 +120,7 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 Scope = result.Record.Scope,
                 Kind = result.Record.Kind,
                 Actor = result.Record.Actor.ToString(),
+                Tome = result.Record.Tome,
                 ProjectId = result.Record.ProjectId,
                 SessionId = result.Record.SessionId,
                 Tags = result.Record.Tags,

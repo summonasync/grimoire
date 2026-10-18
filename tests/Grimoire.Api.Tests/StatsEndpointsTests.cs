@@ -35,6 +35,56 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("activeByScope").GetProperty("session").GetInt64().ShouldBe(1);
         body.GetProperty("pendingCompaction").GetInt64().ShouldBe(0);
         body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(0);
+        body.GetProperty("tome").GetString().ShouldBe("default");
+        body.GetProperty("byTome").GetProperty("default").GetProperty("active").GetInt64().ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Get_EchoesTheTomeResolvedFromEnvironment()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+
+        var response = await tomeFactory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tome").GetString().ShouldBe("eng");
+    }
+
+    [Fact]
+    public async Task Get_SplitsCountsByTome()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "alpha gone",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "wrong",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("active").GetInt64().ShouldBe(1);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(1);
+        body.GetProperty("byTome").GetProperty("default").GetProperty("active").GetInt64().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Get_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/stats?tome=Not%20Valid%21%21");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options))
+            .GetProperty("error").GetProperty("code").GetString().ShouldBe("invalid_tome");
     }
 
     [Fact]

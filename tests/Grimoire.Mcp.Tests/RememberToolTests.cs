@@ -334,4 +334,138 @@ public sealed class RememberToolTests
         message.ShouldNotContain("at Grimoire");
         session.Store.Points.ShouldBeEmpty();
     }
+
+    [Fact]
+    public async Task Remember_ExplicitTome_WritesThereAndEchoesTheLandedTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha squad rule",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tome"] = "Alpha Squad",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("alpha-squad");
+        session.Store.Points.Single().Record.Tome.ShouldBe("alpha-squad");
+    }
+
+    [Fact]
+    public async Task Remember_WithoutTome_BindsTheClientFallbackTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "client scoped note",
+            ["scope"] = "Global",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe(McpTestSession.ClientActor);
+    }
+
+    [Fact]
+    public async Task Remember_EnvTome_BindsTheWriteWhenNoParamIsGiven()
+    {
+        await using var session = await McpTestSession.StartAsync(new McpHostOptions { EnvTome = "team-platform" });
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "team scoped note",
+            ["scope"] = "Global",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("team-platform");
+    }
+
+    [Fact]
+    public async Task Remember_EnvActorAlias_ImpliesTheTome()
+    {
+        await using var session = await McpTestSession.StartAsync(new McpHostOptions { EnvActor = "dan+claude" });
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "actor scoped note",
+            ["scope"] = "Global",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("dan");
+    }
+
+    [Fact]
+    public async Task Remember_ExplicitTome_BeatsTheEnvCandidates()
+    {
+        await using var session = await McpTestSession.StartAsync(new McpHostOptions
+        {
+            EnvTome = "team-platform",
+            EnvActor = "dan+claude",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "pinned note",
+            ["scope"] = "Global",
+            ["tome"] = "alpha",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Remember_ClaimBlock_SuppliesTheTomeAfterTheEnv()
+    {
+        var claims = new FakeActorClaimProvider(new ActorClaim { Alias = "kadre", Tome = "kadr-tome" });
+        await using var session = await McpTestSession.StartAsync(claims: claims);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "claimed note",
+            ["scope"] = "Global",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("kadr-tome");
+    }
+
+    [Fact]
+    public async Task Remember_ClaimAliasOnly_ImpliesTheTome()
+    {
+        var claims = new FakeActorClaimProvider(new ActorClaim { Alias = "kadre" });
+        await using var session = await McpTestSession.StartAsync(claims: claims);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "claimed alias note",
+            ["scope"] = "Global",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe("kadre");
+    }
+
+    [Fact]
+    public async Task Remember_InvalidTomeParam_ReturnsInvalidRequestWithoutTouchingTheStore()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "misbound note",
+            ["scope"] = "Global",
+            ["tome"] = "Not Valid!!",
+        });
+
+        var (code, _, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tome");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
+    }
 }

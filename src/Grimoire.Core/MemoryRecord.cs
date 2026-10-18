@@ -12,6 +12,8 @@ public sealed record MemoryRecord
 
     public required MemoryActor Actor { get; init; }
 
+    public string Tome { get; init; } = TomeKey.DefaultTome;
+
     public string? ProjectId { get; init; }
 
     public string? SessionId { get; init; }

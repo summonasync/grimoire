@@ -8,6 +8,10 @@ public sealed record ApiHostOptions
 
     public required string StaticRootPath { get; init; }
 
+    public string? EnvTome { get; init; }
+
+    public string? EnvActor { get; init; }
+
     // Test-only: keeps configuration-sourced Kestrel endpoints loadable so tests can prove
     // the post-bind loopback guard. Production paths keep the configuration wipe.
     public bool DisableConfigSourceClear { get; init; }

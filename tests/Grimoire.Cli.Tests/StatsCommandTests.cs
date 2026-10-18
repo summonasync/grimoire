@@ -1,3 +1,4 @@
+using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Shouldly;
 using Xunit;
@@ -54,6 +55,69 @@ public sealed class StatsCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         _host.Output.ToString().ShouldContain("Idempotency conflicts: 1");
+    }
+
+    [Fact]
+    public async Task Stats_RendersPerTomeCounts()
+    {
+        Seed("alpha note", "alpha");
+        Seed("second alpha note", "alpha");
+        Seed("beta note", "beta");
+        Seed(
+            "buried beta note",
+            "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "x",
+            tombstonedAt: _host.Clock.UtcNow);
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Per tome: alpha (2 active, 0 tombstoned), beta (1 active, 1 tombstoned)");
+    }
+
+    [Fact]
+    public async Task Stats_WithoutIdentity_ShowsTheDefaultTome()
+    {
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Tome: default (default)");
+    }
+
+    [Fact]
+    public async Task Stats_WithClaimFile_ShowsTheClaimResolvedTome()
+    {
+        using var host = new TestHost(
+            claims: new FixedClaimProvider(new ActorClaim { Alias = "dan", Tome = "platform-work" }));
+
+        var code = await host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Output.ToString().ShouldContain("Tome: platform-work (claim file)");
+    }
+
+    private void Seed(
+        string content,
+        string tome,
+        MemoryStatus status = MemoryStatus.Active,
+        string? tombstoneReason = null,
+        DateTimeOffset? tombstonedAt = null)
+    {
+        _host.Store.Seed(new MemoryRecord
+        {
+            Id = Guid.NewGuid(),
+            Content = content,
+            Scope = MemoryScope.Project,
+            Kind = MemoryKind.Journal,
+            Actor = MemoryActor.Human,
+            Tome = tome,
+            CreatedAt = _host.Clock.UtcNow,
+            LastAccessedAt = _host.Clock.UtcNow,
+            Status = status,
+            TombstoneReason = tombstoneReason,
+            TombstonedAt = tombstonedAt,
+        }, [1f, 0f]);
     }
 
     public void Dispose() => _host.Dispose();

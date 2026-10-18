@@ -52,6 +52,19 @@ public sealed class IdempotencyKeyTests
     }
 
     [Fact]
+    public void Compute_ChangesWithTome()
+    {
+        IdempotencyKey.Compute(Request(), tome: "alpha")
+            .ShouldNotBe(IdempotencyKey.Compute(Request(), tome: "beta"));
+    }
+
+    [Fact]
+    public void Compute_WithoutTome_DefaultsToDefaultTome()
+    {
+        IdempotencyKey.Compute(Request()).ShouldBe(IdempotencyKey.Compute(Request(), TomeKey.DefaultTome));
+    }
+
+    [Fact]
     public void Compute_ChangesWithProject()
     {
         IdempotencyKey.Compute(Request(projectId: "grim"))

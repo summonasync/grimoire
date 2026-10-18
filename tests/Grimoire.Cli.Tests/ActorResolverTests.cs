@@ -1,3 +1,4 @@
+using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Shouldly;
@@ -7,12 +8,15 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class ActorResolverTests
 {
+    private static readonly ActorClaim Claim = new() { Alias = "dan", Tome = "platform-work" };
+
     private static CliEnvironment Environment(IReadOnlyDictionary<string, string>? variables = null) => new()
     {
         ConfigPath = "config.json",
         Config = new ConfigLoader("config.json"),
         Variables = variables,
     };
+
 
     [Fact]
     public void Resolve_FlagWinsOverEnvironmentVariable()
@@ -75,5 +79,135 @@ public sealed class ActorResolverTests
     public void Resolve_BlankFlag_FallsBackToHuman(string text)
     {
         ActorResolver.Resolve(Environment(), text).ShouldBe(MemoryActor.Human);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_EnvActorImpliesTomeAndActor()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "dan+claude" }),
+            null, null, "default", new FixedClaimProvider(null), CancellationToken.None);
+
+        identity.Tome.ShouldBe("dan");
+        identity.Actor.ShouldBe(new MemoryActor("dan", "claude"));
+        identity.Source.ShouldBe(TomeSource.EnvActor);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_EnvTomeWinsOverEnvActorTome()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(new Dictionary<string, string>
+            {
+                ["GRIMOIRE_TOME"] = "platform-work",
+                [ActorResolver.EnvironmentVariable] = "dan+claude",
+            }),
+            null, null, "default", new FixedClaimProvider(null), CancellationToken.None);
+
+        identity.Tome.ShouldBe("platform-work");
+        identity.Source.ShouldBe(TomeSource.EnvTome);
+        identity.Actor.ShouldBe(new MemoryActor("dan", "claude"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ClaimBindsActorAliasToTome()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, null, "default", new FixedClaimProvider(Claim), CancellationToken.None);
+
+        identity.Tome.ShouldBe("platform-work");
+        identity.Source.ShouldBe(TomeSource.ClaimFile);
+        identity.Actor.ShouldBe(new MemoryActor("dan", null));
+        identity.Actor.IsHuman.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ClaimAliasAloneImpliesTome()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, null, "default",
+            new FixedClaimProvider(new ActorClaim { Alias = "dan" }), CancellationToken.None);
+
+        identity.Tome.ShouldBe("dan");
+        identity.Source.ShouldBe(TomeSource.ClaimFile);
+        identity.Actor.Alias.ShouldBe("dan");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ExplicitTomeWinsAndSkipsTheClaimWalk()
+    {
+        var claims = new FixedClaimProvider(Claim);
+
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, "research", "default", claims, CancellationToken.None);
+
+        identity.Tome.ShouldBe("research");
+        identity.Source.ShouldBe(TomeSource.ExplicitParam);
+        identity.Actor.ShouldBe(MemoryActor.Human);
+        claims.Reads.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ExplicitActorOverridesClaimAlias()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), "eve+anthropic", null, "default", new FixedClaimProvider(Claim), CancellationToken.None);
+
+        identity.Tome.ShouldBe("platform-work");
+        identity.Actor.ShouldBe(new MemoryActor("eve", "anthropic"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UnsetFallsBackToDefaultTomeAndHuman()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, null, "team", new FixedClaimProvider(null), CancellationToken.None);
+
+        identity.Tome.ShouldBe("team");
+        identity.Source.ShouldBe(TomeSource.Default);
+        identity.Actor.ShouldBe(MemoryActor.Human);
+    }
+
+    [Theory]
+    [InlineData("Platform Work", "platform-work")]
+    [InlineData("PLATFORM", "platform")]
+    public async Task ResolveAsync_NormalizesTomeCandidates(string candidate, string expected)
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, candidate, "default", new FixedClaimProvider(null), CancellationToken.None);
+
+        identity.Tome.ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("Not Valid!", "--tome")]
+    [InlineData("", "--tome")]
+    public async Task ResolveAsync_InvalidExplicitTome_ThrowsUsage(string candidate, string origin)
+    {
+        var failure = await Should.ThrowAsync<UsageException>(() =>
+            ActorResolver.ResolveAsync(Environment(), null, candidate, "default", new FixedClaimProvider(null), CancellationToken.None));
+
+        failure.Message.ShouldContain(origin);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InvalidClaimTome_ThrowsUsageNamingTheClaimFile()
+    {
+        var failure = await Should.ThrowAsync<UsageException>(() =>
+            ActorResolver.ResolveAsync(
+                Environment(), null, null, "default",
+                new FixedClaimProvider(new ActorClaim { Alias = "dan", Tome = "Not Valid!" }),
+                CancellationToken.None));
+
+        failure.Message.ShouldContain("AGENTS.md");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InvalidEnvActorAlias_ThrowsUsage()
+    {
+        await Should.ThrowAsync<UsageException>(() =>
+            ActorResolver.ResolveAsync(
+                Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "+claude" }),
+                null, null, "default", new FixedClaimProvider(null), CancellationToken.None));
     }
 }

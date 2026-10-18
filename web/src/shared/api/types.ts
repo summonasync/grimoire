@@ -15,6 +15,7 @@ export interface MemoryRecord {
   scope: MemoryScope;
   kind: MemoryKind;
   actor: MemoryActor;
+  tome: string;
   projectId: string | null;
   sessionId: string | null;
   tags: string[];
@@ -77,10 +78,18 @@ export interface SettingsResponse {
   editable: string[];
 }
 
+export interface TomeStats {
+  active: number;
+  tombstoned: number;
+}
+
 export interface MemoryStats {
+  tome: string;
   active: number;
   superseded: number;
   tombstoned: number;
   activeByScope: Record<MemoryScope, number>;
   pendingCompaction: number;
+  idempotencyConflicts: number;
+  byTome: Record<string, TomeStats>;
 }

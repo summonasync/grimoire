@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class ListTool(MemoryService memories)
+internal sealed class ListTool(MemoryService memories, MemoryActorProvider actors)
 {
     public const string Name = "memory_list";
 
@@ -14,7 +14,8 @@ internal sealed class ListTool(MemoryService memories)
     public const string Description =
         "Browse stored memories by filter, newest first - no semantic ranking. Defaults to active records; pass " +
         "status to audit superseded or tombstoned entries, for example to confirm a fact was already retracted " +
-        "before re-asserting it. Prefer memory_recall for meaning-based lookup.";
+        "before re-asserting it. Pass tome to audit another tome you own. Prefer memory_recall for meaning-based " +
+        "lookup.";
 
     public Task<CallToolResult> List(
         [Description("Restrict to one scope.")]
@@ -31,6 +32,8 @@ internal sealed class ListTool(MemoryService memories)
         string[]? tags = null,
         [Description("Maximum entries to return, default 50.")]
         int limit = 50,
+        [Description("Tome to browse; omit for your resolved tome, or name another tome you own to audit it. The response echoes the tome listed.")]
+        string? tome = null,
         CancellationToken cancellationToken = default)
     {
         if (limit <= 0)
@@ -41,14 +44,21 @@ internal sealed class ListTool(MemoryService memories)
                 nameof(limit))));
         }
 
+        if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
+        {
+            return Task.FromResult(ToolResults.Failure(tomeError));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
             var records = await memories.ListAsync(new MemoryFilter
             {
                 Scopes = scope is null ? [] : [scope.Value],
                 Kind = kind,
                 Status = status,
                 Tags = tags ?? [],
+                Tome = resolvedTome,
                 ProjectId = projectId,
                 SessionId = sessionId,
                 Limit = limit,
@@ -57,6 +67,7 @@ internal sealed class ListTool(MemoryService memories)
             var entries = records.Select(ToEntry).ToArray();
             return ToolResults.Success(new ListView
             {
+                Tome = resolvedTome,
                 Memories = entries,
                 Count = entries.Length,
             });

@@ -1,3 +1,4 @@
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Shouldly;
 using Xunit;
@@ -40,6 +41,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Memory.RecencyHalfLifeDays.Global.ShouldBe(90);
         options.Memory.RecencyHalfLifeDays.Personal.ShouldBe(180);
         options.Memory.TombstoneRetentionDays.ShouldBe(30);
+        options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
         options.Serve.Port.ShouldBe(4770);
         options.Serve.GcIntervalMinutes.ShouldBe(30);
     }
@@ -49,6 +51,7 @@ public sealed class ConfigLoaderTests : IDisposable
     {
         var path = WriteConfig("""
             {
+              "defaultTome": "ainora-luna",
               "qdrant": { "endpoint": "http://10.0.0.8:6334" },
               "serve": { "port": 5001 }
             }
@@ -56,9 +59,31 @@ public sealed class ConfigLoaderTests : IDisposable
 
         var options = new ConfigLoader(path, EmptyEnvironment).Load();
 
+        options.DefaultTome.ShouldBe("ainora-luna");
         options.Qdrant.Endpoint.ShouldBe("http://10.0.0.8:6334");
         options.Qdrant.Collection.ShouldBe("grimoire");
         options.Serve.Port.ShouldBe(5001);
+    }
+
+    [Fact]
+    public void Load_WithEnvironmentTomeOverride_AppliesDefaultTome()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_DEFAULTTOME", "team-platform")]);
+
+        var options = loader.Load();
+
+        options.DefaultTome.ShouldBe("team-platform");
+    }
+
+    [Fact]
+    public void Load_WithReservedTomeVariable_IsNotAConfigurationOverride()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_TOME", "session-tome"), ("GRIMOIRE_SERVE__PORT", "6000")]);
+
+        var options = loader.Load();
+
+        options.Serve.Port.ShouldBe(6000);
+        options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
     }
 
     [Fact]

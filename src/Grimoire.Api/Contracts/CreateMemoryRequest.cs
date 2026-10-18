@@ -14,6 +14,8 @@ public sealed record CreateMemoryRequest
 
     public string? SessionId { get; init; }
 
+    public string? Tome { get; init; }
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 
     public double Importance { get; init; } = 0.5;

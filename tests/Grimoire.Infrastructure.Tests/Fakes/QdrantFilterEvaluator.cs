@@ -7,10 +7,17 @@ public static class QdrantFilterEvaluator
 {
     public static bool Matches(Filter filter, IReadOnlyDictionary<string, Value> payload) =>
         filter.Must.All(condition => Matches(condition, payload))
+        && (filter.Should.Count == 0 || filter.Should.Any(condition => Matches(condition, payload)))
         && filter.MustNot.All(condition => !Matches(condition, payload));
 
     private static bool Matches(Condition condition, IReadOnlyDictionary<string, Value> payload) =>
-        condition.Field is { } field && Matches(field, payload);
+        condition.Field is { } field ? Matches(field, payload)
+        : condition.Filter is { } nested ? Matches(nested, payload)
+        : condition.IsEmpty is { } empty ? IsEmpty(payload, empty.Key)
+        : throw new NotSupportedException($"Condition kind on '{condition.Field?.Key}' is not supported by the fake.");
+
+    private static bool IsEmpty(IReadOnlyDictionary<string, Value> payload, string key) =>
+        !payload.TryGetValue(key, out var value) || value.KindCase == Value.KindOneofCase.NullValue;
 
     private static bool Matches(FieldCondition field, IReadOnlyDictionary<string, Value> payload)
     {

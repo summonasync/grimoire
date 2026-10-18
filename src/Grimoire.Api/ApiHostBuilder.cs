@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Endpoints;
 using Grimoire.Api.Querying;
+using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -42,12 +43,25 @@ public static class ApiHostBuilder
             clock,
             TimeSpan.FromMinutes(options.GcIntervalMinutes)));
 
+        var tomeResolver = new ApiTomeResolver(
+            new TomeResolver(engineOptions),
+            services.GetService<IActorClaimProvider>(),
+            options.EnvTome,
+            options.EnvActor);
+        builder.Services.AddSingleton(tomeResolver);
+
         var app = builder.Build();
         app.UseStructuredErrors();
-        app.MapMemoryEndpoints(memories, new MemoryEditor(store, embeddings), new MemoryQueryRunner(store, embeddings), store);
-        app.MapPersonaEndpoints(persona);
+        app.MapMemoryEndpoints(
+            memories,
+            new MemoryEditor(store, embeddings),
+            new MemoryQueryRunner(store, embeddings),
+            store,
+            tomeResolver);
+        app.MapScryEndpoints(new ScryQueryRunner(memories, store, tomeResolver));
+        app.MapPersonaEndpoints(persona, tomeResolver);
         app.MapSettingsEndpoints(engineOptions, options);
-        app.MapStatsEndpoints(memories);
+        app.MapStatsEndpoints(memories, tomeResolver);
         app.MapHealthEndpoints(store, embeddings, clock);
         app.UseSpaFrontend(options);
 

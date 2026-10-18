@@ -10,7 +10,14 @@ export interface MemoryListParams {
   tag?: string[];
   projectId?: string;
   sessionId?: string;
+  tome?: string;
   limit?: number;
+}
+
+export interface MemoryListResult {
+  tome: string;
+  count: number;
+  items: MemoryRecord[];
 }
 
 export interface CreateMemoryInput {
@@ -26,6 +33,7 @@ export interface CreateMemoryInput {
 
 export interface CreateMemoryResult {
   record: MemoryRecord;
+  tome: string;
   supersededId: string | null;
 }
 

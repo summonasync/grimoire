@@ -129,6 +129,16 @@ internal sealed class FakeMemoryStore : IMemoryStore
             return false;
         }
 
+        if (filter.Tome is not null && record.Tome != filter.Tome)
+        {
+            return false;
+        }
+
+        if (filter.Tomes.Count > 0 && !filter.Tomes.Contains(record.Tome))
+        {
+            return false;
+        }
+
         if (filter.ExpiresBefore is not null && (record.ExpiresAt is null || record.ExpiresAt > filter.ExpiresBefore))
         {
             return false;

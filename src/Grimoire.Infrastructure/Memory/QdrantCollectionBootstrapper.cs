@@ -9,6 +9,7 @@ public sealed class QdrantCollectionBootstrapper(IQdrantVectorDb db, string coll
         (MemoryPayloadFields.Scope, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.Kind, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.Status, PayloadSchemaType.Keyword),
+        (MemoryPayloadFields.Tome, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.Tags, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.ProjectId, PayloadSchemaType.Keyword),
         (MemoryPayloadFields.SessionId, PayloadSchemaType.Keyword),

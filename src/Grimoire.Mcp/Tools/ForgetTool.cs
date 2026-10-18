@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class ForgetTool(MemoryService memories)
+internal sealed class ForgetTool(MemoryService memories, MemoryActorProvider actors)
 {
     public const string Name = "memory_forget";
 
@@ -16,14 +16,17 @@ internal sealed class ForgetTool(MemoryService memories)
         "with a visible tombstone and your reason, but disappears from recall and from list's default (active) view. " +
         "Call it when the human retracts a fact or reverses a decision (\"forget that, we do it differently now\"), " +
         "and to retire journal entries after distilling them into facts. Use the exact memoryId from an earlier " +
-        "recall, list or compact-candidates result. Forgetting an unknown or already-forgotten id returns " +
-        "forgotten=false - do not retry.";
+        "recall, list or compact-candidates result. A tombstone lands only in the resolved tome: an id that lives " +
+        "in another tome comes back forgotten=false - reads accept tome=, writes never cross. Forgetting an " +
+        "unknown or already-forgotten id also returns forgotten=false - do not retry.";
 
     public Task<CallToolResult> Forget(
         [Description("The id of the memory to tombstone, exactly as returned by a previous tool call.")]
         string memoryId,
         [Description("Why the memory is being retracted. Recorded on the tombstone for the human to audit.")]
         string reason,
+        [Description("Tome the tombstone lands in; omit for your resolved tome. Forgetting never crosses tomes: an id from another tome returns forgotten=false.")]
+        string? tome = null,
         CancellationToken cancellationToken = default)
     {
         if (!Guid.TryParseExact(memoryId, "D", out var id))
@@ -42,13 +45,20 @@ internal sealed class ForgetTool(MemoryService memories)
                 nameof(reason))));
         }
 
+        if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
+        {
+            return Task.FromResult(ToolResults.Failure(tomeError));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
-            var forgotten = await memories.ForgetAsync(id, reason, ct);
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
+            var forgotten = await memories.ForgetAsync(id, reason, ct, resolvedTome);
 
             return ToolResults.Success(new ForgetView
             {
                 MemoryId = id,
+                Tome = resolvedTome,
                 Forgotten = forgotten,
                 Reason = forgotten ? reason : null,
             });

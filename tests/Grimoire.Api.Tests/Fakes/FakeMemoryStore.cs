@@ -125,6 +125,16 @@ public class FakeMemoryStore : IMemoryStore
             query = query.Where(point => filter.ExcludeTags.All(tag => !point.Record.Tags.Contains(tag)));
         }
 
+        if (filter.Tome is not null)
+        {
+            query = query.Where(point => point.Record.Tome == filter.Tome);
+        }
+
+        if (filter.Tomes.Count > 0)
+        {
+            query = query.Where(point => filter.Tomes.Contains(point.Record.Tome));
+        }
+
         if (filter.ProjectId is not null)
         {
             query = query.Where(point => point.Record.ProjectId == filter.ProjectId);

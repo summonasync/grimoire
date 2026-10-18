@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class BriefTool(BriefService brief)
+internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
 {
     public const string Name = "memory_brief";
 
@@ -18,8 +18,10 @@ internal sealed class BriefTool(BriefService brief)
         "proxy, not exact tokens, and a section that no longer fits is named in omitted - truncation is never " +
         "silent. Journal bodies are capped per entry and flagged truncated; tombstones are references only, inspect " +
         "one via memory_list status=Tombstoned. A section in state empty means cold start: nothing recorded there " +
-        "yet, not a failure. upstream_unavailable means the store or embedding provider is unreachable; the call is " +
-        "read-only and writes nothing.";
+        "yet, not a failure - when every section comes back empty the response says so and points at memory_scry " +
+        "for cross-tome context. The brief is scoped to one tome; pass tome to brief another tome you own. " +
+        "upstream_unavailable means the store or embedding provider is unreachable; the call is read-only and " +
+        "writes nothing.";
 
     public Task<CallToolResult> Brief(
         [Description("Restrict to memories of one project.")]
@@ -32,12 +34,21 @@ internal sealed class BriefTool(BriefService brief)
         int? journalPerScope = null,
         [Description("Tombstoned records in the digest, default 10, clamped server-side.")]
         int? tombstoneLimit = null,
+        [Description("Tome to brief; omit for your resolved tome.")]
+        string? tome = null,
         CancellationToken cancellationToken = default)
     {
+        if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
+        {
+            return Task.FromResult(ToolResults.Failure(tomeError));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
             var result = await brief.BriefAsync(new BriefQuery
             {
+                Tome = resolvedTome,
                 ProjectId = projectId,
                 Scopes = scopes ?? [],
                 FactsPerScope = factsPerScope,
@@ -47,16 +58,26 @@ internal sealed class BriefTool(BriefService brief)
 
             return ToolResults.Success(new BriefView
             {
-                Persona = ToPersonaSection(result),
+                Tome = resolvedTome,
+                Persona = ToPersonaSection(result, resolvedTome),
                 Facts = ToItemsSection(result.FactsState, result.Facts, ToFactItem),
                 Tombstones = ToItemsSection(result.TombstonesState, result.Tombstones, ToTombstoneItem),
                 Journal = ToItemsSection(result.JournalState, result.Journal, ToJournalItem),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
+                Hint = IsEmpty(result) ? EmptyTomeHint : null,
             });
         }, cancellationToken);
     }
 
-    private static BriefPersonaSection ToPersonaSection(BriefResult result)
+    private const string EmptyTomeHint = "tome is empty — use memory_scry for cross-tome context";
+
+    private static bool IsEmpty(BriefResult result) =>
+        result.PersonaState == BriefSectionState.Empty &&
+        result.FactsState == BriefSectionState.Empty &&
+        result.TombstonesState == BriefSectionState.Empty &&
+        result.JournalState == BriefSectionState.Empty;
+
+    private static BriefPersonaSection ToPersonaSection(BriefResult result, string tome)
     {
         return new BriefPersonaSection
         {
@@ -65,6 +86,7 @@ internal sealed class BriefTool(BriefService brief)
                 ? null
                 : new PersonaView
                 {
+                    Tome = tome,
                     Identity = result.Persona.Identity,
                     Tone = result.Persona.Tone,
                     Preferences = result.Persona.Preferences,

@@ -16,34 +16,37 @@ public sealed class McpToolContractTests
         "memory_persona_get",
         "memory_recall",
         "memory_remember",
+        "memory_scry",
         "memory_stats",
     ];
 
     public static TheoryData<string, string[]> TeachingKeywords()
     {
         var data = new TheoryData<string, string[]>();
-        data.Add("memory_remember", ["projectId", "supersedes", "Never store secrets"]);
-        data.Add("memory_recall", ["session start", "before you assume"]);
-        data.Add("memory_forget", ["tombstone", "forgotten=false"]);
-        data.Add("memory_list", ["newest first", "active"]);
-        data.Add("memory_persona_get", ["identity, tone, preferences, rules", "were never filled"]);
-        data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill"]);
-        data.Add("memory_stats", ["pendingCompaction", "memory_compact_candidates"]);
-        data.Add("memory_brief", ["session start", "omitted", "tombstone", "cold start", "upstream_unavailable"]);
+        data.Add("memory_remember", ["projectId", "supersedes", "Never store secrets", "tome"]);
+        data.Add("memory_recall", ["session start", "before you assume", "tome"]);
+        data.Add("memory_forget", ["tombstone", "forgotten=false", "tome"]);
+        data.Add("memory_list", ["newest first", "active", "tome"]);
+        data.Add("memory_persona_get", ["identity, tone, preferences, rules", "were never filled", "per-tome"]);
+        data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
+        data.Add("memory_stats", ["pendingCompaction", "memory_compact_candidates", "byTome"]);
+        data.Add("memory_brief", ["session start", "omitted", "tombstone", "cold start", "upstream_unavailable", "memory_scry"]);
+        data.Add("memory_scry", ["OTHER tomes", "memory_recall", "journal", "anonymous", "session", "read-only"]);
         return data;
     }
 
     public static TheoryData<string, string[], string[]> ParameterContracts()
     {
         var data = new TheoryData<string, string[], string[]>();
-        data.Add("memory_remember", ["content", "scope"], ["kind", "projectId", "sessionId", "tags", "importance"]);
-        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "limit"]);
-        data.Add("memory_forget", ["memoryId", "reason"], []);
-        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit"]);
-        data.Add("memory_persona_get", [], []);
-        data.Add("memory_compact_candidates", [], []);
-        data.Add("memory_stats", [], []);
-        data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit"]);
+        data.Add("memory_remember", ["content", "scope"], ["kind", "projectId", "sessionId", "tags", "importance", "tome"]);
+        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "limit", "tome"]);
+        data.Add("memory_forget", ["memoryId", "reason"], ["tome"]);
+        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit", "tome"]);
+        data.Add("memory_persona_get", [], ["tome"]);
+        data.Add("memory_compact_candidates", [], ["tome"]);
+        data.Add("memory_stats", [], ["tome"]);
+        data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
+        data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
         return data;
     }
 
@@ -53,6 +56,7 @@ public sealed class McpToolContractTests
         data.Add("memory_remember", "scope", ["Session", "Project", "Global", "Personal"]);
         data.Add("memory_remember", "kind", ["Journal", "Fact"]);
         data.Add("memory_list", "status", ["Active", "Superseded", "Tombstoned"]);
+        data.Add("memory_scry", "attribution", ["None", "Light", "Full"]);
         return data;
     }
 
@@ -64,15 +68,20 @@ public sealed class McpToolContractTests
         data.Add("memory_remember", "importance", "number");
         data.Add("memory_recall", "query", "string");
         data.Add("memory_recall", "limit", "integer");
+        data.Add("memory_recall", "tome", "string");
         data.Add("memory_forget", "memoryId", "string");
         data.Add("memory_list", "limit", "integer");
         data.Add("memory_brief", "scopes", "array");
         data.Add("memory_brief", "factsPerScope", "integer");
+        data.Add("memory_scry", "query", "string");
+        data.Add("memory_scry", "tomes", "array");
+        data.Add("memory_scry", "includeJournal", "boolean");
+        data.Add("memory_scry", "limit", "integer");
         return data;
     }
 
     [Fact]
-    public async Task ExposesExactlyTheEightContractedTools()
+    public async Task ExposesExactlyTheNineContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 

@@ -21,7 +21,7 @@ export function MemoriesPage() {
     filters.query === deferredQuery ? filters : { ...filters, query: deferredQuery };
 
   const list = useQuery(memoriesQueryOptions(toMemoryListParams(effectiveFilters)));
-  const records = list.data ?? [];
+  const records = list.data?.items ?? [];
   const selected = selectedId ? (records.find((record) => record.id === selectedId) ?? null) : null;
 
   return (

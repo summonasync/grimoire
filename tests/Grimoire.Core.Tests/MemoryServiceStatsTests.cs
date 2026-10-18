@@ -133,6 +133,31 @@ public sealed class MemoryServiceStatsTests
         stats.IdempotencyConflicts.ShouldBe(0);
     }
 
+    [Fact]
+    public async Task Stats_ByTome_CountsActiveAndTombstonedPerKey()
+    {
+        Seed("default active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+        Seed("alpha active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha");
+        Seed("alpha second", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "alpha");
+        Seed("alpha buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, tome: "alpha", tombstoneReason: "gone", tombstonedAt: FakeClock.DefaultStart);
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.Keys.ShouldBe(["alpha", TomeKey.DefaultTome]);
+        stats.ByTome[TomeKey.DefaultTome].Active.ShouldBe(1);
+        stats.ByTome[TomeKey.DefaultTome].Tombstoned.ShouldBe(0);
+        stats.ByTome["alpha"].Active.ShouldBe(2);
+        stats.ByTome["alpha"].Tombstoned.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Stats_ByTome_EmptyStore_HasNoEntries()
+    {
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.ShouldBeEmpty();
+    }
+
     private void Seed(
         string content,
         MemoryScope scope,
@@ -144,7 +169,8 @@ public sealed class MemoryServiceStatsTests
         string? tombstoneReason = null,
         DateTimeOffset? tombstonedAt = null,
         string? idempotencyKey = null,
-        DateTimeOffset? created = null)
+        DateTimeOffset? created = null,
+        string? tome = null)
     {
         var memoryVector = vector ?? [1f, 0f, 0f];
         var record = TestMemories.Create(
@@ -158,7 +184,8 @@ public sealed class MemoryServiceStatsTests
             tombstoneReason: tombstoneReason,
             tombstonedAt: tombstonedAt,
             idempotencyKey: idempotencyKey,
-            created: created);
+            created: created,
+            tome: tome);
         _store.Seed(record, memoryVector);
     }
 }

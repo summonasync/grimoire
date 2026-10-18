@@ -24,7 +24,8 @@ internal static class CliServices
             sp.GetRequiredService<HttpClient>(),
             options.Embedding));
         services.AddSingleton<IClock>(SystemClock.Instance);
-        services.AddSingleton(EngineOptionsMapper.ToEngineOptions(options.Memory));
+        services.AddSingleton(EngineOptionsMapper.ToEngineOptions(options.Memory, options.DefaultTome));
+        services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
         services.AddSingleton<MemoryService>(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

@@ -22,6 +22,16 @@ internal static class MemoryFilterTranslator
             translated.Must.Add(Conditions.MatchKeyword(MemoryPayloadFields.Kind, kind.ToString()));
         }
 
+        if (filter.Tome is { } tome)
+        {
+            translated.Must.Add(TomeCondition(tome));
+        }
+
+        if (filter.Tomes.Count > 0)
+        {
+            translated.Must.Add(TomeAnyCondition(filter.Tomes));
+        }
+
         if (filter.Tags.Count > 0)
         {
             translated.Must.Add(Conditions.Match(MemoryPayloadFields.Tags, [.. filter.Tags]));
@@ -69,6 +79,37 @@ internal static class MemoryFilterTranslator
         }
 
         return translated;
+    }
+
+    // Points written before the tome field existed carry no tome payload at all; they belong
+    // to the default tome, so a default-tome filter must also accept the absent field instead
+    // of hiding every pre-tome point on real Qdrant.
+    private static Condition TomeCondition(string tome)
+    {
+        if (tome != TomeKey.DefaultTome)
+        {
+            return Conditions.MatchKeyword(MemoryPayloadFields.Tome, tome);
+        }
+
+        var legacyOrDefault = new Filter();
+        legacyOrDefault.Should.Add(Conditions.MatchKeyword(MemoryPayloadFields.Tome, TomeKey.DefaultTome));
+        legacyOrDefault.Should.Add(new Condition { IsEmpty = new IsEmptyCondition { Key = MemoryPayloadFields.Tome } });
+        return new Condition { Filter = legacyOrDefault };
+    }
+
+    private static Condition TomeAnyCondition(IReadOnlyList<string> tomes)
+    {
+        var anyOf = new Filter();
+        foreach (var tome in tomes)
+        {
+            anyOf.Should.Add(Conditions.MatchKeyword(MemoryPayloadFields.Tome, tome));
+            if (tome == TomeKey.DefaultTome)
+            {
+                anyOf.Should.Add(new Condition { IsEmpty = new IsEmptyCondition { Key = MemoryPayloadFields.Tome } });
+            }
+        }
+
+        return new Condition { Filter = anyOf };
     }
 
     private static string[] ScopeValues(IReadOnlyList<MemoryScope> scopes) =>

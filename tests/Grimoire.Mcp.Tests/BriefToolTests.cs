@@ -23,6 +23,78 @@ public sealed class BriefToolTests
     }
 
     [Fact]
+    public async Task Brief_EmptyTome_TeachesTheScryDoor()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("hint").GetString().ShouldBe("tome is empty — use memory_scry for cross-tome context");
+    }
+
+    [Fact]
+    public async Task Brief_PopulatedTome_CarriesNoHint()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "standing rule",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("hint", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_TomeParam_BriefsTheNamedTomeAndEchoesIt()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha squad standing rule",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tome"] = "alpha",
+        });
+
+        var alpha = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["tome"] = "alpha",
+        });
+
+        alpha.ShouldSucceed();
+        var alphaPayload = alpha.Payload();
+        alphaPayload.GetProperty("tome").GetString().ShouldBe("alpha");
+        alphaPayload.GetProperty("facts").GetProperty("items")[0].GetProperty("content").GetString()
+            .ShouldBe("alpha squad standing rule");
+
+        var own = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        own.ShouldSucceed();
+        own.Payload().GetProperty("facts").GetProperty("state").GetString().ShouldBe("Empty");
+    }
+
+    [Fact]
+    public async Task Brief_InvalidTome_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["tome"] = "tome!",
+        });
+
+        var (code, _, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tome");
+    }
+
+    [Fact]
     public async Task Brief_PopulatedStore_ReturnsAllFourSections()
     {
         await using var session = await McpTestSession.StartAsync();
@@ -231,6 +303,6 @@ public sealed class BriefToolTests
             Tone = "informal",
             Preferences = "dark mode, Vim bindings",
             Rules = "never commit without being asked",
-        }, MemoryActor.Human, CancellationToken.None);
+        }, MemoryActor.Human, CancellationToken.None, McpTestSession.ClientActor);
     }
 }

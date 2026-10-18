@@ -25,7 +25,8 @@ internal static class TestMemories
         string? tombstoneReason = null,
         DateTimeOffset? tombstonedAt = null,
         IReadOnlyList<Guid>? sources = null,
-        string? idempotencyKey = null)
+        string? idempotencyKey = null,
+        string? tome = null)
     {
         var moment = created ?? FakeClock.DefaultStart;
 
@@ -36,6 +37,7 @@ internal static class TestMemories
             Scope = scope,
             Kind = kind,
             Actor = actor ?? Agent,
+            Tome = tome ?? TomeKey.DefaultTome,
             ProjectId = projectId,
             SessionId = sessionId,
             Tags = tags ?? [],

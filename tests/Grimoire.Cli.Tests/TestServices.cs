@@ -12,7 +12,8 @@ internal static class TestServices
         StubEmbeddings embeddings,
         FakeClock clock,
         MemoryEngineOptions? options = null,
-        RecordingVectorDb? db = null)
+        RecordingVectorDb? db = null,
+        IActorClaimProvider? claims = null)
     {
         var vectorDb = db ?? new RecordingVectorDb();
         var services = new ServiceCollection();
@@ -21,6 +22,7 @@ internal static class TestServices
         services.AddSingleton<IMemoryStore>(store);
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
+        services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());
         services.AddSingleton(options ?? TunedOptions());
         services.AddSingleton(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
@@ -45,4 +47,9 @@ internal static class TestServices
         DedupSimilarityThreshold = 0.86,
         TombstoneRetentionDays = 7,
     };
+
+    private sealed class NullClaimProvider : IActorClaimProvider
+    {
+        public Task<ActorClaim?> ReadAsync(CancellationToken cancellationToken) => Task.FromResult<ActorClaim?>(null);
+    }
 }

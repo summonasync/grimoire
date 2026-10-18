@@ -21,6 +21,7 @@ public sealed class BriefService(
     public async Task<BriefResult> BriefAsync(BriefQuery query, CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
+        var tome = ResolveTome(query.Tome);
         var scopes = NormalizeScopes(query.Scopes);
         var omitted = new List<BriefSection>();
         var remaining = _options.BriefMaxTotalChars;
@@ -42,16 +43,16 @@ public sealed class BriefService(
             return BriefSectionState.Populated;
         }
 
-        var document = await persona.GetAsync(cancellationToken);
+        var document = await persona.GetAsync(cancellationToken, tome);
         var personaState = Fit(BriefSection.Persona, PersonaChars(document));
 
-        var facts = await CollectFactsAsync(query, scopes, now, cancellationToken);
+        var facts = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
         var factsState = Fit(BriefSection.Facts, facts.Sum(fact => fact.Content.Length));
 
-        var tombstones = await CollectTombstonesAsync(query, scopes, cancellationToken);
+        var tombstones = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
         var tombstonesState = Fit(BriefSection.Tombstones, tombstones.Sum(tombstone => tombstone.Reason?.Length ?? 0));
 
-        var journal = await CollectJournalAsync(query, scopes, cancellationToken);
+        var journal = await CollectJournalAsync(query, scopes, tome, cancellationToken);
         var journalState = Fit(BriefSection.Journal, journal.Sum(entry => entry.Content.Length));
 
         return new BriefResult
@@ -71,6 +72,7 @@ public sealed class BriefService(
     private async Task<IReadOnlyList<BriefFact>> CollectFactsAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
+        string tome,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -79,6 +81,7 @@ public sealed class BriefService(
             Scopes = scopes,
             Kind = MemoryKind.Fact,
             Status = MemoryStatus.Active,
+            Tome = tome,
             ProjectId = query.ProjectId,
             ExcludeTags = [PersonaSectionExtensions.PersonaTag],
         }, cancellationToken);
@@ -107,12 +110,14 @@ public sealed class BriefService(
     private async Task<IReadOnlyList<BriefTombstone>> CollectTombstonesAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
+        string tome,
         CancellationToken cancellationToken)
     {
         var records = await store.ListAsync(new MemoryFilter
         {
             Scopes = scopes,
             Status = MemoryStatus.Tombstoned,
+            Tome = tome,
             ProjectId = query.ProjectId,
         }, cancellationToken);
 
@@ -133,6 +138,7 @@ public sealed class BriefService(
     private async Task<IReadOnlyList<BriefJournalEntry>> CollectJournalAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
+        string tome,
         CancellationToken cancellationToken)
     {
         var records = await store.ListAsync(new MemoryFilter
@@ -140,6 +146,7 @@ public sealed class BriefService(
             Scopes = scopes,
             Kind = MemoryKind.Journal,
             Status = MemoryStatus.Active,
+            Tome = tome,
             ProjectId = query.ProjectId,
         }, cancellationToken);
 
@@ -177,6 +184,8 @@ public sealed class BriefService(
 
         return longTerm.Length > 0 ? longTerm : [MemoryScope.Project, MemoryScope.Global];
     }
+
+    private string ResolveTome(string? tome) => TomeKey.Normalize(tome ?? _options.DefaultTome);
 
     private static int PersonaChars(PersonaDocument document) =>
         document.Identity.Length + document.Tone.Length + document.Preferences.Length + document.Rules.Length;

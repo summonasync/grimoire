@@ -4,6 +4,7 @@ import type {
   CreateMemoryInput,
   CreateMemoryResult,
   MemoryListParams,
+  MemoryListResult,
   PatchMemoryInput,
 } from "./types";
 
@@ -34,6 +35,9 @@ export function buildMemoryListQuery(params: MemoryListParams): string {
   if (params.sessionId) {
     search.set("sessionId", params.sessionId);
   }
+  if (params.tome) {
+    search.set("tome", params.tome);
+  }
   if (params.limit !== undefined) {
     search.set("limit", String(params.limit));
   }
@@ -41,9 +45,9 @@ export function buildMemoryListQuery(params: MemoryListParams): string {
   return search.toString();
 }
 
-export async function fetchMemories(params: MemoryListParams): Promise<MemoryRecord[]> {
+export function fetchMemories(params: MemoryListParams): Promise<MemoryListResult> {
   const query = buildMemoryListQuery(params);
-  return apiFetch<MemoryRecord[]>(query ? `/api/memories?${query}` : "/api/memories");
+  return apiFetch<MemoryListResult>(query ? `/api/memories?${query}` : "/api/memories");
 }
 
 export function fetchMemory(id: string): Promise<MemoryRecord> {

@@ -37,4 +37,24 @@ public sealed class McpCommandTests
 
         options.ServerVersion.ShouldBe(expected);
     }
+
+    [Fact]
+    public void BuildHostOptions_CarriesTheEnvCandidatesForTomeResolution()
+    {
+        var options = McpCommand.BuildHostOptions(null, "team-platform", "dan+claude");
+
+        options.EnvTome.ShouldBe("team-platform");
+        options.EnvActor.ShouldBe("dan+claude");
+    }
+
+    [Fact]
+    public void DefaultInstructions_TeachBriefFirstStartupAndTheScryDoor()
+    {
+        var instructions = McpHostOptions.DefaultInstructions;
+
+        instructions.ShouldContain("memory_brief");
+        instructions.ShouldContain("memory_scry");
+        instructions.IndexOf("memory_brief", StringComparison.Ordinal)
+            .ShouldBeLessThan(instructions.IndexOf("memory_recall", StringComparison.Ordinal));
+    }
 }

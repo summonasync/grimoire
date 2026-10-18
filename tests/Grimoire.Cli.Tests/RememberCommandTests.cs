@@ -113,5 +113,80 @@ public sealed class RememberCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Usage);
     }
 
+    [Fact]
+    public async Task Remember_EnvTomeLandsTheWriteThere()
+    {
+        using var host = TomedHost(new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+
+        var code = await host.RunAsync("remember", "prefers dark mode");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("platform-work");
+        host.Output.ToString().ShouldContain("in tome 'platform-work'");
+    }
+
+    [Fact]
+    public async Task Remember_ExplicitTomeOverridesEnvTome()
+    {
+        using var host = TomedHost(new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+
+        var code = await host.RunAsync("remember", "chose qdrant", "--tome", "research");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("research");
+    }
+
+    [Fact]
+    public async Task Remember_EnvActorImpliesTomeAndCarriesTheActor()
+    {
+        using var host = TomedHost(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "dan+claude" });
+
+        var code = await host.RunAsync("remember", "prefers dark mode");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var record = host.Store.Upserted.ShouldHaveSingleItem();
+        record.Tome.ShouldBe("dan");
+        record.Actor.ShouldBe(new MemoryActor("dan", "claude"));
+    }
+
+    [Fact]
+    public async Task Remember_ClaimFileBindsTomeAndAliasWithoutFlagsOrEnv()
+    {
+        using var host = TomedHost(null, new FixedClaimProvider(new ActorClaim { Alias = "dan", Tome = "platform-work" }));
+
+        var code = await host.RunAsync("remember", "prefers dark mode");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var record = host.Store.Upserted.ShouldHaveSingleItem();
+        record.Tome.ShouldBe("platform-work");
+        record.Actor.ShouldBe(new MemoryActor("dan", null));
+    }
+
+    [Fact]
+    public async Task Remember_WithoutIdentity_LandsInTheConfiguredDefaultTome()
+    {
+        var code = await _host.RunAsync("remember", "prefers dark mode");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Store.Upserted.ShouldHaveSingleItem().Tome.ShouldBe("default");
+    }
+
+    [Fact]
+    public async Task Remember_InvalidTomeFlag_ExitsUsageWithoutWriting()
+    {
+        var code = await _host.RunAsync("remember", "note", "--tome", "Not Valid!");
+
+        code.ShouldBe(ExitCodes.Usage);
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    private static TestHost TomedHost(
+        IReadOnlyDictionary<string, string>? variables,
+        IActorClaimProvider? claims = null) =>
+        new(
+            new StubEmbeddings(new Dictionary<string, float[]> { ["prefers dark mode"] = [1f, 0f], ["chose qdrant"] = [1f, 0f] }),
+            claims: claims,
+            variables: variables);
+
     public void Dispose() => _host.Dispose();
 }

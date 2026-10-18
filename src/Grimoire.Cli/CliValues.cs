@@ -1,6 +1,7 @@
 using System.Globalization;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
+using Grimoire.Mcp;
 
 namespace Grimoire.Cli;
 
@@ -73,6 +74,41 @@ internal static class CliValues
         }
 
         return number;
+    }
+
+    public static bool Switch(CliInvocation invocation, CommandSpec spec, string name) =>
+        invocation.Value(name) is { } value
+            ? bool.TryParse(value, out var flag) ? flag
+                : throw new UsageException($"--{name} expects true or false, got '{value}'.", spec)
+            : false;
+
+    public static ScryAttribution Attribution(CommandSpec spec, string? value) =>
+        value is null ? ScryAttribution.None
+            : Enum.TryParse<ScryAttribution>(value, ignoreCase: true, out var attribution) && Enum.IsDefined(attribution)
+                ? attribution
+                : throw new UsageException(
+                    $"Unknown attribution '{value}' (expected: none, light, full).", spec);
+
+    public static IReadOnlyList<string> TomeList(CommandSpec spec, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        var tomes = new List<string>();
+        foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!TomeKey.TryNormalize(part, out var tome))
+            {
+                throw new UsageException(
+                    $"Each entry of --tomes must be a lowercase kebab-case tome key; '{part}' is not a valid tome key.", spec);
+            }
+
+            tomes.Add(tome);
+        }
+
+        return tomes;
     }
 
     private static MemoryScope ParseScope(CommandSpec spec, string value) =>

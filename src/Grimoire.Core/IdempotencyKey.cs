@@ -5,12 +5,10 @@ namespace Grimoire.Core;
 
 public static class IdempotencyKey
 {
-    private const string Tome = "default";
-
-    public static string Compute(RememberRequest request)
+    public static string Compute(RememberRequest request, string tome = TomeKey.DefaultTome)
     {
         var payload = new StringBuilder();
-        AppendPart(payload, Tome);
+        AppendPart(payload, tome);
         AppendPart(payload, request.Scope.ToString());
         AppendPart(payload, request.Kind.ToString());
         AppendPart(payload, request.Actor.Alias);

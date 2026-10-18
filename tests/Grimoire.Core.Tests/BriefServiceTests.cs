@@ -246,16 +246,35 @@ public sealed class BriefServiceTests
         widened.Facts.Select(fact => fact.Content).ShouldBe(["personal note"]);
     }
 
+    [Fact]
+    public async Task Brief_BindsPersonaAndSectionsToResolvedTome()
+    {
+        Seed("shared fact", kind: MemoryKind.Fact, tome: "alpha");
+        Seed("shared journal", kind: MemoryKind.Journal, tome: "beta");
+
+        var alpha = await Service().BriefAsync(Query(tome: "alpha"), CancellationToken.None);
+
+        alpha.Facts.Select(fact => fact.Content).ShouldBe(["shared fact"]);
+        alpha.Journal.ShouldBeEmpty();
+
+        var beta = await Service().BriefAsync(Query(tome: "beta"), CancellationToken.None);
+
+        beta.Facts.ShouldBeEmpty();
+        beta.Journal.Select(entry => entry.Content).ShouldBe(["shared journal"]);
+    }
+
     private BriefService Service(MemoryEngineOptions? options = null) =>
         new(_store, new PersonaService(_store, _embeddings, _clock), _clock, options);
 
     private static BriefQuery Query(
+        string? tome = null,
         string? projectId = null,
         IReadOnlyList<MemoryScope>? scopes = null,
         int? factsPerScope = null,
         int? journalPerScope = null,
         int? tombstoneLimit = null) => new()
         {
+            Tome = tome,
             ProjectId = projectId,
             Scopes = scopes ?? [],
             FactsPerScope = factsPerScope,
@@ -276,7 +295,8 @@ public sealed class BriefServiceTests
         MemoryStatus status = MemoryStatus.Active,
         Guid? supersededBy = null,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string? tome = null)
     {
         var record = TestMemories.Create(
             content,
@@ -292,7 +312,8 @@ public sealed class BriefServiceTests
             status: status,
             supersededBy: supersededBy,
             tombstoneReason: tombstoneReason,
-            tombstonedAt: tombstonedAt);
+            tombstonedAt: tombstonedAt,
+            tome: tome);
         _store.Seed(record, []);
         return record;
     }

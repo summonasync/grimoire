@@ -16,6 +16,20 @@ internal static class MemoryFormatter
         WriteLines(output, match.Record.Content, "  ");
     }
 
+    public static void WriteScryMatch(TextWriter output, RecallMatch match, string? actor)
+    {
+        var details = $"{match.Score:F3} {match.Record.Tome} {match.Record.Id} {match.Record.Scope}/{match.Record.Kind} " +
+            $"{match.Record.Status.ToString().ToLowerInvariant()} {match.Record.CreatedAt:u}";
+        if (actor is not null)
+        {
+            details += $" by {actor}";
+        }
+
+        var tags = string.Join(",", match.Record.Tags);
+        output.WriteLine(tags.Length == 0 ? details : $"{details} [{tags}]");
+        WriteLines(output, match.Record.Content, "  ");
+    }
+
     public static void WriteBrief(TextWriter output, BriefResult brief)
     {
         output.WriteLine(Heading("persona", brief.PersonaState));

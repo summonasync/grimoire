@@ -47,12 +47,15 @@ internal sealed class McpTestSession : IAsyncDisposable
 
     public McpClient Client { get; }
 
-    public static async Task<McpTestSession> StartAsync(McpHostOptions? hostOptions = null, MemoryEngineOptions? engineOptions = null)
+    public static async Task<McpTestSession> StartAsync(
+        McpHostOptions? hostOptions = null,
+        MemoryEngineOptions? engineOptions = null,
+        IActorClaimProvider? claims = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
-        var services = new FakeServiceProvider(store, embeddings, clock, engineOptions);
+        var services = new FakeServiceProvider(store, embeddings, clock, engineOptions, claims);
         var options = hostOptions ?? new McpHostOptions();
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
