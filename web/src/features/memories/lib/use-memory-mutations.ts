@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { forgetMemory, patchMemory, restoreMemory } from "../api";
+import { createMemory, forgetMemory, patchMemory, restoreMemory } from "../api";
 import { memoryKeys } from "../queries";
-import type { PatchMemoryInput, RestoreMemoryInput } from "../types";
+import type { CreateMemoryInput, PatchMemoryInput, RestoreMemoryInput } from "../types";
 
 function useInvalidateMemories() {
   const queryClient = useQueryClient();
@@ -12,6 +12,18 @@ function useInvalidateMemories() {
     void queryClient.invalidateQueries({ queryKey: memoryKeys.detail(id) });
     void queryClient.invalidateQueries({ queryKey: memoryKeys.history(id) });
   };
+}
+
+export function useCreateMemory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMemoryInput) => createMemory(input),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: memoryKeys.all });
+      void result;
+    },
+  });
 }
 
 export function usePatchMemory(id: string) {

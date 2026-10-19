@@ -3,6 +3,9 @@
 import { useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/shared/ui/page-header";
+import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icons";
+import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import {
   ScryFilterBar,
   ScryResultItem,
@@ -24,11 +27,31 @@ export function ScryPage() {
   const result = hasQuery ? search.data : undefined;
 
   return (
-    <>
-      <PageHeader
-        title="Scry"
-        description="Recall facts from other tomes, anonymized per the attribution level."
-      />
+    <div className="space-y-4">
+      <PageHeader title="Scry" description="Search across tomes. See what others remember." />
+
+      <div className="panel flex items-center gap-3 px-4 py-3">
+        <Icon name="search" className="size-5 shrink-0 text-accent" />
+        <input
+          type="search"
+          value={filters.query}
+          onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+          placeholder="What do the other tomes know about…"
+          aria-label="Scry query"
+          className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted"
+        />
+        {filters.query.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="close"
+            onClick={() => setFilters((current) => ({ ...current, query: "" }))}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+
       <ScryFilterBar
         filters={filters}
         onChange={(patch) => setFilters((current) => ({ ...current, ...patch }))}
@@ -36,51 +59,51 @@ export function ScryPage() {
       />
 
       {!hasQuery ? (
-        <p className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted">
-          Type a query to scry the other tomes.
-        </p>
+        <EmptyState
+          icon="scry"
+          title="Nothing scryed yet"
+          reason="Type a query above to read across the other tomes. Attribution controls how much actor detail you get back."
+        />
       ) : search.isPending ? (
-        <p className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted">
-          Scrying…
-        </p>
-      ) : search.error ? (
-        <div className="rounded-lg border border-dashed border-border px-6 py-10 text-center">
-          <p className="text-sm text-red-400">{search.error.message}</p>
-          <button
-            type="button"
-            onClick={() => void search.refetch()}
-            className="mt-3 rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Retry
-          </button>
+        <div className="space-y-2">
+          {[0, 1, 2].map((index) => (
+            <Skeleton key={index} className="h-20" />
+          ))}
         </div>
+      ) : search.error ? (
+        <QueryFailure message={search.error.message} onRetry={() => void search.refetch()} />
       ) : (
-        result && (
+        result &&
+        (result.tomes.length === 0 ? (
+          <EmptyState
+            icon="book"
+            title="No other tomes exist"
+            reason="Scry reads tomes other than your own — there is nothing else to read yet."
+          />
+        ) : result.items.length === 0 ? (
+          <EmptyState
+            icon="search"
+            title="No matches"
+            reason={`Nothing in ${result.tomes.join(", ")} answered this query. Try fewer terms or include the journal.`}
+          />
+        ) : (
           <>
-            {result.tomes.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted">
-                No other tomes exist — there is nothing to scry.
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <p className="font-display text-lg font-semibold">
+                {result.count} result{result.count === 1 ? "" : "s"}
               </p>
-            ) : result.items.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted">
-                No matches in {result.tomes.join(", ")}.
+              <p className="text-xs text-muted">
+                across {result.tomes.join(", ")} · attribution {result.attribution}
               </p>
-            ) : (
-              <>
-                <p className="mb-2 text-xs text-muted">
-                  {result.count} match{result.count === 1 ? "" : "es"} in {result.tomes.join(", ")}{" "}
-                  · attribution {result.attribution}
-                </p>
-                <ul className="space-y-2">
-                  {result.items.map((item) => (
-                    <ScryResultItem key={item.memoryId} item={item} />
-                  ))}
-                </ul>
-              </>
-            )}
+            </div>
+            <ul className="space-y-2">
+              {result.items.map((item) => (
+                <ScryResultItem key={item.memoryId} item={item} />
+              ))}
+            </ul>
           </>
-        )
+        ))
       )}
-    </>
+    </div>
   );
 }

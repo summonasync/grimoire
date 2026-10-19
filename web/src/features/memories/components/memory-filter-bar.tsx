@@ -2,6 +2,7 @@
 
 import type { MemoryScope, MemoryStatus } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
+import { Icon } from "@/shared/ui/icons";
 import {
   defaultMemoryFilters,
   memoryKinds,
@@ -18,10 +19,62 @@ interface MemoryFilterBarProps {
   onReset: () => void;
 }
 
-const chipBase =
-  "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed";
-const chipOff = "border-border text-muted hover:border-accent/50 hover:text-accent";
-const chipOn = "border-accent bg-accent text-accent-foreground";
+function Select({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-muted">
+      <span className="whitespace-nowrap">{label}</span>
+      <span className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="field h-8 appearance-none py-0 pr-7 pl-2.5 text-xs"
+        >
+          {children}
+        </select>
+        <Icon
+          name="chevronDown"
+          className="pointer-events-none absolute top-1/2 right-2 size-3 -translate-y-1/2 text-muted"
+        />
+      </span>
+    </label>
+  );
+}
+
+function StatusChip({
+  label,
+  on,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "rounded-md border px-2 py-1 text-[0.7rem] font-medium transition-colors",
+        on
+          ? "border-accent/55 bg-accent-soft text-foreground"
+          : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function MemoryFilterBar({ filters, onChange, onReset }: MemoryFilterBarProps) {
   const toggleScope = (scope: MemoryScope) => {
@@ -40,120 +93,111 @@ export function MemoryFilterBar({ filters, onChange, onReset }: MemoryFilterBarP
   return (
     <section
       aria-label="Memory filters"
-      className="mb-4 space-y-3 rounded-lg border border-border bg-surface p-4"
+      className="panel mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5"
     >
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-56 flex-1 flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Search</span>
-          <input
-            type="search"
-            value={filters.query}
-            onChange={(event) => onChange({ query: event.target.value })}
-            placeholder="Search content…"
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+      <label className="relative flex min-w-52 flex-1 items-center">
+        <Icon name="search" className="pointer-events-none absolute left-2.5 size-4 text-muted" />
+        <input
+          type="search"
+          value={filters.query}
+          onChange={(event) => onChange({ query: event.target.value })}
+          placeholder="Search content…"
+          aria-label="Search content"
+          className="field h-9 pl-9"
+        />
+      </label>
+
+      <fieldset className="flex items-center gap-1.5">
+        <legend className="sr-only">Scopes</legend>
+        <span className="text-[0.68rem] tracking-wide text-muted uppercase">Scope</span>
+        {memoryScopes.map((scope) => {
+          const on = filters.scopes.includes(scope);
+          return (
+            <button
+              key={scope}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggleScope(scope)}
+              className={cn(
+                "rounded-md border px-2 py-1 text-[0.7rem] font-medium transition-colors",
+                on
+                  ? "border-accent/55 bg-accent-soft text-foreground"
+                  : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+              )}
+            >
+              {scope}
+            </button>
+          );
+        })}
+      </fieldset>
+
+      <Select
+        label="Kind"
+        value={filters.kind}
+        onChange={(value) => onChange({ kind: value as MemoryFilters["kind"] })}
+      >
+        <option value="">All</option>
+        {memoryKinds.map((kind) => (
+          <option key={kind} value={kind}>
+            {kind}
+          </option>
+        ))}
+      </Select>
+
+      <label className="flex items-center gap-1.5 text-xs text-muted">
+        <span className="whitespace-nowrap">Tags</span>
+        <input
+          type="text"
+          value={filters.tags}
+          onChange={(event) => onChange({ tags: event.target.value })}
+          placeholder="tag1, tag2"
+          aria-label="Tags"
+          className="field h-8 w-32 text-xs"
+        />
+      </label>
+
+      <label className="flex items-center gap-1.5 text-xs text-muted">
+        <span className="whitespace-nowrap">Limit</span>
+        <input
+          type="number"
+          min={memoryLimitBounds.min}
+          max={memoryLimitBounds.max}
+          value={filters.limit}
+          onChange={(event) => onChange({ limit: event.target.value })}
+          aria-invalid={limitInvalid}
+          aria-label="Result limit"
+          className="field h-8 w-16 text-xs"
+        />
+      </label>
+
+      <div className="flex items-center gap-1.5">
+        {memoryStatuses.map((status) => (
+          <StatusChip
+            key={status}
+            label={status}
+            on={statusActive(status)}
+            onClick={() => onChange({ status: toggleStatusFilter(filters.status, status) })}
           />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Kind</span>
-          <select
-            value={filters.kind}
-            onChange={(event) => onChange({ kind: event.target.value as MemoryFilters["kind"] })}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          >
-            <option value="">Any kind</option>
-            {memoryKinds.map((kind) => (
-              <option key={kind} value={kind}>
-                {kind}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Tome</span>
-          <input
-            type="text"
-            value={filters.tome}
-            onChange={(event) => onChange({ tome: event.target.value })}
-            placeholder="any tome"
-            className="w-36 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Tags</span>
-          <input
-            type="text"
-            value={filters.tags}
-            onChange={(event) => onChange({ tags: event.target.value })}
-            placeholder="tag1, tag2"
-            className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Limit</span>
-          <input
-            type="number"
-            min={memoryLimitBounds.min}
-            max={memoryLimitBounds.max}
-            value={filters.limit}
-            onChange={(event) => onChange({ limit: event.target.value })}
-            aria-invalid={limitInvalid}
-            className="w-20 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onReset}
-          className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:border-accent/50 hover:text-accent"
-        >
-          Reset
-        </button>
+        ))}
+        <StatusChip
+          label="all"
+          on={filters.status === "all"}
+          onClick={() =>
+            onChange({
+              status: filters.status === "all" ? defaultMemoryFilters().status : "all",
+            })
+          }
+        />
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <fieldset className="flex flex-wrap items-center gap-1.5">
-          <legend className="sr-only">Scopes</legend>
-          {memoryScopes.map((scope) => {
-            const on = filters.scopes.includes(scope);
-            return (
-              <button
-                key={scope}
-                type="button"
-                aria-pressed={on}
-                onClick={() => toggleScope(scope)}
-                className={cn(chipBase, on ? chipOn : chipOff)}
-              >
-                {scope}
-              </button>
-            );
-          })}
-        </fieldset>
-        <fieldset className="flex flex-wrap items-center gap-1.5">
-          <legend className="sr-only">Statuses</legend>
-          {memoryStatuses.map((status) => {
-            const on = statusActive(status);
-            return (
-              <button
-                key={status}
-                type="button"
-                aria-pressed={on}
-                onClick={() => onChange({ status: toggleStatusFilter(filters.status, status) })}
-                className={cn(chipBase, on ? chipOn : chipOff)}
-              >
-                {status}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            aria-pressed={filters.status === "all"}
-            onClick={() =>
-              onChange({ status: filters.status === "all" ? defaultMemoryFilters().status : "all" })
-            }
-            className={cn(chipBase, filters.status === "all" ? chipOn : chipOff)}
-          >
-            all
-          </button>
-        </fieldset>
-      </div>
+
+      <button
+        type="button"
+        onClick={onReset}
+        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[0.7rem] text-muted transition-colors hover:border-accent/50 hover:text-accent"
+      >
+        <Icon name="close" className="size-3" />
+        Reset
+      </button>
     </section>
   );
 }

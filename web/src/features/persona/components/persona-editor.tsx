@@ -1,86 +1,160 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { healthQueryOptions } from "@/shared/api/health";
+import { statsQueryOptions } from "@/features/stats";
+import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icons";
+import { NotTracked, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { personaSections } from "../lib/persona-document";
 import { usePersonaEditor } from "../lib/use-persona-editor";
 import { PersonaSectionField } from "./persona-section-field";
 
 export function PersonaEditor() {
   const editor = usePersonaEditor();
+  const stats = useQuery(statsQueryOptions());
+  const health = useQuery(healthQueryOptions());
 
   if (editor.loadError !== null) {
     return (
-      <div role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-6 text-sm">
-        <p className="font-medium">The persona document could not be loaded.</p>
-        <p className="mt-1 text-muted">
-          {editor.loadError.code}: {editor.loadError.message}
-        </p>
-        <button
-          type="button"
-          onClick={editor.reload}
-          className="mt-3 rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-background"
-        >
-          Try again
-        </button>
-      </div>
+      <QueryFailure
+        message={`${editor.loadError.code}: ${editor.loadError.message}`}
+        onRetry={editor.reload}
+      />
     );
   }
 
   if (editor.draft === null) {
-    return <p className="text-sm text-muted">Loading persona…</p>;
+    return (
+      <div className="space-y-3">
+        {personaSections.map((spec) => (
+          <Skeleton key={spec.key} className="h-36" />
+        ))}
+      </div>
+    );
   }
 
   const draft = editor.draft;
+  const filled = personaSections.filter((spec) => draft[spec.key].trim().length > 0);
 
   return (
-    <form noValidate onSubmit={(event) => event.preventDefault()}>
-      <div className="flex flex-col gap-4">
-        {personaSections.map((spec) => (
-          <PersonaSectionField
-            key={spec.key}
-            spec={spec}
-            value={draft[spec.key]}
-            disabled={editor.isSaving}
-            onChange={editor.setSection}
-          />
-        ))}
-      </div>
-
-      {editor.saveError !== null && (
-        <div role="alert" className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm">
-          <p className="font-medium">The persona was not saved.</p>
-          <p className="mt-0.5 text-muted">
-            {editor.saveError.code}: {editor.saveError.message}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={editor.save}
-          disabled={!editor.isDirty || editor.isSaving}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {editor.isSaving ? "Saving…" : "Save persona"}
-        </button>
-        {editor.isDirty && (
-          <button
-            type="button"
-            onClick={editor.discard}
-            className="rounded-md border border-border px-4 py-2 text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Discard changes
-          </button>
-        )}
-        {editor.savedTome && (
-          <span className="rounded bg-background px-1.5 py-0.5 text-xs font-medium text-foreground">
-            tome {editor.savedTome}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-xs">
+            <Icon name="book" className="size-3.5 text-muted" />
+            <span className="text-muted">Active tome</span>
+            <span className="font-medium">{stats.data?.tome ?? "—"}</span>
           </span>
-        )}
-        <span aria-live="polite" className="text-xs text-muted">
-          {editor.isSaving ? "Saving…" : editor.isSaved ? "All changes saved" : editor.isDirty ? "Unsaved changes" : ""}
-        </span>
+          {health.data && (
+            <span
+              className={
+                health.data.status === "healthy"
+                  ? "flex items-center gap-1.5 rounded-lg border border-jade/45 bg-jade/10 px-2.5 py-1.5 text-xs font-medium text-jade"
+                  : "flex items-center gap-1.5 rounded-lg border border-ember/45 bg-ember/10 px-2.5 py-1.5 text-xs font-medium text-ember"
+              }
+            >
+              <Icon name="pulse" className="size-3.5" />
+              {health.data.status}
+            </span>
+          )}
+        </div>
+
+        <form noValidate onSubmit={(event) => event.preventDefault()} className="space-y-3">
+          {personaSections.map((spec, index) => (
+            <PersonaSectionField
+              key={spec.key}
+              spec={spec}
+              index={index + 1}
+              value={draft[spec.key]}
+              disabled={editor.isSaving}
+              onChange={editor.setSection}
+            />
+          ))}
+
+          {editor.saveError !== null && (
+            <div role="alert" className="panel border-ember/45 px-4 py-3">
+              <p className="text-sm font-medium text-ember">The persona was not saved.</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {editor.saveError.code}: {editor.saveError.message}
+              </p>
+            </div>
+          )}
+
+          {editor.isDirty && (
+            <div className="flex items-start gap-2 rounded-lg border border-gilt/45 bg-gilt/10 px-3 py-2.5">
+              <Icon name="alert" className="mt-0.5 size-4 shrink-0 text-gilt" />
+              <div className="min-w-0 text-xs">
+                <p className="font-medium text-gilt">Unsaved changes</p>
+                <p className="text-muted">Your changes are lost if you leave this page.</p>
+              </div>
+            </div>
+          )}
+
+          <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/95 px-3 py-2.5 backdrop-blur">
+            <Button
+              variant="primary"
+              size="sm"
+              icon="save"
+              onClick={editor.save}
+              disabled={!editor.isDirty || editor.isSaving}
+            >
+              {editor.isSaving ? "Saving…" : "Save changes"}
+            </Button>
+            {editor.isDirty && (
+              <Button variant="ghost" size="sm" onClick={editor.discard}>
+                Discard changes
+              </Button>
+            )}
+            {editor.savedTome && (
+              <span className="rounded border border-border px-1.5 py-0.5 text-[0.7rem] text-muted">
+                tome {editor.savedTome}
+              </span>
+            )}
+            <span aria-live="polite" className="ml-auto text-xs text-muted">
+              {editor.isSaving
+                ? "Saving…"
+                : editor.isSaved
+                  ? "All changes saved"
+                  : editor.isDirty
+                    ? "Unsaved changes"
+                    : ""}
+            </span>
+          </div>
+        </form>
       </div>
-    </form>
+
+      <aside className="panel sticky top-4 flex max-h-[calc(100dvh-4rem)] flex-col overflow-hidden">
+        <header className="border-b border-border px-4 py-3">
+          <h2 className="font-display text-base font-semibold">Persona preview</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            How the agent reads this tome on startup.
+          </p>
+        </header>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {filled.length === 0 ? (
+            <NotTracked
+              label="Nothing written yet"
+              reason="Every section is empty — agents receive no persona guidance for this tome."
+            />
+          ) : (
+            filled.map((spec) => (
+              <section key={spec.key}>
+                <p className="label mb-1">{spec.label}</p>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap text-foreground/90">
+                  {draft[spec.key]}
+                </p>
+              </section>
+            ))
+          )}
+        </div>
+        <footer className="border-t border-border px-4 py-2.5">
+          <NotTracked
+            label="Test persona"
+            reason="The API stores and returns the document only — there is no dry-run endpoint to preview agent behaviour."
+          />
+        </footer>
+      </aside>
+    </div>
   );
 }

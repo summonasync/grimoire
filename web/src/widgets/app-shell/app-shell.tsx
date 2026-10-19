@@ -1,54 +1,97 @@
 "use client";
 
-import type { ReactNode } from "react";
+import Image from "next/image";
+import { type ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 import { useHashTab } from "@/shared/lib/use-hash-tab";
 import type { TabId } from "@/shared/navigation/tabs";
+import { Icon } from "@/shared/ui/icons";
+import { Sigil } from "@/shared/ui/sigil";
 import { tabItems } from "./nav-items";
 import { ThemeToggle } from "./theme-toggle";
+import { TomeRail } from "./tome-rail";
+import { EndpointPill } from "./endpoint-pill";
+import { TomeFilterProvider } from "./tome-context";
 
 interface AppShellProps {
   tabs: Record<TabId, ReactNode>;
 }
 
 export function AppShell({ tabs }: AppShellProps) {
-  const active = useHashTab("memories");
+  const active = useHashTab("console");
+  const current = tabItems.find((item) => item.id === active) ?? tabItems[0]!;
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col">
-      <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div className="flex items-baseline gap-2">
-          <span className="text-base font-semibold tracking-tight">Grimoire</span>
-          <span className="text-xs text-muted">agent memory console</span>
-        </div>
-        <ThemeToggle />
-      </header>
-      <div className="flex flex-1 flex-col sm:flex-row">
-        <nav
-          aria-label="Console sections"
-          className="border-b border-border px-3 py-2 sm:w-44 sm:shrink-0 sm:border-b-0 sm:border-r sm:py-4"
+    <TomeFilterProvider>
+      <div className="relative flex min-h-dvh w-full">
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-y-0 right-0 z-0 hidden w-[34rem] xl:block"
         >
-          <ul className="flex gap-1 sm:flex-col">
-            {tabItems.map((item) => (
-              <li key={item.id}>
-                <a
-                  href={`#${item.id}`}
-                  aria-current={active === item.id ? "page" : undefined}
-                  className={cn(
-                    "block whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors",
-                    active === item.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted hover:bg-surface hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <main className="min-w-0 flex-1 px-5 py-6">{tabs[active]}</main>
+          <Image
+            src={current.art}
+            alt=""
+            fill
+            sizes="544px"
+            className="object-cover object-left opacity-55"
+            style={{ maskImage: "var(--art-mask)", WebkitMaskImage: "var(--art-mask)" }}
+          />
+        </div>
+
+        <aside className="relative z-20 flex w-56 shrink-0 flex-col border-r border-border bg-surface/80 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5 px-4 py-5">
+            <span className="flex size-9 items-center justify-center rounded-lg border border-accent/40 bg-accent-soft">
+              <Sigil seed="grimoire-wordmark" className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-lg leading-none font-semibold tracking-tight">
+                Grimoire
+              </p>
+              <p className="mt-1 text-[0.65rem] tracking-wide text-muted uppercase">
+                Local memory console
+              </p>
+            </div>
+          </div>
+
+          <nav aria-label="Console sections" className="px-3">
+            <ul className="space-y-0.5">
+              {tabItems.map((item) => (
+                <li key={item.id}>
+                  <a
+                    href={`#${item.id}`}
+                    aria-current={active === item.id ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                      active === item.id
+                        ? "bg-accent-soft font-medium text-foreground ring-1 ring-accent/45"
+                        : "text-muted hover:bg-foreground/5 hover:text-foreground",
+                    )}
+                  >
+                    <Icon
+                      name={item.icon}
+                      className={cn("size-4", active === item.id && "text-accent")}
+                    />
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <TomeRail />
+
+          <div className="border-t border-border p-3">
+            <EndpointPill />
+          </div>
+        </aside>
+
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-end gap-2 border-b border-border/70 px-6 py-3">
+            <ThemeToggle />
+          </header>
+          <main className="min-w-0 flex-1 px-6 py-6">{tabs[active]}</main>
+        </div>
       </div>
-    </div>
+    </TomeFilterProvider>
   );
 }

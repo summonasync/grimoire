@@ -1,30 +1,19 @@
-import type { CorrectionAction, CorrectionEntry } from "@/shared/api/types";
-import { cn } from "@/shared/lib/cn";
-
-const actionStyles: Record<CorrectionAction, string> = {
-  patch: "border-accent/50 text-accent",
-  restore: "border-emerald-600/50 text-emerald-500",
-  supersede: "border-border text-muted",
-  forget: "border-red-700/60 text-red-400",
-};
+import type { CorrectionEntry } from "@/shared/api/types";
+import { ActionBadge } from "@/shared/ui/badge";
+import { absoluteTime, actorLabel, relativeTime } from "@/shared/ui/format";
+import { Icon } from "@/shared/ui/icons";
 
 function CorrectionRow({ entry }: { entry: CorrectionEntry }) {
   return (
-    <li className="space-y-1 border-l border-border pl-3">
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-            actionStyles[entry.action],
-          )}
-        >
-          {entry.action}
-        </span>
-        <span className="text-xs text-muted">
-          {new Date(entry.at).toLocaleString()}
-          {" · "}
-          {entry.actor.alias}
-          {entry.actor.vendor ? ` · ${entry.actor.vendor}` : ""}
+    <li className="relative space-y-1 pl-5">
+      <span
+        aria-hidden
+        className="absolute top-1.5 left-0 size-2 rounded-full border border-border-strong bg-surface"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <ActionBadge action={entry.action} />
+        <span className="text-[0.7rem] text-muted" title={absoluteTime(entry.at)}>
+          {relativeTime(entry.at)} · {actorLabel(entry.actor.alias, entry.actor.vendor)}
         </span>
       </div>
       <p className="text-xs break-words text-muted">{entry.reason}</p>
@@ -38,17 +27,22 @@ interface MemoryCorrectionsTrailProps {
 
 export function MemoryCorrectionsTrail({ corrections }: MemoryCorrectionsTrailProps) {
   return (
-    <div className="mt-4">
-      <h3 className="text-xs font-medium text-muted">Corrections</h3>
+    <section className="mt-4 border-t border-border pt-3">
+      <h3 className="label mb-2 flex items-center gap-1.5">
+        <Icon name="clock" className="size-3.5" />
+        Corrections ({corrections.length})
+      </h3>
       {corrections.length === 0 ? (
-        <p className="mt-1 text-xs text-muted">No corrections yet.</p>
+        <p className="text-xs text-muted">
+          No corrections yet — this record has never been patched, superseded or restored.
+        </p>
       ) : (
-        <ul className="mt-2 space-y-3">
+        <ul className="space-y-3 border-l border-border pl-0">
           {corrections.map((entry, index) => (
             <CorrectionRow key={`${entry.at}-${index}`} entry={entry} />
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

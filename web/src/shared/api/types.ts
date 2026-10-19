@@ -93,6 +93,16 @@ export interface TomeStats {
   tombstoned: number;
 }
 
+export interface GcState {
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  removedExpired: number | null;
+  removedTombstones: number | null;
+  lastError: string | null;
+  unknownReason: string | null;
+  stale: boolean;
+}
+
 export interface MemoryStats {
   tome: string;
   active: number;
@@ -102,4 +112,5 @@ export interface MemoryStats {
   pendingCompaction: number;
   idempotencyConflicts: number;
   byTome: Record<string, TomeStats>;
+  gc: GcState;
 }

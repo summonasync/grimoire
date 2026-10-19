@@ -1,3 +1,3 @@
-export const tabIds = ["memories", "persona", "scry", "settings", "stats"] as const;
+export const tabIds = ["console", "memories", "persona", "stats", "settings", "scry"] as const;
 
 export type TabId = (typeof tabIds)[number];

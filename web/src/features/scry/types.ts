@@ -1,3 +1,5 @@
+import type { MemoryKind, MemoryScope } from "@/shared/api/types";
+
 export type ScryAttribution = "none" | "light" | "full";
 
 export interface ScryParams {
@@ -11,8 +13,8 @@ export interface ScryItem {
   memoryId: string;
   content: string;
   tome: string;
-  scope: string;
-  kind: string;
+  scope: MemoryScope;
+  kind: MemoryKind;
   actor?: string;
   tags: string[];
   projectId: string | null;

@@ -1,27 +1,31 @@
 import type { HealthResponse } from "@/shared/api/health";
 import { cn } from "@/shared/lib/cn";
+import { absoluteTime, relativeTime } from "@/shared/ui/format";
+import { Icon } from "@/shared/ui/icons";
 
 interface ProviderHealthCardProps {
   health: HealthResponse;
 }
 
-function HealthDot({ reachable }: { reachable: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn("inline-block size-2 rounded-full", reachable ? "bg-accent" : "bg-red-500")}
-    />
-  );
-}
-
-function HealthRow({ label, reachable, error }: { label: string; reachable: boolean; error: string | null }) {
+function HealthRow({
+  label,
+  reachable,
+  error,
+}: {
+  label: string;
+  reachable: boolean;
+  error: string | null;
+}) {
   return (
     <div className="flex items-start justify-between gap-3 py-2">
       <span className="flex items-center gap-2 text-sm">
-        <HealthDot reachable={reachable} />
+        <span
+          aria-hidden
+          className={cn("size-2 rounded-full", reachable ? "bg-jade" : "bg-ember")}
+        />
         {label}
       </span>
-      <span className="max-w-64 text-right text-xs break-words text-muted">
+      <span className="max-w-56 truncate text-right text-xs text-muted" title={error ?? undefined}>
         {reachable ? "reachable" : (error ?? "unreachable")}
       </span>
     </div>
@@ -30,27 +34,31 @@ function HealthRow({ label, reachable, error }: { label: string; reachable: bool
 
 export function ProviderHealthCard({ health }: ProviderHealthCardProps) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Provider health</h2>
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
         <span
           className={cn(
-            "rounded-full border px-2 py-0.5 text-xs font-medium",
-            health.status === "healthy" ? "border-accent/50 text-accent" : "border-red-500/50 text-red-400",
+            "flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
+            health.status === "healthy"
+              ? "border-jade/45 bg-jade/10 text-jade"
+              : "border-ember/45 bg-ember/10 text-ember",
           )}
         >
+          <Icon name={health.status === "healthy" ? "check" : "alert"} className="size-3.5" />
           {health.status}
         </span>
+        <span className="text-[0.7rem] text-muted" title={absoluteTime(health.checkedAt)}>
+          checked {relativeTime(health.checkedAt)}
+        </span>
       </div>
-      <div className="mt-2 divide-y divide-border">
-        <HealthRow label="Store" reachable={health.store.reachable} error={health.store.error} />
+      <div className="divide-y divide-border">
+        <HealthRow label="Vector store" reachable={health.store.reachable} error={health.store.error} />
         <HealthRow
           label="Embeddings provider"
           reachable={health.embeddings.reachable}
           error={health.embeddings.error}
         />
       </div>
-      <p className="mt-2 text-xs text-muted">Checked {new Date(health.checkedAt).toLocaleString()}</p>
     </div>
   );
 }

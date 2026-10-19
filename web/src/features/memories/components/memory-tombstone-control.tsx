@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { MemoryRecord } from "@/shared/api/types";
+import { Button } from "@/shared/ui/button";
 import { useForgetMemory } from "../lib/use-memory-mutations";
 
 interface MemoryTombstoneControlProps {
@@ -26,11 +27,17 @@ export function MemoryTombstoneControl({ record }: MemoryTombstoneControlProps) 
     });
   };
 
+  const reset = () => {
+    setConfirming(false);
+    setReason("");
+  };
+
   if (confirming) {
     return (
-      <div className="space-y-3 rounded-lg border border-border bg-background p-3">
+      <div className="w-full space-y-3 rounded-lg border border-ember/40 bg-ember/8 p-3">
         <p className="text-xs text-muted">
-          Tombstoning hides the record from recall. The reason is stored on the tombstone.
+          Tombstoning hides the record from recall. Nothing is deleted — the reason is stored on the
+          tombstone until garbage collection owns the hard delete.
         </p>
         <textarea
           value={reason}
@@ -39,28 +46,23 @@ export function MemoryTombstoneControl({ record }: MemoryTombstoneControlProps) 
           autoFocus
           placeholder="Why is this memory being retired?"
           aria-label="Tombstone reason"
-          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+          aria-required
+          className="field"
         />
-        {forget.error && <p className="text-xs text-red-400">{forget.error.message}</p>}
+        {forget.error && <p className="text-xs text-ember">{forget.error.message}</p>}
         <div className="flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
+            icon="tombstone"
             onClick={confirm}
             disabled={trimmedReason.length === 0 || forget.isPending}
-            className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
           >
             {forget.isPending ? "Tombstoning…" : "Confirm tombstone"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirming(false);
-              setReason("");
-            }}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={reset}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -68,14 +70,10 @@ export function MemoryTombstoneControl({ record }: MemoryTombstoneControlProps) 
 
   return (
     <div className="space-y-2">
-      {forget.error && <p className="text-xs text-red-400">{forget.error.message}</p>}
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="rounded-md border border-red-700/60 px-3 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-700/10"
-      >
-        Tombstone…
-      </button>
+      {forget.error && <p className="text-xs text-ember">{forget.error.message}</p>}
+      <Button variant="outline" size="sm" icon="tombstone" onClick={() => setConfirming(true)}>
+        Tombstone
+      </Button>
     </div>
   );
 }
