@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { MemoryRecord } from "@/shared/api/types";
+import { Button } from "@/shared/ui/button";
 import { useRestoreMemory } from "../lib/use-memory-mutations";
 
 interface MemoryRestoreControlProps {
@@ -29,12 +30,17 @@ export function MemoryRestoreControl({ record }: MemoryRestoreControlProps) {
     );
   };
 
+  const reset = () => {
+    setConfirming(false);
+    setReason("");
+  };
+
   if (confirming) {
     return (
-      <div className="space-y-3 rounded-lg border border-border bg-background p-3">
+      <div className="w-full space-y-3 rounded-lg border border-jade/40 bg-jade/8 p-3">
         <p className="text-xs text-muted">
-          Restoring makes this record active again. A superseding record is tombstoned to keep one
-          truth per fact.
+          Restoring makes this record active again. If another record superseded it, that one is
+          tombstoned — the engine keeps exactly one active truth per fact.
         </p>
         <textarea
           value={reason}
@@ -43,28 +49,23 @@ export function MemoryRestoreControl({ record }: MemoryRestoreControlProps) {
           autoFocus
           placeholder="Why is this memory being restored?"
           aria-label="Restore reason"
-          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+          aria-required
+          className="field"
         />
-        {restore.error && <p className="text-xs text-red-400">{restore.error.message}</p>}
+        {restore.error && <p className="text-xs text-ember">{restore.error.message}</p>}
         <div className="flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
+            icon="restore"
             onClick={confirm}
             disabled={trimmedReason.length === 0 || restore.isPending}
-            className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
           >
             {restore.isPending ? "Restoring…" : "Confirm restore"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirming(false);
-              setReason("");
-            }}
-            className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={reset}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -72,14 +73,10 @@ export function MemoryRestoreControl({ record }: MemoryRestoreControlProps) {
 
   return (
     <div className="space-y-2">
-      {restore.error && <p className="text-xs text-red-400">{restore.error.message}</p>}
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="rounded-md border border-emerald-700/60 px-3 py-2 text-sm font-medium text-emerald-500 transition-colors hover:bg-emerald-700/10"
-      >
-        Restore…
-      </button>
+      {restore.error && <p className="text-xs text-ember">{restore.error.message}</p>}
+      <Button variant="outline" size="sm" icon="restore" onClick={() => setConfirming(true)}>
+        Restore
+      </Button>
     </div>
   );
 }

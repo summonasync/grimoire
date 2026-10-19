@@ -16,7 +16,6 @@ export { MemoryHistorySection } from "./components/memory-history-section";
 export { MemoryList } from "./components/memory-list";
 export { MemoryListRow } from "./components/memory-list-row";
 export { MemoryRestoreControl } from "./components/memory-restore-control";
-export { MemoryStatusBadge } from "./components/memory-status-badge";
 export { MemoryTombstoneControl } from "./components/memory-tombstone-control";
 export {
   memoriesQueryOptions,

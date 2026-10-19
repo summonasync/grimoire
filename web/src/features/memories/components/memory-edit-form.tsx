@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import type { MemoryRecord } from "@/shared/api/types";
+import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icons";
 import { parseTagList } from "../lib/memory-filters";
 import { usePatchMemory } from "../lib/use-memory-mutations";
 
@@ -51,29 +53,24 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 border-t border-border pt-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted">Content</span>
-        <textarea
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          rows={5}
-          className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-        />
+        <span className="label">Content</span>
+        <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} className="field" />
       </label>
       <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Tags</span>
+          <span className="label">Tags</span>
           <input
             type="text"
             value={tags}
             onChange={(event) => setTags(event.target.value)}
             placeholder="tag1, tag2"
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+            className="field"
           />
         </label>
         <label className="flex w-28 flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Importance</span>
+          <span className="label">Importance</span>
           <input
             type="number"
             min={0}
@@ -81,13 +78,13 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
             step={0.05}
             value={importance}
             onChange={(event) => setImportance(event.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+            className="field"
           />
         </label>
       </div>
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted">
-          Reason <span className="text-red-400">*</span>
+        <span className="label flex items-center gap-1">
+          Reason <span className="text-accent">*</span>
         </span>
         <textarea
           value={reason}
@@ -96,27 +93,30 @@ export function MemoryEditForm({ record, onDone, onCancel }: MemoryEditFormProps
           placeholder="Why is this change needed?"
           aria-label="Correction reason"
           aria-required
-          className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+          className="field"
         />
-        <span className="text-xs text-muted">Stored on the correction trail.</span>
+        <span className="text-[0.7rem] text-muted">
+          {reasonMissing
+            ? "A reason is required — it is written to the correction trail."
+            : "Stored on the correction trail."}
+        </span>
       </label>
-      {patch.error && <p className="text-xs text-red-400">{patch.error.message}</p>}
+      {patch.error && <p className="text-xs text-ember">{patch.error.message}</p>}
       <div className="flex gap-2">
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="sm"
+          icon="save"
           disabled={!canSave}
           title={reasonMissing ? "A reason is required to save." : undefined}
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition-opacity disabled:opacity-50"
         >
           {patch.isPending ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-border px-3 py-2 text-sm text-muted transition-colors hover:text-foreground"
-        >
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <Icon name="close" className="size-3.5" />
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );
