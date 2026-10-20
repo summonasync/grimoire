@@ -20,14 +20,14 @@
   --veil: rgba(34, 28, 23, 0.55);
   /* Backdrop art: a full-bleed picture that must stay recognizable. The blur is a
      hairline seam softener, not a bokeh wash — dimming is the scrim's job, not this one's. */
-  --art-opacity: 0.34;
+  --art-opacity: 0.42;
   --art-blur: 2px;
-  --art-scrim: rgba(241, 236, 225, 0.62);
+  --art-scrim: rgba(241, 236, 225, 0.55);
   /* One glass tier per surface role: the further an element is from plain text,
      the more art is allowed through it. */
-  --glass-panel: 72%;
-  --glass-field: 58%;
-  --glass-shell: 66%;
+  --glass-panel: 64%;
+  --glass-field: 50%;
+  --glass-shell: 58%;
   --glass-blur: 12px;
 }
 
@@ -47,13 +47,12 @@
   --jade: #2f9e6b;
   --ember: #d98032;
   --veil: rgba(6, 5, 4, 0.72);
-  --art-opacity: 0.42;
+  --art-opacity: 0.5;
   --art-blur: 2px;
-  --art-scrim: rgba(10, 9, 8, 0.5);
-  --glass-panel: 62%;
-  --glass-raised: 80%;
-  --glass-field: 48%;
-  --glass-shell: 56%;
+  --art-scrim: rgba(10, 9, 8, 0.42);
+  --glass-panel: 54%;
+  --glass-field: 40%;
+  --glass-shell: 48%;
   --glass-blur: 14px;
 }
 
