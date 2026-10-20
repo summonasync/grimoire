@@ -19,6 +19,22 @@ internal static class StatsEndpoints
             }
 
             var stats = await memories.StatsAsync(cancellationToken);
+            var byTome = new Dictionary<string, TomeStatsResponse>(stats.ByTome.Count);
+            foreach (var entry in stats.ByTome)
+            {
+                // Fail as a structured error, not a raw KeyNotFoundException: the API face has no
+                // exception handler, and a fabricated epoch here would be fake telemetry.
+                if (!stats.LastWriteByTome.TryGetValue(entry.Key, out var lastWrite))
+                {
+                    return ApiResponses.Error(
+                        HttpStatusCode.InternalServerError,
+                        "stats_projection_mismatch",
+                        $"No last-write census entry for tome '{entry.Key}'.");
+                }
+
+                byTome[entry.Key] = new TomeStatsResponse(entry.Value.Active, entry.Value.Tombstoned, lastWrite);
+            }
+
             return Results.Ok(new StatsResponse(
                 await tomes.ResolveAsync(tome, cancellationToken),
                 stats.Active,
@@ -27,7 +43,7 @@ internal static class StatsEndpoints
                 stats.ActiveByScope,
                 stats.PendingCompaction,
                 stats.IdempotencyConflicts,
-                stats.ByTome,
+                byTome,
                 stats.Gc));
         });
     }

@@ -141,6 +141,24 @@ public class ScryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
     }
 
     [Fact]
+    public async Task Scry_ReportsElapsedMs_OnBothTheEmptyAndThePopulatedPath()
+    {
+        factory.Reset();
+
+        var empty = await ScryAsync("nothing is seeded yet");
+        empty.GetProperty("count").GetInt32().ShouldBe(0);
+        empty.TryGetProperty("elapsedMs", out var emptyElapsed).ShouldBeTrue("elapsedMs is part of the scry contract");
+        emptyElapsed.GetInt64().ShouldBeGreaterThanOrEqualTo(0);
+
+        Seed("alpha squad decision", tome: "alpha");
+
+        var populated = await ScryAsync("alpha squad decision");
+        populated.GetProperty("count").GetInt32().ShouldBe(1);
+        populated.TryGetProperty("elapsedMs", out var populatedElapsed).ShouldBeTrue();
+        populatedElapsed.GetInt64().ShouldBeGreaterThanOrEqualTo(0);
+    }
+
+    [Fact]
     public async Task Scry_WithoutOtherTomes_ReturnsAnHonestEmptyResult()
     {
         factory.Reset();

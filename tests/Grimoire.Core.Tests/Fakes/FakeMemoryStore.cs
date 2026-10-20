@@ -12,6 +12,8 @@ public sealed class FakeMemoryStore : IMemoryStore
 
     public int DeleteCount { get; private set; }
 
+    public int ListCallCount { get; private set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public void Seed(MemoryRecord record, params float[] vector) => _points[record.Id] = new StoredPoint(record, vector);
@@ -42,6 +44,7 @@ public sealed class FakeMemoryStore : IMemoryStore
 
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        ListCallCount++;
         IReadOnlyList<MemoryRecord> records = Matching(filter).Select(point => point.Record).ToList();
         return Task.FromResult(records);
     }

@@ -131,6 +131,104 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
     }
 
     [Fact]
+    public async Task Get_EmitsLastWriteAtOnEveryTomeKey()
+    {
+        factory.Reset();
+        var ancient = FakeClock.DefaultStart.AddDays(-30);
+        factory.Store.Seed("alpha plain", [1f, 0f], tome: "alpha", createdAt: ancient.AddDays(10));
+        factory.Store.Seed("default plain", [1f, 0f], createdAt: ancient.AddDays(5));
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var byTome = body.GetProperty("byTome");
+
+        byTome.EnumerateObject().Select(entry => entry.Name).OrderBy(name => name, StringComparer.Ordinal)
+            .ShouldBe(["alpha", "default"]);
+        byTome.EnumerateObject().Count(entry => entry.Value.TryGetProperty("lastWriteAt", out _))
+            .ShouldBe(2);
+        byTome.GetProperty("alpha").GetProperty("lastWriteAt").GetDateTimeOffset().ShouldBe(ancient.AddDays(10));
+        byTome.GetProperty("alpha").GetProperty("active").GetInt64().ShouldBe(1);
+        byTome.GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(0);
+        byTome.GetProperty("default").GetProperty("lastWriteAt").GetDateTimeOffset().ShouldBe(ancient.AddDays(5));
+    }
+
+    [Fact]
+    public async Task Get_LastWriteAtIsTheCorrectionEvenOnADecrepitRecord()
+    {
+        factory.Reset();
+        var created = FakeClock.DefaultStart.AddDays(-30);
+        var patched = FakeClock.DefaultStart.AddDays(-2);
+        factory.Store.Seed(
+            TestMemories.Create("stale fact", createdAt: created, tome: "alpha") with
+            {
+                LastAccessedAt = patched.AddDays(1),
+                Corrections = [Patch(created.AddDays(1), "first fix"), Patch(patched, "second fix")],
+            },
+            [1f, 0f]);
+        factory.Store.Seed("younger plain", [1f, 0f], tome: "alpha", createdAt: created.AddDays(20));
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var alpha = body.GetProperty("byTome").GetProperty("alpha");
+        alpha.GetProperty("lastWriteAt").GetDateTimeOffset().ShouldBe(patched);
+        alpha.GetProperty("active").GetInt64().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Get_LastWriteAtPaysNoAttentionToTheReadStamp()
+    {
+        factory.Reset();
+        var created = FakeClock.DefaultStart.AddDays(-30);
+        factory.Store.Seed(
+            TestMemories.Create("read a thousand times", createdAt: created, tome: "alpha") with
+            {
+                LastAccessedAt = FakeClock.DefaultStart.AddDays(40),
+                AccessCount = 1000,
+            },
+            [1f, 0f]);
+        factory.Store.Seed("younger rewrite", [1f, 0f], tome: "alpha", createdAt: FakeClock.DefaultStart.AddDays(-5));
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("lastWriteAt").GetDateTimeOffset()
+            .ShouldBe(FakeClock.DefaultStart.AddDays(-5));
+    }
+
+    [Fact]
+    public async Task Get_LastWriteAtIsTheTombstoneWhenTheBurialIsTheNewestWrite()
+    {
+        factory.Reset();
+        factory.Store.Seed("young active", [1f, 0f], tome: "alpha", createdAt: FakeClock.DefaultStart.AddDays(-20));
+        factory.Store.Seed(
+            "old buried",
+            [1f, 0f],
+            tome: "alpha",
+            createdAt: FakeClock.DefaultStart.AddDays(-30),
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart.AddDays(-1));
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("lastWriteAt").GetDateTimeOffset()
+            .ShouldBe(FakeClock.DefaultStart.AddDays(-1));
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(1);
+    }
+
+    private static CorrectionEntry Patch(DateTimeOffset at, string reason) => new()
+    {
+        At = at,
+        Actor = TestMemories.Agent,
+        Action = CorrectionAction.Patch,
+        Reason = reason,
+    };
+
+    [Fact]
     public async Task Get_CountsActiveIdempotencyDuplicates()
     {
         factory.Reset();

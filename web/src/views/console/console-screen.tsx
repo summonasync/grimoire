@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { healthQueryOptions } from "@/shared/api/health";
+import { versionQueryOptions } from "@/shared/api/version";
 import { memoriesQueryOptions } from "@/features/memories";
 import { statsQueryOptions } from "@/features/stats";
 import { compactNumber, relativeTime } from "@/shared/ui/format";
@@ -45,6 +46,7 @@ function QuickAction({
 export function ConsoleScreen() {
   const stats = useQuery(statsQueryOptions());
   const health = useQuery(healthQueryOptions());
+  const version = useQuery(versionQueryOptions());
   const recent = useQuery(memoriesQueryOptions({ limit: 8, status: "all" }));
 
   if (stats.error) {
@@ -325,6 +327,18 @@ export function ConsoleScreen() {
           )}
         </Panel>
       </div>
+
+      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[0.7rem] text-muted">
+        <span>
+          Grimoire{" "}
+          <span className="font-mono text-foreground/80">
+            {version.isPending ? "probing…" : (version.data?.version ?? "not reported")}
+          </span>
+        </span>
+        <span>
+          {data.tome} · {compactNumber(total)} records
+        </span>
+      </footer>
     </div>
   );
 }

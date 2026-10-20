@@ -9,7 +9,7 @@ import { Donut, resolveSliceColor } from "@/shared/ui/charts";
 import { Panel } from "@/shared/ui/panel";
 import { StatTile } from "@/shared/ui/stat-tile";
 import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/honest";
-import { compactNumber, relativeTime } from "@/shared/ui/format";
+import { absoluteTime, compactNumber, relativeTime } from "@/shared/ui/format";
 import { Icon } from "@/shared/ui/icons";
 import { Sigil } from "@/shared/ui/sigil";
 
@@ -165,6 +165,7 @@ export function StatsPage() {
                   <th className="label px-4 py-2 text-right">Active</th>
                   <th className="label px-4 py-2 text-right">Tombstoned</th>
                   <th className="label px-4 py-2 text-right">Share</th>
+                  <th className="label px-4 py-2 text-right">Last write</th>
                 </tr>
               </thead>
               <tbody>
@@ -186,6 +187,12 @@ export function StatsPage() {
                       {totalActive > 0
                         ? `${Math.round((counts.active / totalActive) * 100)}%`
                         : "—"}
+                    </td>
+                    <td
+                      className="px-4 py-2 text-right tabular-nums text-muted"
+                      title={absoluteTime(counts.lastWriteAt)}
+                    >
+                      {relativeTime(counts.lastWriteAt)}
                     </td>
                   </tr>
                 ))}

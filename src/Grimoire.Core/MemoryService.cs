@@ -211,6 +211,8 @@ public sealed class MemoryService(
         var pending = CompactionPlanner.Plan(journal, clock.UtcNow, _options.Compaction)
             .Sum(group => group.MemoryIds.Count);
 
+        var census = await CountByTomeAsync(cancellationToken);
+
         return new MemoryStats
         {
             Active = active,
@@ -219,7 +221,8 @@ public sealed class MemoryService(
             ActiveByScope = activeByScope,
             PendingCompaction = pending,
             IdempotencyConflicts = await CountIdempotencyConflictsAsync(cancellationToken),
-            ByTome = await CountByTomeAsync(cancellationToken),
+            ByTome = census.ByTome,
+            LastWriteByTome = census.LastWriteByTome,
             Gc = await GcHeartbeatAsync(cancellationToken),
         };
     }
@@ -258,23 +261,47 @@ public sealed class MemoryService(
         }, cancellationToken);
     }
 
-    private async Task<IReadOnlyDictionary<string, TomeStats>> CountByTomeAsync(CancellationToken cancellationToken)
+    private async Task<TomeCensus> CountByTomeAsync(CancellationToken cancellationToken)
     {
         var active = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
         var tombstoned = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Tombstoned }, cancellationToken);
 
-        return active.Select(record => record.Tome)
-            .Concat(tombstoned.Select(record => record.Tome))
-            .Distinct()
-            .OrderBy(tome => tome, StringComparer.Ordinal)
-            .ToDictionary(
-                tome => tome,
-                tome => new TomeStats
+        var groups = active.Concat(tombstoned)
+            .GroupBy(record => record.Tome)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToArray();
+
+        return new TomeCensus(
+            groups.ToDictionary(
+                group => group.Key,
+                group => new TomeStats
                 {
-                    Active = active.Count(record => record.Tome == tome),
-                    Tombstoned = tombstoned.Count(record => record.Tome == tome),
-                });
+                    Active = group.Count(record => record.Status == MemoryStatus.Active),
+                    Tombstoned = group.Count(record => record.Status == MemoryStatus.Tombstoned),
+                }),
+            groups.ToDictionary(
+                group => group.Key,
+                group => group.Select(LastWriteAt).Max()));
     }
+
+    private static DateTimeOffset LastWriteAt(MemoryRecord record)
+    {
+        var newest = record.CreatedAt;
+
+        foreach (var correction in record.Corrections)
+        {
+            if (correction.At > newest)
+            {
+                newest = correction.At;
+            }
+        }
+
+        return record.TombstonedAt is { } forgotten && forgotten > newest ? forgotten : newest;
+    }
+
+    private sealed record TomeCensus(
+        IReadOnlyDictionary<string, TomeStats> ByTome,
+        IReadOnlyDictionary<string, DateTimeOffset> LastWriteByTome);
 
     private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(
         RememberRequest request,

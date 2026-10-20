@@ -10,28 +10,31 @@ export function relativeTime(iso: string | null | undefined): string {
   const future = seconds < 0;
   const magnitude = Math.abs(seconds);
 
-  const units: Array<[number, string]> = [
-    [60, "s"],
-    [3600, "m"],
-    [86400, "h"],
-    [604800, "d"],
-    [2629800, "w"],
-    [31557600, "mo"],
+  // A tier is (exclusive upper bound in seconds, unit label, divisor for that unit).
+  // Pairing the divisor with the unit it PRODUCES is the whole point: /60 yields
+  // minutes. The previous table paired 60 with "s", so every tier read one unit
+  // too small — 22 minutes rendered as "22s ago".
+  const tiers: Array<[number, string, number]> = [
+    [3600, "m", 60],
+    [86400, "h", 3600],
+    [604800, "d", 86400],
+    [2629800, "w", 604800],
+    [31557600, "mo", 2629800],
   ];
 
   if (magnitude < 60) {
     return future ? "in just now" : "just now";
   }
-  for (let index = 0; index < units.length; index += 1) {
-    const [limit] = units[index]!;
-    const next = units[index + 1];
-    if (!next || magnitude < next[0]) {
-      const value = Math.floor(magnitude / limit);
-      const suffix = future ? `in ${value}${units[index]![1]}` : `${value}${units[index]![1]} ago`;
-      return suffix;
+
+  const say = (value: number, unit: string) => (future ? `in ${value}${unit}` : `${value}${unit} ago`);
+
+  for (const [upperBound, unit, divisor] of tiers) {
+    if (magnitude < upperBound) {
+      return say(Math.floor(magnitude / divisor), unit);
     }
   }
-  return `${Math.floor(magnitude / 31557600)}y ago`;
+
+  return say(Math.floor(magnitude / 31557600), "y");
 }
 
 export function absoluteTime(iso: string | null | undefined): string {
@@ -53,6 +56,10 @@ export function absoluteTime(iso: string | null | undefined): string {
 
 export function compactNumber(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+export function elapsedTime(ms: number): string {
+  return `${(ms / 1000).toFixed(2)} s`;
 }
 
 export function importanceScore(importance: number): number {

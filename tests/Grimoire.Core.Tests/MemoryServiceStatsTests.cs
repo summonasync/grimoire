@@ -209,6 +209,143 @@ public sealed class MemoryServiceStatsTests
         var stats = await _service.StatsAsync(CancellationToken.None);
 
         stats.ByTome.ShouldBeEmpty();
+        stats.LastWriteByTome.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_CarriesExactlyTheByTomeKeys()
+    {
+        Seed("default active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+        Seed("alpha active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha");
+        Seed("alpha buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, tome: "alpha", tombstoneReason: "gone", tombstonedAt: FakeClock.DefaultStart);
+        Seed("beta active", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "beta");
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.Count.ShouldBe(3);
+        stats.LastWriteByTome.Count.ShouldBe(3);
+        stats.LastWriteByTome.Keys.ShouldBe(stats.ByTome.Keys);
+        stats.ByTome.Keys.ShouldBe(["alpha", "beta", TomeKey.DefaultTome]);
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_PatchedOldRecordBeatsAYoungerCreation()
+    {
+        var oldest = FakeClock.DefaultStart.AddDays(-30);
+        var patched = FakeClock.DefaultStart;
+        Seed("ancient patched", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha", created: oldest, corrections: [TestMemories.Patch(patched)]);
+        Seed("younger plain", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "alpha", created: oldest.AddDays(29));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome["alpha"].ShouldBe(patched);
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_LatestOfSeveralCorrectionsWins()
+    {
+        var created = FakeClock.DefaultStart.AddDays(-10);
+        Seed(
+            "twice corrected",
+            MemoryScope.Project,
+            MemoryKind.Journal,
+            MemoryStatus.Active,
+            tome: "alpha",
+            created: created,
+            corrections:
+            [
+                TestMemories.Patch(created.AddDays(1), "first fix"),
+                TestMemories.Patch(created.AddDays(4), "second fix"),
+            ]);
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome["alpha"].ShouldBe(created.AddDays(4));
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_IgnoresARead()
+    {
+        var created = FakeClock.DefaultStart.AddDays(-10);
+        var touched = FakeClock.DefaultStart.AddDays(-1);
+        Seed("ancient", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha", created: created, accessed: touched);
+        Seed("newest plain", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "alpha", created: created.AddDays(1));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome["alpha"].ShouldBe(created.AddDays(1));
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_CountsTheTombstoneAsAWrite()
+    {
+        Seed("buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, tome: "alpha", created: FakeClock.DefaultStart.AddDays(-10), tombstoneReason: "gone", tombstonedAt: FakeClock.DefaultStart.AddDays(-2));
+        Seed("plain", MemoryScope.Global, MemoryKind.Fact, MemoryStatus.Active, tome: "alpha", created: FakeClock.DefaultStart.AddDays(-5));
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome["alpha"].ShouldBe(FakeClock.DefaultStart.AddDays(-2));
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_SupersededRecordsMoveNothing()
+    {
+        Seed("active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha", created: FakeClock.DefaultStart.AddDays(-3));
+        Seed("superseded later", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Superseded, tome: "alpha", created: FakeClock.DefaultStart, supersededBy: Guid.NewGuid());
+        Seed("orphan superseded", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Superseded, tome: "gamma", created: FakeClock.DefaultStart, supersededBy: Guid.NewGuid());
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome["alpha"].ShouldBe(FakeClock.DefaultStart.AddDays(-3));
+        stats.LastWriteByTome.Keys.ShouldNotContain("gamma");
+        stats.LastWriteByTome.Keys.ShouldBe(stats.ByTome.Keys);
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_ReadPathLeavesTheCensusUntouched()
+    {
+        var created = FakeClock.DefaultStart.AddDays(-10);
+        var service = TestMemories.Service(
+            _store,
+            new FakeEmbeddingProvider(new Dictionary<string, float[]> { ["recall me"] = [1f, 0f, 0f] }),
+            _clock);
+        Seed("recall me", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, created: created);
+
+        var recalled = await service.RecallAsync(
+            new RecallQuery { Text = "recall me", Tome = TomeKey.DefaultTome, Limit = 5 },
+            CancellationToken.None);
+
+        recalled.ShouldNotBeEmpty();
+        _clock.Advance(TimeSpan.FromDays(30));
+        var stats = await service.StatsAsync(CancellationToken.None);
+
+        stats.LastWriteByTome[TomeKey.DefaultTome].ShouldBe(created);
+    }
+
+    [Fact]
+    public async Task Stats_LastWriteByTome_TombstoneWithoutAStampFallsBackToCreation()
+    {
+        var created = FakeClock.DefaultStart.AddDays(-7);
+        Seed("legacy buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, tome: "alpha", created: created, tombstoneReason: "gone");
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome["alpha"].Tombstoned.ShouldBe(1);
+        stats.LastWriteByTome["alpha"].ShouldBe(created);
+    }
+
+    [Fact]
+    public async Task Stats_PaysThreeListRoundTripsOnTheCensusAndConflictPath()
+    {
+        Seed("default active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);
+        Seed("alpha active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, tome: "alpha");
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.ByTome.Count.ShouldBe(2);
+        // Two census scrolls plus one idempotency probe. The stats path is the heaviest
+        // full-store read in the product; a fourth call here means someone re-widened it.
+        _store.ListCallCount.ShouldBe(3);
     }
 
     private void Seed(
@@ -223,7 +360,8 @@ public sealed class MemoryServiceStatsTests
         DateTimeOffset? tombstonedAt = null,
         string? idempotencyKey = null,
         DateTimeOffset? created = null,
-        string? tome = null)
+        string? tome = null,
+        IReadOnlyList<CorrectionEntry>? corrections = null)
     {
         var memoryVector = vector ?? [1f, 0f, 0f];
         var record = TestMemories.Create(
@@ -238,7 +376,8 @@ public sealed class MemoryServiceStatsTests
             tombstonedAt: tombstonedAt,
             idempotencyKey: idempotencyKey,
             created: created,
-            tome: tome);
+            tome: tome,
+            corrections: corrections);
         _store.Seed(record, memoryVector);
     }
 }

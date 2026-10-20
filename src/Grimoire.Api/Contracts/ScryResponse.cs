@@ -4,4 +4,5 @@ public sealed record ScryResponse(
     IReadOnlyList<string> Tomes,
     ScryAttribution Attribution,
     int Count,
-    IReadOnlyList<ScryItem> Items);
+    IReadOnlyList<ScryItem> Items,
+    long ElapsedMs);

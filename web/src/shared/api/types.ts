@@ -61,6 +61,15 @@ export interface CompactionOptions {
   minClusterSize: number;
 }
 
+export interface VersionResponse {
+  version: string;
+}
+
+export interface BriefSettings {
+  maxTotalChars: number;
+  maxEntryChars: number;
+}
+
 export interface EngineSettings {
   sessionTtlHours: number;
   dedupSimilarityThreshold: number;
@@ -68,6 +77,7 @@ export interface EngineSettings {
   recallOversampling: number;
   recencyHalfLives: RecencyHalfLives;
   compaction: CompactionOptions;
+  brief: BriefSettings;
 }
 
 export interface ServeSettings {
@@ -91,6 +101,7 @@ export interface SettingsResponse {
 export interface TomeStats {
   active: number;
   tombstoned: number;
+  lastWriteAt: string;
 }
 
 export interface GcState {

@@ -8,4 +8,5 @@ public sealed record EngineSettings(
     double TombstoneRetentionDays,
     int RecallOversampling,
     RecencyHalfLives RecencyHalfLives,
-    CompactionOptions Compaction);
+    CompactionOptions Compaction,
+    BriefSettings Brief);

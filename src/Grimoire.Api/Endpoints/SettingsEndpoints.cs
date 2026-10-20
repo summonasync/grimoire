@@ -17,7 +17,8 @@ internal static class SettingsEndpoints
                 engineOptions.TombstoneRetentionDays,
                 engineOptions.RecallOversampling,
                 engineOptions.RecencyHalfLives,
-                engineOptions.Compaction),
+                engineOptions.Compaction,
+                new BriefSettings(engineOptions.BriefMaxTotalChars, engineOptions.BriefMaxEntryChars)),
             new ServeSettings(hostOptions.Port, hostOptions.GcIntervalMinutes),
             SettingsPersistence.Deferred,
             UpdateSettingsRequest.EditableKeys)));

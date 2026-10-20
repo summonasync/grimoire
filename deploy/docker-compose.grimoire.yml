@@ -1,0 +1,17 @@
+# Isolated store for local development: the default docker-compose.yml binds 6333/6334,
+# which on a shared machine already belongs to another product's Qdrant. Point the config
+# at 6354 (GRIMOIRE_QDRANT__ENDPOINT or ~/.grimoire/config.json) when running this file.
+# Ollama is deliberately not here — inference is stateless, reuse the existing 11434.
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    container_name: grimoire-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6353:6333"
+      - "127.0.0.1:6354:6334"
+    volumes:
+      - grimoire_qdrant_storage:/qdrant/storage
+
+volumes:
+  grimoire_qdrant_storage:

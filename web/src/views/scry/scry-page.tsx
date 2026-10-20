@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icons";
+import { elapsedTime } from "@/shared/ui/format";
 import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import {
   ScryFilterBar,
@@ -95,6 +96,11 @@ export function ScryPage() {
               <p className="text-xs text-muted">
                 across {result.tomes.join(", ")} · attribution {result.attribution}
               </p>
+              {result.elapsedMs >= 0 && (
+                <p className="text-xs text-muted tabular-nums">
+                  answered in {elapsedTime(result.elapsedMs)}
+                </p>
+              )}
             </div>
             <ul className="space-y-2">
               {result.items.map((item) => (

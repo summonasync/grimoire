@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Grimoire.Api.Contracts;
 using Grimoire.Api.Tomes;
 using Grimoire.Core;
@@ -8,6 +9,7 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
 {
     public async Task<ScryResponse> RunAsync(ParsedScryQuery query, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         var own = await tomes.ResolveAsync(null, cancellationToken);
         var targets = query.Tomes.Count > 0
             ? query.Tomes
@@ -28,7 +30,8 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
             targets,
             query.Attribution,
             matches.Count,
-            [.. matches.Select(match => ToItem(match, query.Attribution))]);
+            [.. matches.Select(match => ToItem(match, query.Attribution))],
+            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     }
 
     private async Task<IReadOnlyList<string>> DiscoverTomesAsync(CancellationToken cancellationToken)

@@ -13,10 +13,6 @@ import { UpdateNotice } from "./update-notice";
 
 const mockupOnlyTabs = [
   {
-    label: "Brief & Context",
-    reason: "BriefMaxTotalChars and BriefMaxEntryChars exist in engine options but are not exposed by GET /api/settings.",
-  },
-  {
     label: "Storage",
     reason: "The API reports no collection size, segment breakdown or Qdrant storage metrics.",
   },
@@ -100,6 +96,23 @@ export function SettingsTuning() {
         <p className="mt-3 text-[0.7rem] text-muted">
           Editable per API contract: {editableKeys.join(", ")}.
         </p>
+      </Panel>
+
+      <Panel
+        title="Brief & Context"
+        description="Engine options the API reports but PUT does not accept yet."
+        icon="book"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="label">Brief max total chars</p>
+            <p className="mt-1 text-sm tabular-nums">{settings.memory.brief.maxTotalChars}</p>
+          </div>
+          <div>
+            <p className="label">Brief max entry chars</p>
+            <p className="mt-1 text-sm tabular-nums">{settings.memory.brief.maxEntryChars}</p>
+          </div>
+        </div>
       </Panel>
 
       <Panel

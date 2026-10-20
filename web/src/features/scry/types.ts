@@ -28,4 +28,5 @@ export interface ScryResult {
   attribution: ScryAttribution;
   count: number;
   items: ScryItem[];
+  elapsedMs: number;
 }

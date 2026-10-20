@@ -26,7 +26,8 @@ internal static class TestMemories
         DateTimeOffset? tombstonedAt = null,
         IReadOnlyList<Guid>? sources = null,
         string? idempotencyKey = null,
-        string? tome = null)
+        string? tome = null,
+        IReadOnlyList<CorrectionEntry>? corrections = null)
     {
         var moment = created ?? FakeClock.DefaultStart;
 
@@ -52,8 +53,17 @@ internal static class TestMemories
             TombstonedAt = tombstonedAt,
             Sources = sources ?? [],
             IdempotencyKey = idempotencyKey,
+            Corrections = corrections ?? [],
         };
     }
+
+    public static CorrectionEntry Patch(DateTimeOffset at, string reason = "corrected") => new()
+    {
+        At = at,
+        Actor = Agent,
+        Action = CorrectionAction.Patch,
+        Reason = reason,
+    };
 
     public static MemoryService Service(
         IMemoryStore store,

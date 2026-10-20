@@ -69,6 +69,7 @@ public static class ApiHostBuilder
         app.MapSettingsEndpoints(engineOptions, options);
         app.MapStatsEndpoints(memories, tomeResolver);
         app.MapHealthEndpoints(store, embeddings, clock);
+        app.MapVersionEndpoints();
         app.UseSpaFrontend(options);
 
         return app;

@@ -28,11 +28,43 @@ public class SettingsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         settings.Memory.RecencyHalfLives.PersonalDays.ShouldBe(180);
         settings.Memory.Compaction.MinSimilarity.ShouldBe(0.85);
         settings.Memory.Compaction.MinClusterSize.ShouldBe(2);
+        settings.Memory.Brief.MaxTotalChars.ShouldBe(8000);
+        settings.Memory.Brief.MaxEntryChars.ShouldBe(400);
         settings.Serve.Port.ShouldBe(0);
         settings.Serve.GcIntervalMinutes.ShouldBe(60);
         settings.Persistence.Available.ShouldBeFalse();
         settings.Persistence.Reason.ShouldBe("settings_persistence_not_implemented");
         settings.Editable.ShouldContain("memory.sessionTtlHours");
+        settings.Editable.ShouldNotContain("memory.brief.maxTotalChars");
+        settings.Editable.ShouldNotContain("memory.brief.maxEntryChars");
+    }
+
+    [Fact]
+    public async Task Get_ExposesBriefBudgetsAsRawPathsUnderMemoryBrief()
+    {
+        factory.Reset();
+
+        var body = await factory.NewClient().GetFromJsonAsync<JsonElement>("/api/settings", TestJson.Options);
+
+        var brief = body.GetProperty("memory").GetProperty("brief");
+        brief.GetProperty("maxTotalChars").GetInt32().ShouldBe(8000);
+        brief.GetProperty("maxEntryChars").GetInt32().ShouldBe(400);
+    }
+
+    [Fact]
+    public async Task Get_ReflectsConfiguredBriefBudgets()
+    {
+        factory.Reset();
+        using var configured = GrimoireApiFactory.Create(new MemoryEngineOptions
+        {
+            BriefMaxTotalChars = 1234,
+            BriefMaxEntryChars = 77,
+        });
+
+        var settings = await configured.NewClient().GetFromJsonAsync<SettingsResponse>("/api/settings", TestJson.Options);
+
+        settings!.Memory.Brief.MaxTotalChars.ShouldBe(1234);
+        settings.Memory.Brief.MaxEntryChars.ShouldBe(77);
     }
 
     [Fact]
