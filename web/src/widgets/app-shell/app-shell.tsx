@@ -35,8 +35,8 @@ export function AppShell({ tabs }: AppShellProps) {
             style={{
               opacity: "var(--art-opacity)",
               filter: "blur(var(--art-blur))",
-              // Blur pulls transparent pixels inward at the edges; oversizing hides the fringe.
-              transform: "scale(1.08)",
+              // Even a hairline blur pulls transparent pixels inward at the edges.
+              transform: "scale(1.01)",
             }}
           />
           <div className="absolute inset-0" style={{ backgroundColor: "var(--art-scrim)" }} />

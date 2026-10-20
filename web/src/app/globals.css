@@ -18,10 +18,10 @@
   --jade: #1c7a51;
   --ember: #a8560d;
   --veil: rgba(34, 28, 23, 0.55);
-  /* Backdrop art: a full-bleed picture, blurred into bokeh and dimmed under a scrim
-     so glass panels read as glass instead of fighting the artwork. */
+  /* Backdrop art: a full-bleed picture that must stay recognizable. The blur is a
+     hairline seam softener, not a bokeh wash — dimming is the scrim's job, not this one's. */
   --art-opacity: 0.34;
-  --art-blur: 18px;
+  --art-blur: 2px;
   --art-scrim: rgba(241, 236, 225, 0.62);
   /* One glass tier per surface role: the further an element is from plain text,
      the more art is allowed through it. */
@@ -48,7 +48,7 @@
   --ember: #d98032;
   --veil: rgba(6, 5, 4, 0.72);
   --art-opacity: 0.42;
-  --art-blur: 16px;
+  --art-blur: 2px;
   --art-scrim: rgba(10, 9, 8, 0.5);
   --glass-panel: 62%;
   --glass-raised: 80%;
