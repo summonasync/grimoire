@@ -50,7 +50,7 @@ export function StatsPage() {
         title="Stats"
         description="Memory system health and telemetry."
         actions={
-          <span className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-xs">
+          <span className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs">
             <Icon name="book" className="size-3.5 text-muted" />
             <span className="text-muted">Resolved tome</span>
             <span className="font-medium">{data.tome}</span>

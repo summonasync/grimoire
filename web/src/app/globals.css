@@ -5,8 +5,6 @@
 :root {
   color-scheme: light;
   --background: #f1ece1;
-  /* Theme-independent: an alpha ramp only, so it is defined once. */
-  --art-fade: linear-gradient(to bottom, #000 35%, rgba(0, 0, 0, 0) 100%);
   --surface: #faf6ee;
   --surface-raised: #fffdf8;
   --foreground: #221c17;
@@ -20,9 +18,17 @@
   --jade: #1c7a51;
   --ember: #a8560d;
   --veil: rgba(34, 28, 23, 0.55);
-  /* Alpha ramps up toward the screen edge and dissolves toward the content, so a
-     plate never cuts a hard line where the panels start. */
-  --art-mask: linear-gradient(to left, #f1ece1 0%, rgba(241, 236, 225, 0.72) 42%, rgba(0, 0, 0, 0) 100%);
+  /* Backdrop art: a full-bleed picture, blurred into bokeh and dimmed under a scrim
+     so glass panels read as glass instead of fighting the artwork. */
+  --art-opacity: 0.34;
+  --art-blur: 18px;
+  --art-scrim: rgba(241, 236, 225, 0.62);
+  /* One glass tier per surface role: the further an element is from plain text,
+     the more art is allowed through it. */
+  --glass-panel: 72%;
+  --glass-field: 58%;
+  --glass-shell: 66%;
+  --glass-blur: 12px;
 }
 
 .dark {
@@ -41,7 +47,14 @@
   --jade: #2f9e6b;
   --ember: #d98032;
   --veil: rgba(6, 5, 4, 0.72);
-  --art-mask: linear-gradient(to left, #0a0908 0%, rgba(10, 9, 8, 0.72) 42%, rgba(0, 0, 0, 0) 100%);
+  --art-opacity: 0.42;
+  --art-blur: 16px;
+  --art-scrim: rgba(10, 9, 8, 0.5);
+  --glass-panel: 62%;
+  --glass-raised: 80%;
+  --glass-field: 48%;
+  --glass-shell: 56%;
+  --glass-blur: 14px;
 }
 
 @theme inline {
@@ -75,10 +88,10 @@ body {
   }
 
   .panel {
-    background-color: color-mix(in srgb, var(--surface) 88%, transparent);
-    border: 1px solid var(--border);
+    background-color: color-mix(in srgb, var(--surface) var(--glass-panel), transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
     border-radius: 0.75rem;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(var(--glass-blur)) saturate(115%);
   }
 
   .panel-raised {
@@ -91,20 +104,17 @@ body {
     border-color: var(--border);
   }
 
-  /* Two alpha ramps intersected: dissolve toward the content on the left, and off
-     the page at the bottom. One axis alone leaves a hard edge the other theme shows. */
-  .art-plate {
-    -webkit-mask-image: var(--art-mask), var(--art-fade);
-    -webkit-mask-composite: source-in;
-    mask-image: var(--art-mask), var(--art-fade);
-    mask-composite: intersect;
+  /* The sidebar and header sit directly on the backdrop, so they get their own tier. */
+  .glass-shell {
+    background-color: color-mix(in srgb, var(--surface) var(--glass-shell), transparent);
+    backdrop-filter: blur(var(--glass-blur)) saturate(110%);
   }
 
   .field {
     width: 100%;
     border-radius: 0.5rem;
     border: 1px solid var(--border-strong);
-    background-color: color-mix(in srgb, var(--background) 78%, transparent);
+    background-color: color-mix(in srgb, var(--background) var(--glass-field), transparent);
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     color: var(--foreground);

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { healthQueryOptions } from "@/shared/api/health";
@@ -135,15 +134,6 @@ export function ConsoleScreen() {
       </div>
 
       <section className="panel relative overflow-hidden">
-        <Image
-          src="/design/hero-console.webp"
-          alt=""
-          aria-hidden
-          fill
-          sizes="52% of viewport"
-          className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-[52%] object-cover object-left opacity-45 lg:block"
-          style={{ maskImage: "var(--art-mask)", WebkitMaskImage: "var(--art-mask)" }}
-        />
         <div className="relative z-10 max-w-xl px-5 py-6">
           <p className="font-display text-2xl leading-snug font-semibold italic text-gilt">
             “A memory well kept is an ally that never betrays.”

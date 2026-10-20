@@ -20,31 +20,29 @@ interface AppShellProps {
 export function AppShell({ tabs }: AppShellProps) {
   const active = useHashTab("console");
   const current = tabItems.find((item) => item.id === active) ?? tabItems[0]!;
-  // Console paints its own hero inside the quote panel; a second copy behind it
-  // read as a seam, so the shell plate stands down there.
-  const showPlate = current.id !== "console";
 
   return (
     <TomeFilterProvider>
       <div className="relative flex min-h-dvh w-full">
-        {showPlate ? (
-          <div
-            aria-hidden
-            className="pointer-events-none fixed top-0 right-0 z-0 hidden w-[34rem] xl:block"
-          >
-            <div className="aspect-[900/506] w-full">
-              <Image
-                src={current.art}
-                alt=""
-                fill
-                sizes="544px"
-                className="art-plate object-cover opacity-45"
-              />
-            </div>
-          </div>
-        ) : null}
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
+          <Image
+            src={current.art}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+            style={{
+              opacity: "var(--art-opacity)",
+              filter: "blur(var(--art-blur))",
+              // Blur pulls transparent pixels inward at the edges; oversizing hides the fringe.
+              transform: "scale(1.08)",
+            }}
+          />
+          <div className="absolute inset-0" style={{ backgroundColor: "var(--art-scrim)" }} />
+        </div>
 
-        <aside className="relative z-20 flex w-56 shrink-0 flex-col border-r border-border bg-surface/80 backdrop-blur-sm">
+        <aside className="glass-shell relative z-20 flex w-56 shrink-0 flex-col border-r border-border">
           <div className="flex items-center gap-2.5 px-4 py-5">
             <span className="flex size-9 items-center justify-center rounded-lg border border-accent/40 bg-accent-soft">
               <Sigil seed="grimoire-wordmark" className="size-5" />
