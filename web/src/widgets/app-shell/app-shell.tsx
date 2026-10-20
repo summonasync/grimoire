@@ -20,23 +20,29 @@ interface AppShellProps {
 export function AppShell({ tabs }: AppShellProps) {
   const active = useHashTab("console");
   const current = tabItems.find((item) => item.id === active) ?? tabItems[0]!;
+  // Console paints its own hero inside the quote panel; a second copy behind it
+  // read as a seam, so the shell plate stands down there.
+  const showPlate = current.id !== "console";
 
   return (
     <TomeFilterProvider>
       <div className="relative flex min-h-dvh w-full">
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-y-0 right-0 z-0 hidden w-[34rem] xl:block"
-        >
-          <Image
-            src={current.art}
-            alt=""
-            fill
-            sizes="544px"
-            className="object-cover object-left opacity-55"
-            style={{ maskImage: "var(--art-mask)", WebkitMaskImage: "var(--art-mask)" }}
-          />
-        </div>
+        {showPlate ? (
+          <div
+            aria-hidden
+            className="pointer-events-none fixed top-0 right-0 z-0 hidden w-[34rem] xl:block"
+          >
+            <div className="aspect-[900/506] w-full">
+              <Image
+                src={current.art}
+                alt=""
+                fill
+                sizes="544px"
+                className="art-plate object-cover opacity-45"
+              />
+            </div>
+          </div>
+        ) : null}
 
         <aside className="relative z-20 flex w-56 shrink-0 flex-col border-r border-border bg-surface/80 backdrop-blur-sm">
           <div className="flex items-center gap-2.5 px-4 py-5">
