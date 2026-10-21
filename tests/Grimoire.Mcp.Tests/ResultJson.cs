@@ -7,12 +7,8 @@ internal static class ResultJson
 {
     public static JsonElement Payload(this CallToolResult result)
     {
-        if (result.StructuredContent is not { } payload)
-        {
-            throw new InvalidOperationException("Tool result carried no structured content.");
-        }
-
-        return payload;
+        using var document = JsonDocument.Parse(result.Text());
+        return document.RootElement.Clone();
     }
 
     public static string Text(this CallToolResult result)
