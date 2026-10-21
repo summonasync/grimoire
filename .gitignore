@@ -10,3 +10,5 @@ dist/
 *.DotSettings.user
 .claude/settings.local.json
 TestResults/
+.qwen/*
+
