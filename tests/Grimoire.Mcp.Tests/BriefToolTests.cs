@@ -30,11 +30,11 @@ public sealed class BriefToolTests
         var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
 
         result.ShouldSucceed();
-        result.Payload().GetProperty("hint").GetString().ShouldBe("tome is empty — use memory_scry for cross-tome context");
+        result.Payload().GetProperty("hint").GetString().ShouldContain("tome is empty — use memory_scry for cross-tome context");
     }
 
     [Fact]
-    public async Task Brief_PopulatedTome_CarriesNoHint()
+    public async Task Brief_PopulatedTome_CarriesTheStartupContract()
     {
         await using var session = await McpTestSession.StartAsync();
         await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
@@ -47,7 +47,9 @@ public sealed class BriefToolTests
         var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
 
         result.ShouldSucceed();
-        result.Payload().TryGetProperty("hint", out _).ShouldBeFalse();
+        var hint = result.Payload().GetProperty("hint").GetString();
+        hint.ShouldStartWith("startup contract");
+        hint.ShouldNotContain("tome is empty");
     }
 
     [Fact]

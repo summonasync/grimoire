@@ -12,15 +12,10 @@ internal sealed class CompactCandidatesTool(MemoryService memories, IMemoryStore
     public const string Title = "Get compaction candidates";
 
     public const string Description =
-        "Fetch clusters of old, similar journal entries that are due for distillation into durable facts; each " +
-        "group carries its entry records (id, content, timestamps), similarity and the stalest access time, and " +
-        "memory_stats reports the whole backlog as pendingCompaction. Run the loop when " +
-        "pendingCompaction grows or the human asks to compact: for each group, write one kind=fact " +
-        "memory_remember capturing the durable point, then memory_forget each consumed entry with a reason like " +
-        "\"compacted into <new memory id>\". This is how journal noise becomes the standing encyclopedia - distill " +
-        "deliberately, never speculatively, and never tombstone entries you did not actually distill. Candidates " +
-        "come from one tome at a time; memory_forget stays tome-bound, so distill within the tome you are " +
-        "reading. upstream_unavailable means the store is unreachable; the call is read-only and writes nothing.";
+        "Fetch clusters of old, similar journal entries due for distillation into durable facts - each group " +
+        "carries its entry records, similarity and the stalest access time, and the whole backlog counts as " +
+        "memory_stats pendingCompaction. Run the loop deliberately: write one kind=fact memory_remember per " +
+        "group, then memory_forget each consumed entry; distill within one tome at a time.";
 
     public Task<CallToolResult> GetCandidates(
         [Description("Tome whose journal to distill; omit for your resolved tome. Distilled facts must be written back into the same tome.")]

@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Walk a memory's full replacement lineage before trusting it or writing over it. Use it when a recall or list hit looks stale, when you want to know what a fact replaced or what replaced it, and before a forget or restore so the correction lands on the right generation of the fact. Returns the whole supersede chain - predecessors and successors - ordered oldest to newest, each entry with status, tome, creation and tombstone timestamps, tombstone reason, actor and a 120-character body preview. Read-only and tome-scoped: an id that does not exist in the resolved tome returns found=false with an empty chain, not an error - pass tome to read the lineage in another tome you own. upstream_unavailable means the store is unreachable; the call writes nothing.",
+    "description": "Walk a memory's full replacement lineage - the supersede chain oldest to newest with status, actor, tombstone reason and a 120-char body preview - before trusting or writing over a fact. Read-only and tome-scoped: an id not in your tome returns found=false with an empty chain.",
     "destructive": false,
     "idempotent": true,
     "input": {

@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Read into OTHER tomes - the one deliberate cross-tome surface. Use it when your own tome lacks the answer: a fresh tome needs the project history another agent already recorded, the human asks what a sibling agent knows, or a decision might live in another project's tome. Ranking, query and limit behave exactly like memory_recall over active records; superseded and tombstoned entries never surface. Facts are searched by default, includeJournal opts into append-style journal entries, and session memories never cross tomes. Results are anonymous by default - attribution 'light' adds the author alias, 'full' adds alias and vendor; the store always keeps full provenance, anonymity is presentation only. Without tomes every other tome is searched; pass tomes to narrow. Tome keys must be kebab-case; an empty result means the other tomes hold nothing on the topic, not a failure. upstream_unavailable means the embedding provider or store is unreachable; scry is read-only and never writes into your tome.",
+    "description": "Read into OTHER tomes - the one deliberate cross-tome surface; the only trace is an access bump on the records it surfaces, never a new row in your tome. Facts alone unless includeJournal opts in; session rows never cross, superseded and tombstoned never surface, and hits stay anonymous until attribution lifts the provenance veil.",
     "destructive": false,
     "idempotent": true,
     "input": {

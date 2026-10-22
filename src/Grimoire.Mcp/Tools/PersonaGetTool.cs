@@ -12,12 +12,9 @@ internal sealed class PersonaGetTool(PersonaService persona, MemoryActorProvider
     public const string Title = "Get the persona";
 
     public const string Description =
-        "Read the persona document the human curates for their agents: identity, tone, preferences, rules. The " +
-        "persona is per-tome - each tome carries its own. Call it at session start before writing in the human's " +
-        "voice or making style calls, and whenever a standing instruction might exist - check, don't guess. Empty " +
-        "sections were never filled by the human: do not invent content for them, and do not write persona facts " +
-        "through memory_remember; the human edits persona in the Grimoire UI or CLI. upstream_unavailable means " +
-        "the store is unreachable; the call is read-only and writes nothing.";
+        "Read the human-curated persona of one tome: identity, tone, preferences, rules. Check it before writing " +
+        "in the human's voice or making style calls; empty sections were never filled - do not invent them, and " +
+        "persona is edited by the human in the UI or CLI, never through these memory tools.";
 
     public Task<CallToolResult> Get(
         [Description("Tome whose persona to read; omit for your resolved tome.")]

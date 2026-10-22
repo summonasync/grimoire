@@ -12,16 +12,11 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
     public const string Title = "Get the startup brief";
 
     public const string Description =
-        "Load the agent startup brief in one call - persona, top-scored facts, recent journal and the tombstone " +
-        "digest - instead of chaining memory_persona_get, memory_recall and memory_list at session start. Sections " +
-        "fill in priority order (persona, facts, tombstones, journal) under a total char budget; chars are the size " +
-        "proxy, not exact tokens, and a section that no longer fits is named in omitted - truncation is never " +
-        "silent. Journal bodies are capped per entry and flagged truncated; tombstones are references only, inspect " +
-        "one via memory_list status=Tombstoned. A section in state empty means cold start: nothing recorded there " +
-        "yet, not a failure - when every section comes back empty the response says so and points at memory_scry " +
-        "for cross-tome context. The brief is scoped to one tome; pass tome to brief another tome you own. " +
-        "upstream_unavailable means the store or embedding provider is unreachable; the call is read-only and " +
-        "writes nothing.";
+        "Load the session-start payload in one call: persona, top-scored facts, recent journal, the tombstone " +
+        "digest, and the startup contract block in hint - read it here once instead of chaining persona_get, " +
+        "recall and list. Sections fill in priority order under a char budget, journal bodies are capped per " +
+        "entry and flagged truncated, and what no longer fits is named in omitted; state empty is cold start, " +
+        "not failure.";
 
     public Task<CallToolResult> Brief(
         [Description("Restrict to memories of one project.")]
@@ -64,12 +59,33 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
                 Tombstones = ToItemsSection(result.TombstonesState, result.Tombstones, ToTombstoneItem),
                 Journal = ToItemsSection(result.JournalState, result.Journal, ToJournalItem),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
-                Hint = IsEmpty(result) ? EmptyTomeHint : null,
+                Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
             });
         }, cancellationToken);
     }
 
     private const string EmptyTomeHint = "tome is empty — use memory_scry for cross-tome context";
+
+    private const string StartupContract =
+        "startup contract - how to work this server. At session start call memory_persona_get before writing " +
+        "in the human's voice or making style calls - check, don't guess, and never invent empty persona " +
+        "sections; run memory_recall before redoing work that may already have a decision on record. Write " +
+        "with memory_remember when the human states a preference, decision or correction - record it as they " +
+        "said it, not as your summary; kind fact for statements that must still read true next week, journal " +
+        "for progress notes; scope session dies with the session, project needs projectId, global is " +
+        "cross-project truth, personal is identity-level; the persona itself is human-curated, never write it " +
+        "here. A near-duplicate write supersedes the older record and names the replaced id; retrying an " +
+        "identical write replays it; maintenancePending=true means the record committed but duplicate cleanup " +
+        "did not finish - replaying converges. Before you overwrite or retract a hit, walk memory_history so " +
+        "the correction lands on the right generation; memory_forget keeps your reason on the tombstone for " +
+        "the human to audit (inspect it via memory_list status=Tombstoned - nothing is hard-deleted, GC owns " +
+        "that); memory_restore reverses a correction that turned out wrong. Compaction loop: when memory_stats " +
+        "reports pendingCompaction, pull memory_compact_candidates, write one kind=fact memory_remember per " +
+        "cluster, then memory_forget each consumed entry with a reason like 'compacted into <new id>'; never " +
+        "tombstone entries you did not actually distill. Conventions: reads accept tome= for another tome you " +
+        "own, writes never cross tomes, memory_scry is the one cross-tome read; upstream_unavailable means the " +
+        "store or embedding provider is unreachable - reads returned nothing, writes landed nothing, and the " +
+        "retry is safe when infra is back.";
 
     private static bool IsEmpty(BriefResult result) =>
         result.PersonaState == BriefSectionState.Empty &&

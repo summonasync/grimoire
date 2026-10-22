@@ -12,15 +12,9 @@ internal sealed class ForgetTool(MemoryService memories, MemoryActorProvider act
     public const string Title = "Forget a memory";
 
     public const string Description =
-        "Tombstone a memory that is wrong, outdated or retracted, and get back whether it landed: memoryId, tome, " +
-        "forgotten and your reason on success. Nothing is hard-deleted: the record stays stored with a visible " +
-        "tombstone and your reason, but disappears from recall and from list's default (active) view. " +
-        "Call it when the human retracts a fact or reverses a decision (\"forget that, we do it differently now\"), " +
-        "and to retire journal entries after distilling them into facts. Use the exact memoryId from an earlier " +
-        "recall, list or compact-candidates result. A tombstone lands only in the resolved tome: an id that lives " +
-        "in another tome comes back forgotten=false - reads accept tome=, writes never cross. Forgetting an " +
-        "unknown or already-forgotten id also returns forgotten=false - do not retry. upstream_unavailable means " +
-        "the store is unreachable and no tombstone was applied.";
+        "Tombstone a memory that is wrong or retracted - nothing hard-deletes: the record stays stored with your " +
+        "reason and vanishes from recall and the default active list. Pass an exact memoryId from an earlier result; " +
+        "an unknown, already-forgotten or foreign-tome id comes back forgotten=false - do not retry.";
 
     public Task<CallToolResult> Forget(
         [Description("The id of the memory to tombstone, exactly as returned by a previous tool call.")]

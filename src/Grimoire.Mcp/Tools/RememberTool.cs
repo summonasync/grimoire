@@ -12,21 +12,10 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
     public const string Title = "Remember a memory";
 
     public const string Description =
-        "Write a durable memory for future sessions and get back the stored record: its id, resolved tome, scope, " +
-        "kind, tags and supersede outcome. Use it when the human states a preference, decision or correction " +
-        "(\"always X\", \"never Y\", \"we switched to Z\"), when work reveals a non-obvious constraint or gotcha, " +
-        "and when the human says something worth keeping verbatim - record it as they said it, not as your " +
-        "summary. Pick kind: journal for subjective progress notes; fact for statements that must still read " +
-        "true next week (decisions, rules, preferences). Pick scope: session for things that die with this " +
-        "session; project (requires projectId) for one codebase; global for cross-project truths about the human " +
-        "and their tooling; personal only for identity-level traits - the persona itself is human-curated, never " +
-        "write it here. A near-duplicate write in the same scope and kind supersedes the older record and the " +
-        "response names the replaced id; retrying the identical write is safe - it replays the original record " +
-        "(idempotentReplay=true) instead of storing a copy. Writes are tome-bound: the memory lands in your " +
-        "resolved tome, or in the tome you pass. upstream_unavailable means the embedding provider or store is " +
-        "unreachable - nothing was written, retry when it is back. maintenancePending=true on an otherwise " +
-        "successful call means the memory committed but duplicate supersede did not finish; replaying the same " +
-        "write converges it. Never store secrets or tokens.";
+        "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - " +
+        "with your actor provenance on it. Call it when the human states a preference, decision or correction " +
+        "and record it verbatim; a near-duplicate supersedes the older record, an identical write replays it, " +
+        "and never store secrets.";
 
     public Task<CallToolResult> Remember(
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]

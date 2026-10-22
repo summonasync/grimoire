@@ -12,17 +12,11 @@ internal sealed class StatsTool(MemoryService memories, MemoryActorProvider acto
     public const string Title = "Get memory stats";
 
     public const string Description =
-        "Report store health: active, superseded and tombstoned counts, active records per scope, " +
-        "pendingCompaction (journal entries clustered and waiting to be distilled into facts), " +
-        "idempotencyConflicts (active duplicates whose supersede maintenance never finished; 0 is healthy, " +
-        "replaying the same write converges them), and gc (the host-side sweep heartbeat: lastAttemptAt, " +
-        "lastSuccessAt, what the last sweep removed, lastError of the failed attempt; stale=true once the " +
-        "last success is older than two sweep intervals or the heartbeat is unreadable, meaning expired " +
-        "records may be piling up). Counts span the whole store; byTome splits active and " +
-        "tombstoned per tome and tome names the one your tools resolve to. Call it to check the store is " +
-        "reachable after a failed memory call, to size the compaction backlog before running " +
-        "memory_compact_candidates, or when the human asks what memory currently holds. upstream_unavailable " +
-        "here means the store itself is unreachable - no counts could be read.";
+        "Report store health: active, superseded and tombstoned counts, records per scope, the pendingCompaction " +
+        "backlog, idempotencyConflicts and the gc heartbeat, where stale=true means the sweep is overdue and " +
+        "expired records may be piling up; byTome splits active and tombstoned per tome while counts span the " +
+        "whole store. Call it after a failed memory call to check reachability, or to size the compaction loop " +
+        "before working candidates.";
 
     public Task<CallToolResult> GetStats(
         [Description("Tome named in the response as yours; omit unless you want to declare another tome you own. Stats themselves always span the whole store.")]

@@ -27,17 +27,17 @@ public sealed class McpToolContractTests
     public static TheoryData<string, string[]> TeachingKeywords()
     {
         var data = new TheoryData<string, string[]>();
-        data.Add("memory_remember", ["projectId", "supersedes", "Never store secrets", "tome"]);
-        data.Add("memory_recall", ["session start", "before you assume", "tome"]);
+        data.Add("memory_remember", ["supersedes", "actor provenance", "never store secrets", "tome"]);
+        data.Add("memory_recall", ["before you assume", "memory_scry", "tome", "access stats", "narrow with scope"]);
         data.Add("memory_forget", ["tombstone", "forgotten=false", "tome"]);
-        data.Add("memory_restore", ["undo door", "one active truth", "restored=false", "correction trail", "tome"]);
-        data.Add("memory_history", ["replacement lineage", "oldest to newest", "found=false", "read-only", "tome"]);
+        data.Add("memory_restore", ["undo door", "one active truth", "restored=false", "correction trail", "tome", "converges"]);
+        data.Add("memory_history", ["replacement lineage", "oldest to newest", "found=false", "read-only", "tome", "120-char"]);
         data.Add("memory_list", ["newest first", "active", "tome"]);
-        data.Add("memory_persona_get", ["identity, tone, preferences, rules", "were never filled", "per-tome"]);
+        data.Add("memory_persona_get", ["identity, tone, preferences, rules", "never filled", "human-curated"]);
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
-        data.Add("memory_stats", ["pendingCompaction", "memory_compact_candidates", "byTome"]);
-        data.Add("memory_brief", ["session start", "omitted", "tombstone", "cold start", "upstream_unavailable", "memory_scry"]);
-        data.Add("memory_scry", ["OTHER tomes", "memory_recall", "journal", "anonymous", "session", "read-only"]);
+        data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
+        data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
+        data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);
         return data;
     }
 
