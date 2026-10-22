@@ -9,12 +9,12 @@ One binary, three faces:
 | Face | Command | Who uses it |
 |---|---|---|
 | MCP server | `grimoire mcp` (stdio) | AI agents — Claude Code, Qwen Code, Kimi, anything speaking MCP |
-| Web console | `grimoire serve` (loopback HTTP + SPA) | the human — browse, edit, tune |
+| Web console | `grimoire serve` (loopback HTTP + SPA), opened by `grimoire ui` | the human — browse, edit, tune |
 | CLI | `grimoire <command>` | scripts and quick queries |
 
 **Status**: the MVP plus honest-writes, startup-brief and the tome model are landed
 and acceptance-verified end to end — all three faces (CLI, MCP stdio, loopback web
-console) round-trip against a live Qdrant + Ollama, 656 tests green. Live work
+console) round-trip against a live Qdrant + Ollama, 818 tests green. Live work
 tracking happens on the Overmind board; this README describes the shipped shape plus
 the frozen contracts.
 
@@ -40,7 +40,28 @@ dotnet test Grimoire.sln
 # 3. First run
 grimoire init     # writes ~/.grimoire/config.json, creates the collection
 grimoire serve    # web console on http://127.0.0.1:4770
+
+# 4. Or let the console come to you
+grimoire ui       # opens http://grimoire.localhost:4770 in the default browser,
+                  # starting the systemd user unit first when nothing is serving
 ```
+
+`grimoire ui` probes `http://127.0.0.1:<serve.port>/health`; when nothing answers it runs
+`systemctl --user start grimoire-serve` once and waits (10s budget) before opening. A console
+that never answers is a failure, not a blank tab: the command reports the remedy and exits 6.
+The address it shows is `grimoire.localhost` when that name resolves to loopback, otherwise the
+literal `127.0.0.1` — the health probe itself always uses the literal, because the server binds
+IPv4 loopback only.
+
+Login autostart is opt-in and reversible, and neither flag opens anything:
+
+```bash
+grimoire ui --enable-at-login    # writes ~/.config/autostart/grimoire-ui.desktop (one report line, exit 0)
+grimoire ui --disable-at-login   # removes it; reports cleanly when there is nothing to remove
+```
+
+The entry names the binary you ran, so re-enabling after a release refreshes it. Running either
+flag twice is a no-op: a matching entry reports "already up to date" and is not rewritten.
 
 Wire an agent to the memory (stdio MCP):
 
@@ -53,6 +74,29 @@ Wire an agent to the memory (stdio MCP):
   }
 }
 ```
+
+## Distribution
+
+The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs `Grimoire.<version>.nupkg` (version from
+`Directory.Build.props`, tool command `grimoire`). The public feed (nuget.org) is an owner decision
+still pending, so the shipped channel today is a local folder feed built from this repo:
+
+```bash
+dotnet pack src/Grimoire.Cli -c Release -o build/packages
+dotnet tool install -g Grimoire --add-source build/packages --no-cache
+grimoire --version    # -> grimoire 0.2.0
+```
+
+`-g` lands `grimoire` on PATH (`~/.dotnet/tools` on Linux/macOS,
+`%USERPROFILE%\.dotnet\tools` on Windows; use `--tool-path <dir>` for anywhere else). One package
+covers win/mac/linux — as a framework-dependent tool it rides an installed .NET 10 runtime;
+machines without one need the runtime or the self-contained release binary instead.
+External installers (Overmind's assisted install) spawn exactly these commands and then probe
+`grimoire --version`.
+
+The local infrastructure story is unchanged: Qdrant + Ollama via
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml), isolated per-product variant
+[`deploy/docker-compose.grimoire.yml`](deploy/docker-compose.grimoire.yml).
 
 ## How memory works
 
