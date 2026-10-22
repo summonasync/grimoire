@@ -1,6 +1,7 @@
 using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Mcp;
 using Qdrant.Client.Grpc;
 using Shouldly;
 using Xunit;
@@ -189,6 +190,35 @@ public sealed class CliApplicationTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
     }
+
+    [Fact]
+    public async Task RunAsync_UnknownEnvOverride_EmitsSingleUnknownEnvKeyMarker()
+    {
+        using var host = new TestHost(configEnvironment: new Dictionary<string, string> { ["GRIMOIRE_LOG"] = "debug" });
+
+        var code = await host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Config);
+        MarkerLines(host.Output.ToString()).ShouldHaveSingleItem()
+            .ShouldStartWith("mount_fail:unknown_env_key Environment override 'GRIMOIRE_LOG'");
+    }
+
+    [Fact]
+    public async Task RunAsync_TypeIncompatibleEnvOverride_EmitsSingleConfigInvalidMarker()
+    {
+        using var host = new TestHost(configEnvironment: new Dictionary<string, string> { ["GRIMOIRE_SERVE__PORT"] = "not-a-number" });
+
+        var code = await host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Config);
+        MarkerLines(host.Output.ToString()).ShouldHaveSingleItem()
+            .ShouldStartWith("mount_fail:config_invalid ");
+    }
+
+    private static List<string> MarkerLines(string captured) =>
+        captured.Split('\n').Where(line => line.StartsWith("mount_fail:") || line.StartsWith(BootMarkers.MountOkPrefix + " "))
+            .Select(line => line.TrimEnd('\r'))
+            .ToList();
 
     public void Dispose() => _host.Dispose();
 }

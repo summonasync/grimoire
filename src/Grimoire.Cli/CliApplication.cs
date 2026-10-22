@@ -2,6 +2,7 @@ using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Mcp;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -53,6 +54,7 @@ internal static class CliApplication
         catch (ConfigException ex)
         {
             Report(env, "config", ex.Message);
+            env.Error.WriteLine(BootMarkers.MountFailLine(BootMarkers.ClassifyConfigException(ex.Message), ex.Message));
             return ExitCodes.Config;
         }
         catch (UpstreamUnavailableException ex)
