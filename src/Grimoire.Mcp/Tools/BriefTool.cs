@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -22,7 +23,8 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
         [Description("Restrict to memories of one project.")]
         string? projectId = null,
         [Description("Restrict facts, journal and tombstones to these scopes; defaults to project and global, session is never briefed.")]
-        MemoryScope[]? scopes = null,
+        [AllowedValues("Session", "Project", "Global", "Personal")]
+        string[]? scopes = null,
         [Description("Top facts per scope, default 5, clamped server-side.")]
         int? factsPerScope = null,
         [Description("Recent journal entries per scope, default 5, clamped server-side.")]
@@ -33,6 +35,12 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
         string? tome = null,
         CancellationToken cancellationToken = default)
     {
+        var (scopesFilter, scopesError) = EnumParams.ParseEntries<MemoryScope>(scopes, nameof(scopes));
+        if (scopesError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(scopesError));
+        }
+
         if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
         {
             return Task.FromResult(ToolResults.Failure(tomeError));
@@ -45,7 +53,7 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
             {
                 Tome = resolvedTome,
                 ProjectId = projectId,
-                Scopes = scopes ?? [],
+                Scopes = scopesFilter ?? [],
                 FactsPerScope = factsPerScope,
                 JournalPerScope = journalPerScope,
                 TombstoneLimit = tombstoneLimit,

@@ -16,9 +16,11 @@ public sealed class ForgetToolTests
             ["reason"] = "cleanup",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("memoryId");
+        message.ShouldContain("'not-a-guid'");
+        message.ShouldContain("Nothing was applied by this call.");
     }
 
     [Theory]
@@ -34,9 +36,31 @@ public sealed class ForgetToolTests
             ["reason"] = reason,
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("reason");
+        message.ShouldContain($"reason: '{reason}'");
+        message.ShouldContain("Nothing was applied by this call.");
+    }
+
+    [Fact]
+    public async Task Forget_InvalidTome_EchoesValueAndStatesNothingApplied()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = Guid.NewGuid().ToString(),
+            ["reason"] = "cleanup",
+            ["tome"] = "bad/tome",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tome");
+        message.ShouldContain("'bad/tome'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
     }
 
     [Fact]

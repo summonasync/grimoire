@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -21,9 +22,11 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]
         string content,
         [Description("session expires after ~24h; project needs projectId; global and personal live across projects.")]
-        MemoryScope scope,
+        [AllowedValues("Session", "Project", "Global", "Personal")]
+        string scope,
         [Description("journal for append-style observations; fact for curated standing statements.")]
-        MemoryKind kind = MemoryKind.Journal,
+        [AllowedValues("Journal", "Fact")]
+        string kind = "Journal",
         [Description("Required for scope=project: the project key this memory belongs to. Omit for any other scope.")]
         string? projectId = null,
         [Description("Only for scope=session: identifies the current session.")]
@@ -36,60 +39,77 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         string? tome = null,
         CancellationToken cancellationToken = default)
     {
+        var (scopeValue, scopeError) = EnumParams.ParseRequired<MemoryScope>(scope, nameof(scope));
+        if (scopeError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(scopeError.NothingApplied()));
+        }
+
+        var (kindValue, kindError) = EnumParams.Parse<MemoryKind>(kind, nameof(kind));
+        if (kindError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(kindError.NothingApplied()));
+        }
+
+        var kindEffective = kindValue ?? MemoryKind.Journal;
+
         if (string.IsNullOrWhiteSpace(content))
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
                 "content must not be empty or whitespace.",
-                nameof(content))));
+                nameof(content)).NothingApplied()));
         }
 
         if (!double.IsFinite(importance) || importance is < 0 or > 1)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
-                "importance must be a finite number within 0..1.",
-                nameof(importance))));
+                $"importance must be a finite number within 0..1 - got '{importance}'.",
+                nameof(importance)).NothingApplied()));
         }
 
-        if (scope == MemoryScope.Project && string.IsNullOrWhiteSpace(projectId))
+        if (scopeValue == MemoryScope.Project && string.IsNullOrWhiteSpace(projectId))
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.ProjectIdRequired,
-                "scope 'project' requires projectId: a project memory without one would be matched against every " +
-                "project and could supersede another project's record. Pass projectId, or use scope 'global' when " +
-                "the memory is not project-specific.",
-                nameof(projectId))));
+                "scope 'Project' requires projectId (got scope 'Project', no projectId): a project memory without " +
+                "one would be matched against every project and could supersede another project's record. Pass " +
+                "projectId, or use scope 'Global' when the memory is not project-specific.",
+                nameof(projectId)).NothingApplied()));
         }
 
-        if (scope != MemoryScope.Project && projectId is not null)
+        if (scopeValue != MemoryScope.Project && projectId is not null)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.ParamConflict,
-                $"projectId only applies to scope 'project'; omit it or change the scope (got scope '{scope}').",
-                nameof(projectId))));
+                $"projectId only applies to scope 'Project'; omit it or change the scope " +
+                $"(got projectId '{projectId}' with scope '{scope}').",
+                nameof(projectId)).NothingApplied()));
         }
 
-        if (scope != MemoryScope.Session && sessionId is not null)
+        if (scopeValue != MemoryScope.Session && sessionId is not null)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.ParamConflict,
-                $"sessionId only applies to scope 'session'; omit it or change the scope (got scope '{scope}').",
-                nameof(sessionId))));
+                $"sessionId only applies to scope 'Session'; omit it or change the scope " +
+                $"(got sessionId '{sessionId}' with scope '{scope}').",
+                nameof(sessionId)).NothingApplied()));
         }
 
-        if (scope == MemoryScope.Session && kind == MemoryKind.Fact)
+        if (scopeValue == MemoryScope.Session && kindValue == MemoryKind.Fact)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
-                "scope 'session' only accepts kind 'journal': session memories expire within a day and cannot hold " +
-                "standing facts. Store the durable statement in scope 'project' or 'global'.",
-                nameof(kind))));
+                "scope 'Session' only accepts kind 'Journal': session memories expire within a day and cannot hold " +
+                $"standing facts (got kind '{kind}'). Store the durable statement in scope 'Project' (with projectId) " +
+                "or scope 'Global'.",
+                nameof(kind)).NothingApplied()));
         }
 
         if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
         {
-            return Task.FromResult(ToolResults.Failure(tomeError));
+            return Task.FromResult(ToolResults.Failure(tomeError.NothingApplied()));
         }
 
         return ToolResults.ExecuteAsync(async ct =>
@@ -98,8 +118,8 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
             var result = await memories.RememberAsync(new RememberRequest
             {
                 Content = content,
-                Scope = scope,
-                Kind = kind,
+                Scope = scopeValue,
+                Kind = kindEffective,
                 Actor = actors.GetActor(),
                 Tome = resolvedTome,
                 ProjectId = projectId,

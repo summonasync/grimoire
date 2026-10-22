@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -20,9 +21,11 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
         [Description("What to look for. Phrasing may be approximate - recall is semantic, not keyword match.")]
         string query,
         [Description("Restrict to one scope; omit to search all long-term scopes (project, global, personal).")]
-        MemoryScope? scope = null,
+        [AllowedValues("Session", "Project", "Global", "Personal")]
+        string? scope = null,
         [Description("Restrict to journal or fact records.")]
-        MemoryKind? kind = null,
+        [AllowedValues("Journal", "Fact")]
+        string? kind = null,
         [Description("Restrict to memories of one project.")]
         string? projectId = null,
         [Description("Restrict to one session's memories.")]
@@ -35,6 +38,18 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
         string? tome = null,
         CancellationToken cancellationToken = default)
     {
+        var (scopeFilter, scopeError) = EnumParams.Parse<MemoryScope>(scope, nameof(scope));
+        if (scopeError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(scopeError));
+        }
+
+        var (kindFilter, kindError) = EnumParams.Parse<MemoryKind>(kind, nameof(kind));
+        if (kindError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(kindError));
+        }
+
         if (string.IsNullOrWhiteSpace(query))
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
@@ -62,8 +77,8 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
             var matches = await memories.RecallAsync(new RecallQuery
             {
                 Text = query,
-                Scopes = scope is null ? [] : [scope.Value],
-                Kind = kind,
+                Scopes = scopeFilter is null ? [] : [scopeFilter.Value],
+                Kind = kindFilter,
                 Tags = tags ?? [],
                 Tome = resolvedTome,
                 ProjectId = projectId,

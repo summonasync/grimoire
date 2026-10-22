@@ -63,8 +63,13 @@ public sealed class McpToolContractTests
         var data = new TheoryData<string, string, string[]>();
         data.Add("memory_remember", "scope", ["Session", "Project", "Global", "Personal"]);
         data.Add("memory_remember", "kind", ["Journal", "Fact"]);
+        data.Add("memory_list", "scope", ["Session", "Project", "Global", "Personal"]);
+        data.Add("memory_list", "kind", ["Journal", "Fact"]);
         data.Add("memory_list", "status", ["Active", "Superseded", "Tombstoned"]);
+        data.Add("memory_recall", "scope", ["Session", "Project", "Global", "Personal"]);
+        data.Add("memory_recall", "kind", ["Journal", "Fact"]);
         data.Add("memory_scry", "attribution", ["None", "Light", "Full"]);
+        data.Add("memory_brief", "scopes", ["Session", "Project", "Global", "Personal"]);
         return data;
     }
 
@@ -245,9 +250,20 @@ public sealed class McpToolContractTests
         await using var session = await McpTestSession.StartAsync();
 
         var property = Property((await session.Client.ListToolMap())[tool].JsonSchema, parameter);
+        var tokenHolder = property.TryGetProperty("items", out var items) && items.TryGetProperty("enum", out _)
+            ? items
+            : property;
+        var type = tokenHolder.GetProperty("type");
+        if (type.ValueKind == JsonValueKind.Array)
+        {
+            type.EnumerateArray().ShouldContain(value => value.GetString() == "string");
+        }
+        else
+        {
+            type.GetString().ShouldBe("string");
+        }
 
-        property.GetProperty("type").GetString().ShouldBe("string");
-        property.GetProperty("enum").EnumerateArray()
+        tokenHolder.GetProperty("enum").EnumerateArray()
             .Select(value => value.GetString()!)
             .ShouldBe(expected);
     }

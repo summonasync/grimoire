@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using Grimoire.Core;
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Server;
 using Grimoire.Mcp.Tools;
 
@@ -55,7 +57,30 @@ internal static class ToolCatalog
             Destructive = destructive,
             Idempotent = idempotent,
             OpenWorld = false,
+            SchemaCreateOptions = new AIJsonSchemaCreateOptions
+            {
+                TransformSchemaNode = MoveArrayEnumToItems,
+            },
         });
+    }
+
+    private static JsonNode MoveArrayEnumToItems(AIJsonSchemaCreateContext context, JsonNode node)
+    {
+        if (node is not JsonObject obj
+            || !obj.TryGetPropertyValue("enum", out var enumNode)
+            || enumNode is not JsonArray tokens
+            || !obj.TryGetPropertyValue("items", out _))
+        {
+            return node;
+        }
+
+        obj.Remove("enum");
+        obj["items"] = new JsonObject
+        {
+            ["type"] = "string",
+            ["enum"] = (JsonArray)tokens.DeepClone(),
+        };
+        return obj;
     }
 
     private static T Require<T>(IServiceProvider services) where T : class

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -19,11 +20,14 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
 
     public Task<CallToolResult> List(
         [Description("Restrict to one scope.")]
-        MemoryScope? scope = null,
+        [AllowedValues("Session", "Project", "Global", "Personal")]
+        string? scope = null,
         [Description("Restrict to journal or fact records.")]
-        MemoryKind? kind = null,
+        [AllowedValues("Journal", "Fact")]
+        string? kind = null,
         [Description("active by default; superseded shows dedup history; tombstoned shows retracted entries.")]
-        MemoryStatus status = MemoryStatus.Active,
+        [AllowedValues("Active", "Superseded", "Tombstoned")]
+        string status = "Active",
         [Description("Restrict to memories of one project.")]
         string? projectId = null,
         [Description("Restrict to one session's memories.")]
@@ -36,6 +40,24 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
         string? tome = null,
         CancellationToken cancellationToken = default)
     {
+        var (scopeFilter, scopeError) = EnumParams.Parse<MemoryScope>(scope, nameof(scope));
+        if (scopeError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(scopeError));
+        }
+
+        var (kindFilter, kindError) = EnumParams.Parse<MemoryKind>(kind, nameof(kind));
+        if (kindError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(kindError));
+        }
+
+        var (statusFilter, statusError) = EnumParams.Parse<MemoryStatus>(status, nameof(status));
+        if (statusError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(statusError));
+        }
+
         if (limit <= 0)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
@@ -54,9 +76,9 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
             var records = await memories.ListAsync(new MemoryFilter
             {
-                Scopes = scope is null ? [] : [scope.Value],
-                Kind = kind,
-                Status = status,
+                Scopes = scopeFilter is null ? [] : [scopeFilter.Value],
+                Kind = kindFilter,
+                Status = statusFilter ?? MemoryStatus.Active,
                 Tags = tags ?? [],
                 Tome = resolvedTome,
                 ProjectId = projectId,

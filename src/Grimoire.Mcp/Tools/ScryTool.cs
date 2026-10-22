@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -25,11 +26,20 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
         [Description("Opt into other tomes' journal entries; facts alone are searched by default.")]
         bool includeJournal = false,
         [Description("none strips actor fields, light keeps the alias, full keeps alias and vendor. Default none.")]
-        ScryAttribution attribution = ScryAttribution.None,
+        [AllowedValues("None", "Light", "Full")]
+        string attribution = "None",
         [Description("Maximum matches to return, default 5.")]
         int limit = 5,
         CancellationToken cancellationToken = default)
     {
+        var (attributionValue, attributionError) = EnumParams.Parse<ScryAttribution>(attribution, nameof(attribution));
+        if (attributionError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(attributionError));
+        }
+
+        var attributionFilter = attributionValue ?? ScryAttribution.None;
+
         if (string.IsNullOrWhiteSpace(query))
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
@@ -63,7 +73,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
                 return ToolResults.Success(new ScryView
                 {
                     Tomes = [],
-                    Attribution = attribution,
+                    Attribution = attributionFilter,
                     Hits = [],
                     Count = 0,
                 });
@@ -81,8 +91,8 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
             return ToolResults.Success(new ScryView
             {
                 Tomes = targets,
-                Attribution = attribution,
-                Hits = [.. matches.Select(match => ToHit(match, attribution))],
+                Attribution = attributionFilter,
+                Hits = [.. matches.Select(match => ToHit(match, attributionFilter))],
                 Count = matches.Count,
             });
         }, cancellationToken);

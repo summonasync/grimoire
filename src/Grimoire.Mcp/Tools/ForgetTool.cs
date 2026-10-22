@@ -29,21 +29,21 @@ internal sealed class ForgetTool(MemoryService memories, MemoryActorProvider act
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
-                "memoryId must be a canonical UUID, exactly as returned by a previous memory tool call.",
-                nameof(memoryId))));
+                $"memoryId: '{memoryId}' is not a canonical UUID - pass the id exactly as returned by a previous memory tool call.",
+                nameof(memoryId)).NothingApplied()));
         }
 
         if (string.IsNullOrWhiteSpace(reason))
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
-                "reason must not be empty: every tombstone must say why it exists.",
-                nameof(reason))));
+                $"reason: '{reason}' is blank: every tombstone must say why it exists.",
+                nameof(reason)).NothingApplied()));
         }
 
         if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
         {
-            return Task.FromResult(ToolResults.Failure(tomeError));
+            return Task.FromResult(ToolResults.Failure(tomeError.NothingApplied()));
         }
 
         return ToolResults.ExecuteAsync(async ct =>
