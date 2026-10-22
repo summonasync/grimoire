@@ -2,6 +2,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Processes;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Grimoire.Cli;
@@ -34,6 +35,8 @@ internal static class CliServices
         services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.Serve.GcIntervalMinutes) });
         services.AddSingleton<IGcStateStore>(new GcStateFileStore());
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
+        services.AddSingleton<IExternalProcess, SystemProcess>();
+        services.AddSingleton<IConsoleProbe>(sp => new LoopbackConsoleProbe(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<MemoryService>(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

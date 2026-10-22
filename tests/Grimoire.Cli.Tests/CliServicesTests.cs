@@ -2,6 +2,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Processes;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -43,6 +44,15 @@ public sealed class CliServicesTests
 
         provider.GetRequiredService<MemoryService>().ShouldBeSameAs(provider.GetRequiredService<MemoryService>());
         provider.GetRequiredService<PersonaService>().ShouldBeSameAs(provider.GetRequiredService<PersonaService>());
+    }
+
+    [Fact]
+    public void Build_ResolvesProcessAndProbePorts()
+    {
+        using var provider = CliServices.Build(Options());
+
+        provider.GetRequiredService<IExternalProcess>().ShouldBeOfType<SystemProcess>();
+        provider.GetRequiredService<IConsoleProbe>().ShouldBeOfType<LoopbackConsoleProbe>();
     }
 
     private static GrimoireOptions Options() => new()
