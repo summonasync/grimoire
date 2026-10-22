@@ -10,10 +10,11 @@ public static class McpHost
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(services);
 
-        await using var transport = new StdioServerTransport(options.ServerName, NullLoggerFactory.Instance);
-        await using var server = McpServerFactory.Create(transport, options, services);
         try
         {
+            await using var transport = new StdioServerTransport(options.ServerName, NullLoggerFactory.Instance);
+            await using var server = McpServerFactory.Create(transport, options, services);
+            await Console.Error.WriteLineAsync(BootMarkers.MountOkLine(options.ServerName, options.ServerVersion));
             await server.RunAsync(cancellationToken);
             return 0;
         }
@@ -23,7 +24,8 @@ public static class McpHost
         }
         catch (Exception exception)
         {
-            await Console.Error.WriteLineAsync($"Grimoire MCP host terminated unexpectedly: {exception.Message}");
+            var reason = BootMarkers.ClassifyHostException(exception);
+            await Console.Error.WriteLineAsync(BootMarkers.MountFailLine(reason, exception.Message));
             return 1;
         }
     }
