@@ -123,7 +123,6 @@ internal static class ToolSurfaceProbes
 
         await Probe(session, probes, "memory_list", new Dictionary<string, object?>());
         await Probe(session, probes, "memory_persona_get", new Dictionary<string, object?>());
-        await Probe(session, probes, "memory_brief", new Dictionary<string, object?>());
 
         float[] firstCluster = [1f, 0.05f, 0];
         float[] secondCluster = [1f, 0.05f, 0.05f];
@@ -131,6 +130,8 @@ internal static class ToolSurfaceProbes
             StaleJournal(Guid.NewGuid(), "snapshot probe stale journal one", stale), firstCluster, CancellationToken.None);
         await session.Store.UpsertAsync(
             StaleJournal(Guid.NewGuid(), "snapshot probe stale journal two", stale), secondCluster, CancellationToken.None);
+
+        await Probe(session, probes, "memory_brief", new Dictionary<string, object?>());
 
         await Probe(session, probes, "memory_compact_candidates", new Dictionary<string, object?>());
         await Probe(session, probes, "memory_stats", new Dictionary<string, object?>());

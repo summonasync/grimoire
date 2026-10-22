@@ -26,6 +26,8 @@ public sealed class BriefService(
         var omitted = new List<BriefSection>();
         var remaining = _options.BriefMaxTotalChars;
 
+        var compactionDue = MeasureCompactionDueAsync(tome, now, cancellationToken);
+
         BriefSectionState Fit(BriefSection section, int cost)
         {
             if (cost <= 0)
@@ -66,7 +68,32 @@ public sealed class BriefService(
             JournalState = journalState,
             Journal = journalState == BriefSectionState.Populated ? journal : [],
             Omitted = omitted,
+            CompactionDue = await compactionDue,
         };
+    }
+
+    private async Task<BriefCompactionDue?> MeasureCompactionDueAsync(string tome, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var filter = new MemoryFilter
+        {
+            Scopes = MemoryScopes.LongTerm,
+            Kind = MemoryKind.Journal,
+            Status = MemoryStatus.Active,
+            Tome = tome,
+        };
+
+        var journal = await store.ListAsync(filter, cancellationToken);
+        var staleThreshold = TimeSpan.FromDays(_options.Compaction.StalenessDays);
+        if (journal.Count(record => now - record.LastAccessedAt >= staleThreshold) < _options.Compaction.MinClusterSize)
+        {
+            return null;
+        }
+
+        var points = await store.FetchAsync(filter, cancellationToken);
+        var groups = CompactionPlanner.Plan(points, now, _options.Compaction);
+        return groups.Count == 0
+            ? null
+            : new BriefCompactionDue { PendingEntries = groups.Sum(group => group.MemoryIds.Count) };
     }
 
     private async Task<IReadOnlyList<BriefFact>> CollectFactsAsync(

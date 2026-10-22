@@ -53,6 +53,66 @@ public sealed class BriefToolTests
     }
 
     [Fact]
+    public async Task Brief_StartupContract_TeachesTheCompactionDueDoor()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var hint = result.Payload().GetProperty("hint").GetString()!;
+        var route = hint[hint.IndexOf("Compaction loop", StringComparison.Ordinal)..];
+        route.ShouldContain("compactionDue");
+        route.ShouldContain("memory_compact_candidates");
+    }
+
+    [Fact]
+    public async Task Brief_StaleSimilarJournal_NamesThePendingEntries()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var stale = session.Clock.UtcNow.AddDays(-30);
+        await session.Store.UpsertAsync(StaleJournal("Mediator dispatch generics keep biting us", stale), new float[] { 1, 0.05f, 0 }, CancellationToken.None);
+        await session.Store.UpsertAsync(StaleJournal("Generic dispatch issues with Mediator again", stale), new float[] { 1, 0.05f, 0.05f }, CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var due = result.Payload().GetProperty("compactionDue");
+        due.GetProperty("pendingEntries").GetInt64().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Brief_NothingDue_OmitsTheCompactionKeyEntirely()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "one fresh journal note",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("compactionDue", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_OneStaleJournalBelowClusterFloor_OmitsTheCompactionKey()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Store.UpsertAsync(
+            StaleJournal("a single aging note", session.Clock.UtcNow.AddDays(-30)),
+            new float[] { 1, 0, 0 },
+            CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("compactionDue", out _).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Brief_TomeParam_BriefsTheNamedTomeAndEchoesIt()
     {
         await using var session = await McpTestSession.StartAsync();
@@ -295,6 +355,19 @@ public sealed class BriefToolTests
         annotations.IdempotentHint.ShouldBe(true);
         annotations.DestructiveHint.ShouldBe(false);
     }
+
+    private static MemoryRecord StaleJournal(string content, DateTimeOffset accessed) => new()
+    {
+        Id = Guid.NewGuid(),
+        Content = content,
+        Scope = MemoryScope.Project,
+        Kind = MemoryKind.Journal,
+        Actor = MemoryActor.Human,
+        Tome = McpTestSession.ClientActor,
+        ProjectId = "grimoire",
+        CreatedAt = accessed,
+        LastAccessedAt = accessed,
+    };
 
     private static async Task SeedPersonaAsync(McpTestSession session)
     {

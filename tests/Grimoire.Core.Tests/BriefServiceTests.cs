@@ -31,6 +31,67 @@ public sealed class BriefServiceTests
         brief.JournalState.ShouldBe(BriefSectionState.Empty);
         brief.Journal.ShouldBeEmpty();
         brief.Omitted.ShouldBeEmpty();
+        brief.CompactionDue.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Brief_StaleSimilarJournal_ReportsTheClusterSize()
+    {
+        SeedStaleJournal("wired serilog twice", [1f, 0.05f, 0f]);
+        SeedStaleJournal("wired serilog again", [1f, 0.05f, 0.05f]);
+
+        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        brief.CompactionDue.ShouldNotBeNull();
+        brief.CompactionDue!.PendingEntries.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Brief_BelowMinClusterStaleness_ReportsNoCompactionDue()
+    {
+        Seed("fresh note", kind: MemoryKind.Journal);
+        SeedStaleJournal("lone aging note", [1f, 0f, 0f]);
+
+        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        brief.CompactionDue.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Brief_StaleButDissimilarJournal_ReportsNoCompactionDue()
+    {
+        SeedStaleJournal("orthogonally unrelated one", [1f, 0f, 0f]);
+        SeedStaleJournal("orthogonally unrelated two", [0f, 1f, 0f]);
+
+        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        brief.CompactionDue.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Brief_PersonalStaleJournal_CountsIntoTheBacklogTheJournalSectionHides()
+    {
+        SeedStaleJournal("personal aging one", [1f, 0.05f, 0f], MemoryScope.Personal);
+        SeedStaleJournal("personal aging two", [1f, 0.05f, 0.05f], MemoryScope.Personal);
+
+        var brief = await Service().BriefAsync(Query(scopes: [MemoryScope.Project, MemoryScope.Global]), CancellationToken.None);
+
+        brief.Journal.ShouldBeEmpty();
+        brief.CompactionDue!.PendingEntries.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Brief_CompactionDueFollowsTheBriefedTome_NotTheDefaultOne()
+    {
+        SeedStaleJournal("default tome twin one", [1f, 0.05f, 0f]);
+        SeedStaleJournal("default tome twin two", [1f, 0.05f, 0.05f]);
+        SeedStaleJournal("alpha lone aging note", [1f, 0f, 0f], tome: "alpha");
+
+        var briefed = await Service().BriefAsync(Query(tome: "alpha"), CancellationToken.None);
+        var owner = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        briefed.CompactionDue.ShouldBeNull();
+        owner.CompactionDue!.PendingEntries.ShouldBe(2);
     }
 
     [Fact]
@@ -315,6 +376,26 @@ public sealed class BriefServiceTests
             tombstonedAt: tombstonedAt,
             tome: tome);
         _store.Seed(record, []);
+        return record;
+    }
+
+    private MemoryRecord SeedStaleJournal(
+        string content,
+        float[] vector,
+        MemoryScope scope = MemoryScope.Project,
+        string? tome = null)
+    {
+        var aged = FakeClock.DefaultStart.AddDays(-30);
+        var record = TestMemories.Create(
+            content,
+            [],
+            scope: scope,
+            kind: MemoryKind.Journal,
+            created: aged,
+            accessed: aged,
+            projectId: "grimoire",
+            tome: tome);
+        _store.Seed(record, vector);
         return record;
     }
 

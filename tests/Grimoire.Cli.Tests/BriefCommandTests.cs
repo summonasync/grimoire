@@ -67,8 +67,13 @@ public sealed class BriefCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         var briefFilters = _host.Store.ListedFilters.Where(filter => filter.Tags.Count == 0).ToArray();
-        briefFilters.Length.ShouldBe(3);
-        foreach (var filter in briefFilters)
+        briefFilters.Length.ShouldBe(4);
+
+        var backlogRead = briefFilters.Single(filter => filter.ProjectId is null);
+        backlogRead.Kind.ShouldBe(MemoryKind.Journal);
+        backlogRead.Scopes.ShouldBe(MemoryScopes.LongTerm);
+
+        foreach (var filter in briefFilters.Where(filter => filter.ProjectId is not null))
         {
             filter.ProjectId.ShouldBe("grimoire");
             filter.Scopes.ShouldBe([MemoryScope.Project]);

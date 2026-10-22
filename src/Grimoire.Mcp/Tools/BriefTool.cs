@@ -68,9 +68,13 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
                 Journal = ToItemsSection(result.JournalState, result.Journal, ToJournalItem),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
+                CompactionDue = ToCompactionSection(result.CompactionDue),
             });
         }, cancellationToken);
     }
+
+    private static BriefCompactionSection? ToCompactionSection(BriefCompactionDue? due) =>
+        due is null ? null : new BriefCompactionSection { PendingEntries = due.PendingEntries };
 
     private const string EmptyTomeHint = "tome is empty — use memory_scry for cross-tome context";
 
@@ -88,7 +92,8 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
         "the correction lands on the right generation; memory_forget keeps your reason on the tombstone for " +
         "the human to audit (inspect it via memory_list status=Tombstoned - nothing is hard-deleted, GC owns " +
         "that); memory_restore reverses a correction that turned out wrong. Compaction loop: when memory_stats " +
-        "reports pendingCompaction, pull memory_compact_candidates, write one kind=Fact memory_remember per " +
+        "reports pendingCompaction or this reply carries compactionDue, pull memory_compact_candidates, write " +
+        "one kind=Fact memory_remember per " +
         "cluster, then memory_forget each consumed entry with a reason like 'compacted into <new id>'; never " +
         "tombstone entries you did not actually distill. Conventions: reads accept tome= for another tome you " +
         "own, writes never cross tomes, memory_scry is the one cross-tome read; upstream_unavailable means the " +

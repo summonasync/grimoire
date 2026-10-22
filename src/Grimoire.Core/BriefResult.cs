@@ -19,4 +19,6 @@ public sealed record BriefResult
     public required IReadOnlyList<BriefJournalEntry> Journal { get; init; }
 
     public required IReadOnlyList<BriefSection> Omitted { get; init; }
+
+    public BriefCompactionDue? CompactionDue { get; init; }
 }

@@ -55,6 +55,9 @@
     "title": "Get the startup brief"
   },
   "output": {
+    "compactionDue": {
+      "pendingEntries": "number"
+    },
     "facts": {
       "items": {
         "arrayOf": {
