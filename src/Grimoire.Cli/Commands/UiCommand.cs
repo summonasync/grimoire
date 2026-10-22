@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
+using Grimoire.Infrastructure.Autostart;
 using Grimoire.Infrastructure.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,6 +14,8 @@ internal sealed class UiCommand(CliEnvironment environment)
     internal const string LoopbackHost = "127.0.0.1";
     internal const string ServeUnit = "grimoire-serve";
     internal const string RemedyCommand = "systemctl --user start grimoire-serve";
+    internal const string EnableAtLoginFlag = "enable-at-login";
+    internal const string DisableAtLoginFlag = "disable-at-login";
 
     public async Task<int> RunAsync(
         CliInvocation invocation,
@@ -20,6 +23,19 @@ internal sealed class UiCommand(CliEnvironment environment)
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
+        // The login flags are an admin mode: they touch the session entry and leave. Plain `ui` never reaches them.
+        var enable = CliValues.Switch(invocation, invocation.Spec, EnableAtLoginFlag);
+        var disable = CliValues.Switch(invocation, invocation.Spec, DisableAtLoginFlag);
+        if (enable && disable)
+        {
+            throw new UsageException($"--{EnableAtLoginFlag} and --{DisableAtLoginFlag} contradict each other; pick one.", invocation.Spec);
+        }
+
+        if (enable || disable)
+        {
+            return await ManageLoginEntryAsync(services, enable, cancellationToken);
+        }
+
         var port = config.Serve.Port;
         var timings = services.GetService<UiTimings>() ?? UiTimings.Default;
         var probe = services.GetRequiredService<IConsoleProbe>();
@@ -36,6 +52,28 @@ internal sealed class UiCommand(CliEnvironment environment)
         environment.Output.WriteLine($"Console at {url} (health answered on {LoopbackHost}:{port})");
         return await OpenBrowserAsync(processes, url, cancellationToken);
     }
+
+    private async Task<int> ManageLoginEntryAsync(
+        IServiceProvider services,
+        bool enable,
+        CancellationToken caller)
+    {
+        var entry = services.GetRequiredService<IAutostartEntryWriter>();
+        var change = enable
+            ? await entry.EnableAsync(caller)
+            : await entry.DisableAsync(caller);
+
+        environment.Output.WriteLine(LoginLine(change, entry.EntryPath));
+        return ExitCodes.Ok;
+    }
+
+    private static string LoginLine(AutostartEntryChange change, string path) => change switch
+    {
+        AutostartEntryChange.Written => $"Login entry written to {path}",
+        AutostartEntryChange.UpToDate => $"Login entry at {path} is already up to date",
+        AutostartEntryChange.Removed => $"Login entry removed from {path}",
+        _ => $"No login entry at {path} to remove",
+    };
 
     // One start only: systemd owns the unit lifecycle and a retry loop races it. The budget clock
     // covers the start and the poll together, so a wedged systemctl cannot stretch the wait.

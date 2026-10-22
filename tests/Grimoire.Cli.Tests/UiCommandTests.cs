@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using Grimoire.Cli.Commands;
 using Grimoire.Core;
+using Grimoire.Infrastructure.Autostart;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Processes;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,7 @@ public sealed class UiCommandTests
     private const string Remedy = "systemctl --user start grimoire-serve";
     private const string PrettyUrl = "http://grimoire.localhost:5099";
     private const string LiteralUrl = "http://127.0.0.1:5099";
+    private const string LoginBinary = "/opt/grimoire/bin/grimoire";
 
     private static string LauncherFile =>
         UiCommand.BrowserCommand("http://x", OperatingSystem.IsWindows(), OperatingSystem.IsMacOS()).File;
@@ -213,26 +215,150 @@ public sealed class UiCommandTests
         output.ShouldContain(PrettyUrl);
     }
 
+    [Fact]
+    public async Task EnableAtLogin_WritesTheEntryAndNeverStartsOrOpensTheConsole()
+    {
+        using var harness = new Harness();
+
+        var code = await harness.RunAsync("ui", "--enable-at-login");
+
+        code.ShouldBe(ExitCodes.Ok, harness.Output.ToString());
+        var entry = await File.ReadAllTextAsync(harness.LoginPath);
+        entry.ShouldContain("Type=Application");
+        entry.ShouldContain("Name=Grimoire");
+        entry.ShouldContain("X-GNOME-Autostart-enabled=true");
+        entry.ShouldContain($"Exec={LoginBinary} ui");
+        harness.Probe.Calls.ShouldBe(0);
+        harness.Process.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task EnableAtLogin_AgainReportsUpToDateAndKeepsTheEntryBytes()
+    {
+        using var harness = new Harness();
+        await harness.RunAsync("ui", "--enable-at-login");
+        var written = await File.ReadAllBytesAsync(harness.LoginPath);
+
+        var code = await harness.RunAsync("ui", "--enable-at-login");
+
+        code.ShouldBe(ExitCodes.Ok, harness.Output.ToString());
+        harness.Output.ToString().ShouldContain("already up to date");
+        (await File.ReadAllBytesAsync(harness.LoginPath)).ShouldBe(written);
+    }
+
+    [Fact]
+    public async Task DisableAtLogin_RemovesTheEntryThatEnableWrote()
+    {
+        using var harness = new Harness();
+        await harness.RunAsync("ui", "--enable-at-login");
+
+        var code = await harness.RunAsync("ui", "--disable-at-login");
+
+        code.ShouldBe(ExitCodes.Ok, harness.Output.ToString());
+        File.Exists(harness.LoginPath).ShouldBeFalse();
+        harness.Output.ToString().ShouldContain("removed");
+    }
+
+    [Fact]
+    public async Task DisableAtLogin_WhenNoEntryWasEverWritten_ReportsPlainlyAndExitsZero()
+    {
+        using var harness = new Harness();
+
+        var code = await harness.RunAsync("ui", "--disable-at-login");
+
+        code.ShouldBe(ExitCodes.Ok, harness.Output.ToString());
+        harness.Output.ToString().ShouldContain("No login entry at");
+        Directory.Exists(harness.LoginDirectory).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task LoginFlagsTogether_FailAsUsageBeforeAnyFileWrite()
+    {
+        using var harness = new Harness();
+
+        var code = await harness.RunAsync("ui", "--enable-at-login", "--disable-at-login");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = harness.Output.ToString();
+        output.ShouldContain("error [usage]");
+        output.ShouldContain("contradict each other");
+        Directory.Exists(harness.LoginDirectory).ShouldBeFalse();
+        harness.Probe.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task PlainUi_PerformsNoLoginEntryAccess()
+    {
+        var spy = new SpyAutostart(Path.Combine(Path.GetTempPath(), "grimoire-ui-spy", AutostartEntryWriter.FileName));
+        using var harness = new Harness(loginEntry: spy);
+
+        var code = await harness.RunAsync("ui");
+
+        code.ShouldBe(ExitCodes.Ok, harness.Output.ToString());
+        spy.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void LoginEntry_ResolvesFromTheProductionContainer()
+    {
+        using var provider = CliServices.Build(new GrimoireOptions());
+
+        provider.GetRequiredService<IAutostartEntryWriter>().ShouldBeOfType<AutostartEntryWriter>();
+    }
+
+    private sealed class SpyAutostart(string path) : IAutostartEntryWriter
+    {
+        public List<string> Calls { get; } = [];
+
+        public string EntryPath
+        {
+            get
+            {
+                Calls.Add("path");
+                return path;
+            }
+        }
+
+        public Task<AutostartEntryChange> EnableAsync(CancellationToken cancellationToken)
+        {
+            Calls.Add("enable");
+            return Task.FromResult(AutostartEntryChange.Written);
+        }
+
+        public Task<AutostartEntryChange> DisableAsync(CancellationToken cancellationToken)
+        {
+            Calls.Add("disable");
+            return Task.FromResult(AutostartEntryChange.Removed);
+        }
+    }
+
     private sealed class Harness : IDisposable
     {
         private readonly ServiceProvider _services;
+
+        private readonly string _loginDirectory = Path.Combine(Path.GetTempPath(), "grimoire-ui-login", Guid.NewGuid().ToString("N"));
 
         public Harness(
             IConsoleProbe? probe = null,
             IHostNameResolver? resolver = null,
             IExternalProcess? processes = null,
             UiTimings? timings = null,
-            int port = 5099)
+            int port = 5099,
+            IAutostartEntryWriter? loginEntry = null)
         {
             Process = processes as RecordingProcess ?? new FakeProcess();
             Probe = probe as ScriptedProbe ?? new ScriptedProbe(alwaysAlive: true);
             Resolver = resolver as FakeResolver ?? new FakeResolver(IPAddress.Loopback);
             Output = new StringWriter();
+            Login = loginEntry ?? new AutostartEntryWriter(
+                Path.Combine(_loginDirectory, AutostartEntryWriter.FileName),
+                LoginBinary);
 
             var services = new ServiceCollection();
             services.AddSingleton(probe ?? Probe);
             services.AddSingleton<IExternalProcess>(processes ?? Process);
             services.AddSingleton(resolver ?? Resolver);
+            services.AddSingleton(loginEntry ?? Login);
             services.AddSingleton(timings ?? new UiTimings(TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(10)));
             _services = services.BuildServiceProvider();
 
@@ -259,9 +385,22 @@ public sealed class UiCommandTests
 
         public CliEnvironment Env { get; }
 
+        public IAutostartEntryWriter Login { get; }
+
+        public string LoginDirectory => _loginDirectory;
+
+        public string LoginPath => Path.Combine(_loginDirectory, AutostartEntryWriter.FileName);
+
         public Task<int> RunAsync(params string[] args) => CliApplication.RunAsync(args, Env);
 
-        public void Dispose() => _services.Dispose();
+        public void Dispose()
+        {
+            _services.Dispose();
+            if (Directory.Exists(_loginDirectory))
+            {
+                Directory.Delete(_loginDirectory, true);
+            }
+        }
     }
 
     internal record Spawn(string File, IReadOnlyList<string> Args);

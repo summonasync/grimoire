@@ -75,6 +75,12 @@ internal static class CommandCatalog
     private static readonly FlagSpec Attribution = new(
         "attribution", "none|light|full", "Actor fields on results: none, light (alias) or full (alias+vendor). Default: none.");
 
+    private static readonly FlagSpec EnableAtLogin = FlagSpec.Switch(
+        "enable-at-login", "Add the console to the desktop login session and exit; the entry names this binary.");
+
+    private static readonly FlagSpec DisableAtLogin = FlagSpec.Switch(
+        "disable-at-login", "Remove the console from the desktop login session and exit.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -94,8 +100,10 @@ internal static class CommandCatalog
         new CommandSpec
         {
             Name = "ui",
-            Summary = "Open the console in the default browser, starting the systemd user unit first when it is down.",
+            Summary = "Open the console in the default browser, starting the systemd user unit first when it is down. " +
+                      "With --enable-at-login or --disable-at-login it only manages the desktop login entry and exits.",
             Syntax = "ui",
+            Flags = [EnableAtLogin, DisableAtLogin],
         },
         new CommandSpec
         {

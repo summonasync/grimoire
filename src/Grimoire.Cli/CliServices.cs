@@ -1,4 +1,5 @@
 using Grimoire.Core;
+using Grimoire.Infrastructure.Autostart;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
@@ -39,6 +40,7 @@ internal static class CliServices
         services.AddSingleton<IExternalProcess, SystemProcess>();
         services.AddSingleton<IConsoleProbe>(sp => new LoopbackConsoleProbe(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<IHostNameResolver, SystemHostNameResolver>();
+        services.AddSingleton<IAutostartEntryWriter, AutostartEntryWriter>();
         services.AddSingleton(Grimoire.Cli.Commands.UiTimings.Default);
         services.AddSingleton<MemoryService>(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
