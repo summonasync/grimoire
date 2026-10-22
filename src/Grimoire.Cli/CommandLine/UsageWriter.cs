@@ -15,6 +15,9 @@ internal static class UsageWriter
         }
 
         output.WriteLine();
+        output.WriteLine("Global options:");
+        output.WriteLine("  --version   Print the installed version as 'grimoire <version>' and exit 0.");
+        output.WriteLine();
         output.WriteLine("Exit codes: 0 ok, 1 runtime, 2 usage, 3 config, 4 dependency, 5 not found, 6 upstream unavailable (nothing was written; replay the same command), 7 reindex required (embedding model changed; run `grimoire reindex`).");
         output.WriteLine();
         output.WriteLine("Run 'grimoire help <command>' for command details. Config: ~/.grimoire/config.json");

@@ -17,6 +17,11 @@ internal static class CliApplication
 
         try
         {
+            if (TryWriteVersion(args, env))
+            {
+                return ExitCodes.Ok;
+            }
+
             if (TryWriteHelp(args, env))
             {
                 return ExitCodes.Ok;
@@ -111,6 +116,17 @@ internal static class CliApplication
             "config" => new Commands.ConfigCommand(env).RunAsync(invocation, config, services, cancellationToken),
             _ => throw new UsageException($"Unknown command '{invocation.Spec.Name}'."),
         };
+
+    private static bool TryWriteVersion(string[] args, CliEnvironment env)
+    {
+        if (args.Length == 0 || args[0] != "--version")
+        {
+            return false;
+        }
+
+        env.Output.WriteLine($"grimoire {ProductVersion.Text}");
+        return true;
+    }
 
     private static bool TryWriteHelp(string[] args, CliEnvironment env)
     {
