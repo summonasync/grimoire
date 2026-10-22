@@ -22,9 +22,11 @@ public sealed class RememberToolTests
             ["scope"] = "Project",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.ProjectIdRequired);
         param.ShouldBe("projectId");
+        message.ShouldContain("Nothing was applied by this call.");
+        message.ShouldContain("got scope 'Project', no projectId");
         session.Store.Points.ShouldBeEmpty();
         session.Embeddings.Requests.ShouldBeEmpty();
     }
@@ -44,9 +46,12 @@ public sealed class RememberToolTests
             ["projectId"] = "grimoire",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.ParamConflict);
         param.ShouldBe("projectId");
+        message.ShouldContain($"'{scope}'");
+        message.ShouldContain("'grimoire'");
+        message.ShouldContain("Nothing was applied by this call.");
     }
 
     [Fact]
@@ -62,9 +67,13 @@ public sealed class RememberToolTests
             ["sessionId"] = "s1",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.ParamConflict);
         param.ShouldBe("sessionId");
+        message.ShouldContain("'s1'");
+        message.ShouldContain("'Project'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
     }
 
     [Fact]
@@ -83,7 +92,10 @@ public sealed class RememberToolTests
         var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("kind");
-        message.ShouldContain("journal");
+        message.ShouldContain("kind 'Journal'");
+        message.ShouldContain("got kind 'Fact'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
     }
 
     [Theory]
@@ -99,9 +111,13 @@ public sealed class RememberToolTests
             ["scope"] = "Global",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("content");
+        message.ShouldContain($"'{content}'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
     }
 
     [Theory]
@@ -118,9 +134,12 @@ public sealed class RememberToolTests
             ["importance"] = importance,
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("importance");
+        message.ShouldContain($"'{importance}'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
     }
 
     [Fact]
@@ -462,9 +481,11 @@ public sealed class RememberToolTests
             ["tome"] = "Not Valid!!",
         });
 
-        var (code, _, param) = result.Error();
+        var (code, message, param) = result.Error();
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("tome");
+        message.ShouldContain("'Not Valid!!'");
+        message.ShouldContain("Nothing was applied by this call.");
         session.Store.Points.ShouldBeEmpty();
         session.Embeddings.Requests.ShouldBeEmpty();
     }

@@ -25,7 +25,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
         string[]? tomes = null,
         [Description("Opt into other tomes' journal entries; facts alone are searched by default.")]
         bool includeJournal = false,
-        [Description("none strips actor fields, light keeps the alias, full keeps alias and vendor. Default none.")]
+        [Description("None strips actor fields, Light keeps the alias, Full keeps alias and vendor. Default None.")]
         [AllowedValues("None", "Light", "Full")]
         string attribution = "None",
         [Description("Maximum matches to return, default 5.")]

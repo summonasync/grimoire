@@ -22,7 +22,7 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
     public Task<CallToolResult> Brief(
         [Description("Restrict to memories of one project.")]
         string? projectId = null,
-        [Description("Restrict facts, journal and tombstones to these scopes; defaults to project and global, session is never briefed.")]
+        [Description("Restrict facts, journal and tombstones to these scopes; defaults to Project and Global, Session is never briefed.")]
         [AllowedValues("Session", "Project", "Global", "Personal")]
         string[]? scopes = null,
         [Description("Top facts per scope, default 5, clamped server-side.")]
@@ -79,16 +79,16 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
         "in the human's voice or making style calls - check, don't guess, and never invent empty persona " +
         "sections; run memory_recall before redoing work that may already have a decision on record. Write " +
         "with memory_remember when the human states a preference, decision or correction - record it as they " +
-        "said it, not as your summary; kind fact for statements that must still read true next week, journal " +
-        "for progress notes; scope session dies with the session, project needs projectId, global is " +
-        "cross-project truth, personal is identity-level; the persona itself is human-curated, never write it " +
+        "said it, not as your summary; kind Fact for statements that must still read true next week, Journal " +
+        "for progress notes; scope Session dies with the session, Project needs projectId, Global is " +
+        "cross-project truth, Personal is identity-level; the persona itself is human-curated, never write it " +
         "here. A near-duplicate write supersedes the older record and names the replaced id; retrying an " +
         "identical write replays it; maintenancePending=true means the record committed but duplicate cleanup " +
         "did not finish - replaying converges. Before you overwrite or retract a hit, walk memory_history so " +
         "the correction lands on the right generation; memory_forget keeps your reason on the tombstone for " +
         "the human to audit (inspect it via memory_list status=Tombstoned - nothing is hard-deleted, GC owns " +
         "that); memory_restore reverses a correction that turned out wrong. Compaction loop: when memory_stats " +
-        "reports pendingCompaction, pull memory_compact_candidates, write one kind=fact memory_remember per " +
+        "reports pendingCompaction, pull memory_compact_candidates, write one kind=Fact memory_remember per " +
         "cluster, then memory_forget each consumed entry with a reason like 'compacted into <new id>'; never " +
         "tombstone entries you did not actually distill. Conventions: reads accept tome= for another tome you " +
         "own, writes never cross tomes, memory_scry is the one cross-tome read; upstream_unavailable means the " +

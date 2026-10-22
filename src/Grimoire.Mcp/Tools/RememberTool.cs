@@ -21,15 +21,15 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
     public Task<CallToolResult> Remember(
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]
         string content,
-        [Description("session expires after ~24h; project needs projectId; global and personal live across projects.")]
+        [Description("Session expires after ~24h; Project needs projectId; Global and Personal live across projects.")]
         [AllowedValues("Session", "Project", "Global", "Personal")]
         string scope,
-        [Description("journal for append-style observations; fact for curated standing statements.")]
+        [Description("Journal for append-style observations; Fact for curated standing statements.")]
         [AllowedValues("Journal", "Fact")]
         string kind = "Journal",
-        [Description("Required for scope=project: the project key this memory belongs to. Omit for any other scope.")]
+        [Description("Required for scope=Project: the project key this memory belongs to. Omit for any other scope.")]
         string? projectId = null,
-        [Description("Only for scope=session: identifies the current session.")]
+        [Description("Only for scope=Session: identifies the current session.")]
         string? sessionId = null,
         [Description("Optional free-form tags used by filtered recall and list.")]
         string[]? tags = null,
@@ -57,7 +57,7 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.InvalidRequest,
-                "content must not be empty or whitespace.",
+                $"content: '{content}' must not be empty or whitespace.",
                 nameof(content)).NothingApplied()));
         }
 

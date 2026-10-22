@@ -13,8 +13,8 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
     public const string Title = "List memories";
 
     public const string Description =
-        "Browse stored memories by filter, newest first - full records, active by default, with status, actor and " +
-        "tags; pass status to audit superseded or tombstoned rows, for example to confirm a fact was already " +
+        "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and " +
+        "tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already " +
         "retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes " +
         "the tome listed.";
 
@@ -22,10 +22,10 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
         [Description("Restrict to one scope.")]
         [AllowedValues("Session", "Project", "Global", "Personal")]
         string? scope = null,
-        [Description("Restrict to journal or fact records.")]
+        [Description("Restrict to Journal or Fact records.")]
         [AllowedValues("Journal", "Fact")]
         string? kind = null,
-        [Description("active by default; superseded shows dedup history; tombstoned shows retracted entries.")]
+        [Description("Active by default; Superseded shows dedup history; Tombstoned shows retracted entries.")]
         [AllowedValues("Active", "Superseded", "Tombstoned")]
         string status = "Active",
         [Description("Restrict to memories of one project.")]

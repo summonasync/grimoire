@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Browse stored memories by filter, newest first - full records, active by default, with status, actor and tags; pass status to audit superseded or tombstoned rows, for example to confirm a fact was already retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes the tome listed.",
+    "description": "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes the tome listed.",
     "destructive": false,
     "idempotent": true,
     "input": {

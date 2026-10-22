@@ -14,7 +14,7 @@ internal sealed class CompactCandidatesTool(MemoryService memories, IMemoryStore
     public const string Description =
         "Fetch clusters of old, similar journal entries due for distillation into durable facts - each group " +
         "carries its entry records, similarity and the stalest access time, and the whole backlog counts as " +
-        "memory_stats pendingCompaction. Run the loop deliberately: write one kind=fact memory_remember per " +
+        "memory_stats pendingCompaction. Run the loop deliberately: write one kind=Fact memory_remember per " +
         "group, then memory_forget each consumed entry; distill within one tome at a time.";
 
     public Task<CallToolResult> GetCandidates(

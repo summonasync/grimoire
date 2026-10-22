@@ -20,10 +20,10 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
     public Task<CallToolResult> Recall(
         [Description("What to look for. Phrasing may be approximate - recall is semantic, not keyword match.")]
         string query,
-        [Description("Restrict to one scope; omit to search all long-term scopes (project, global, personal).")]
+        [Description("Restrict to one scope; omit to search all long-term scopes (Project, Global, Personal).")]
         [AllowedValues("Session", "Project", "Global", "Personal")]
         string? scope = null,
-        [Description("Restrict to journal or fact records.")]
+        [Description("Restrict to Journal or Fact records.")]
         [AllowedValues("Journal", "Fact")]
         string? kind = null,
         [Description("Restrict to memories of one project.")]
