@@ -4,6 +4,15 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>grimoire</ToolCommandName>
+    <PackageId>Grimoire</PackageId>
+    <Description>Local agent memory service: MCP stdio face, web console and CLI.</Description>
+    <PackageTags>memory;mcp;agent;qdrant</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Grimoire.Cli.Tests" />
   </ItemGroup>
