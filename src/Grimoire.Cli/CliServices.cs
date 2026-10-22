@@ -2,6 +2,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,6 +38,8 @@ internal static class CliServices
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
         services.AddSingleton<IExternalProcess, SystemProcess>();
         services.AddSingleton<IConsoleProbe>(sp => new LoopbackConsoleProbe(sp.GetRequiredService<HttpClient>()));
+        services.AddSingleton<IHostNameResolver, SystemHostNameResolver>();
+        services.AddSingleton(Grimoire.Cli.Commands.UiTimings.Default);
         services.AddSingleton<MemoryService>(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

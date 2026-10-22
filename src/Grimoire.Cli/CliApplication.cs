@@ -92,6 +92,7 @@ internal static class CliApplication
         {
             "init" => new Commands.InitCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "serve" => new Commands.ServeCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "ui" => new Commands.UiCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "mcp" => new Commands.McpCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "remember" => new Commands.RememberCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "recall" => new Commands.RecallCommand(env).RunAsync(invocation, config, services, cancellationToken),

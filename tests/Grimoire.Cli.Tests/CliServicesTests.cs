@@ -2,6 +2,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -53,6 +54,7 @@ public sealed class CliServicesTests
 
         provider.GetRequiredService<IExternalProcess>().ShouldBeOfType<SystemProcess>();
         provider.GetRequiredService<IConsoleProbe>().ShouldBeOfType<LoopbackConsoleProbe>();
+        provider.GetRequiredService<IHostNameResolver>().ShouldBeOfType<SystemHostNameResolver>();
     }
 
     private static GrimoireOptions Options() => new()

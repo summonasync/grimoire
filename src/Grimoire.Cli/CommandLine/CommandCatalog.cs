@@ -93,6 +93,12 @@ internal static class CommandCatalog
         },
         new CommandSpec
         {
+            Name = "ui",
+            Summary = "Open the console in the default browser, starting the systemd user unit first when it is down.",
+            Syntax = "ui",
+        },
+        new CommandSpec
+        {
             Name = "mcp",
             Summary = "Run the stdio MCP server for agent clients.",
             Syntax = "mcp",
