@@ -24,8 +24,6 @@ public sealed record McpHostOptions
 
     public string ServerVersion { get; init; } = "0.1.0";
 
-    public IReadOnlyList<ProjectAliasRecord> Projects { get; init; } = [];
-
     public MemoryActor? Actor { get; init; }
 
     public string? EnvTome { get; init; }

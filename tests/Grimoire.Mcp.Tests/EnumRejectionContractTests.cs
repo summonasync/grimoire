@@ -20,7 +20,7 @@ public sealed class EnumRejectionContractTests
         data.Add("memory_remember", "kind", new[] { "Journal", "Fact" }, "fact");
         data.Add("memory_scry", "attribution", new[] { "None", "Light", "Full" }, "light");
         data.Add("memory_brief", "scopes", ScopeTokens, "global");
-        data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove" }, "list");
+        data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove", "Sync" }, "list");
         return data;
     }
 
@@ -50,7 +50,7 @@ public sealed class EnumRejectionContractTests
         data.Add("memory_remember", "kind", new[] { "Journal", "Fact" });
         data.Add("memory_scry", "attribution", new[] { "None", "Light", "Full" });
         data.Add("memory_brief", "scopes", ScopeTokens);
-        data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove" });
+        data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove", "Sync" });
         return data;
     }
 
@@ -174,7 +174,7 @@ public sealed class EnumRejectionContractTests
         Enum.GetNames<MemoryKind>().ShouldBe(["Journal", "Fact"]);
         Enum.GetNames<MemoryStatus>().ShouldBe(["Active", "Superseded", "Tombstoned"]);
         Enum.GetNames<ScryAttribution>().ShouldBe(["None", "Light", "Full"]);
-        Enum.GetNames<ProjectAction>().ShouldBe(["List", "Add", "Update", "Remove"]);
+        Enum.GetNames<ProjectAction>().ShouldBe(["List", "Add", "Update", "Remove", "Sync"]);
     }
 
     [Fact]

@@ -19,14 +19,16 @@ internal sealed class TestHost : IDisposable
         GcOptions? gcOptions = null,
         FakeGcStateStore? gcState = null,
         ICallerPathProvider? callerPaths = null,
-        IReadOnlyList<ProjectAliasRecord>? projects = null)
+        IReadOnlyList<ProjectAliasRecord>? projects = null,
+        FakeBoardProjectSource? board = null)
     {
         Store = new RecordingMemoryStore();
         Embeddings = embeddings ?? new StubEmbeddings(new Dictionary<string, float[]>());
         Clock = new FakeClock();
         GcState = gcState ?? new FakeGcStateStore();
         ConfigPath = Path.Combine(_directory, "config.json");
-        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath, callerPaths, projects);
+        Board = board ?? new FakeBoardProjectSource();
+        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath, callerPaths, projects, Board);
         Output = new StringWriter();
         Env = new CliEnvironment
         {
@@ -51,6 +53,8 @@ internal sealed class TestHost : IDisposable
     public ServiceProvider Services { get; }
 
     public string ConfigPath { get; }
+
+    public FakeBoardProjectSource Board { get; }
 
     public StringWriter Output { get; }
 

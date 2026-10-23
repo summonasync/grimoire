@@ -70,18 +70,20 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeGcStateStore? gcState = null,
         string? callerPath = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
-        FakeProjectRegistryStore? registryStore = null)
+        FakeProjectRegistryStore? registryStore = null,
+        FakeBoardProjectSource? board = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
         var gc = gcState ?? new FakeGcStateStore();
-        var registry = registryStore ?? new FakeProjectRegistryStore(DefaultProjects);
+        var registry = registryStore ?? new FakeProjectRegistryStore(projects ?? DefaultProjects);
         var services = new FakeServiceProvider(
             store, embeddings, clock, engineOptions, claims, gcOptions, gc,
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
-            registry);
-        var options = (hostOptions ?? new McpHostOptions()) with { Projects = projects ?? DefaultProjects };
+            registry,
+            board);
+        var options = hostOptions ?? new McpHostOptions();
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
         var serverToClient = Channel.CreateUnbounded<JsonRpcMessage>();

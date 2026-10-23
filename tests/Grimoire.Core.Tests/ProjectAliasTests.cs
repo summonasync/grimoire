@@ -44,4 +44,41 @@ public sealed class ProjectAliasTests
     {
         ProjectAlias.IsValid(new string('a', ProjectAlias.MaxLength)).ShouldBeTrue();
     }
+
+    [Theory]
+    [InlineData("Ainora.Assistant", "ainora-assistant")]
+    [InlineData("Slurp.AI", "slurp-ai")]
+    [InlineData("Bob AI daily assistant", "bob-ai-daily-assistant")]
+    [InlineData("feature--015_", "feature-015")]
+    [InlineData("---", "project")]
+    [InlineData("том", "project")]
+    [InlineData("", "project")]
+    public void Propose_SlugifiesTheSourceName(string source, string expected)
+    {
+        ProjectAlias.Propose(source, []).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void Propose_TakenAlias_AppendsCollisionSuffix()
+    {
+        ProjectAlias.Propose("Slurp.AI", ["slurp-ai", "slurp-ai-2", "other"]).ShouldBe("slurp-ai-3");
+    }
+
+    [Fact]
+    public void Propose_LongSource_ClampsToMaxLengthWithSuffixRoom()
+    {
+        var alias = ProjectAlias.Propose(new string('a', ProjectAlias.MaxLength + 20), [new string('a', ProjectAlias.MaxLength - 4)]);
+
+        ProjectAlias.IsValid(alias).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Propose_LongSourceWithTakenClamp_KeepsTheAliasValid()
+    {
+        var stem = new string('b', ProjectAlias.MaxLength - 4);
+        var alias = ProjectAlias.Propose(new string('b', ProjectAlias.MaxLength + 20), [stem]);
+
+        ProjectAlias.IsValid(alias).ShouldBeTrue();
+        alias.ShouldNotBe(stem);
+    }
 }

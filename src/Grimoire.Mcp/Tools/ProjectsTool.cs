@@ -6,7 +6,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class ProjectsTool(IProjectRegistryStore registry)
+internal sealed class ProjectsTool(IProjectRegistryStore registry, ProjectSyncService sync)
 {
     public const string Name = "projects";
 
@@ -14,16 +14,18 @@ internal sealed class ProjectsTool(IProjectRegistryStore registry)
 
     public const string Description =
         "Read and update the project registry: owner config that maps kebab-case aliases to absolute workspace " +
-        "paths (optional boardProjectId and displayName ride along) - the lookup behind project tags on memory " +
-        "writes. One strict-case action enum: List, Add, Update, Remove; a wrong or misspelled action is rejected " +
-        "with the allowed set spelled out. Add needs an alias plus at least one absolute path; Update replaces the " +
-        "whole path list and sets or clears the optional fields; Remove is explicit only. Rare door: the registry " +
-        "is owner config - confirm with the human before changing it, and a running MCP server picks up registry " +
-        "edits on its next start.";
+        "paths (optional boardProjectId, displayName and description ride along) - the lookup behind project tags " +
+        "on memory writes. One strict-case action enum: List, Add, Update, Remove, Sync; a wrong or misspelled " +
+        "action is rejected with the allowed set spelled out. Add needs an alias plus at least one absolute path; " +
+        "Update replaces the whole path list and sets or clears the optional fields; Remove is explicit only; " +
+        "Sync pulls the project list from the local Overmind host, matches records by board id, adds new projects " +
+        "with a locally generated alias and marks projects that vanished from the board as gone - it never deletes. " +
+        "Rare door: the registry is owner config - confirm with the human before changing it. Registry edits " +
+        "resolve live: the remember and recall doors re-read the registry, no restart needed.";
 
     public Task<CallToolResult> Projects(
-        [Description("The registry operation: List, Add, Update or Remove, passed exactly in this casing.")]
-        [AllowedValues("List", "Add", "Update", "Remove")]
+        [Description("The registry operation: List, Add, Update, Remove or Sync, passed exactly in this casing.")]
+        [AllowedValues("List", "Add", "Update", "Remove", "Sync")]
         string action,
         [Description("Kebab-case alias (a-z, 0-9, single dashes): the record to add, update or remove.")]
         string? alias = null,
@@ -46,6 +48,7 @@ internal sealed class ProjectsTool(IProjectRegistryStore registry)
             ProjectAction.List => List(alias, paths, boardProjectId, displayName, cancellationToken),
             ProjectAction.Add => Add(alias, paths, boardProjectId, displayName, cancellationToken),
             ProjectAction.Update => Update(alias, paths, boardProjectId, displayName, cancellationToken),
+            ProjectAction.Sync => Sync(alias, paths, boardProjectId, displayName, cancellationToken),
             _ => Remove(alias, cancellationToken),
         };
     }
@@ -74,6 +77,25 @@ internal sealed class ProjectsTool(IProjectRegistryStore registry)
                 Count = records.Count,
             }));
         }, cancellationToken);
+    }
+
+    private Task<CallToolResult> Sync(
+        string? alias,
+        string[]? paths,
+        string? boardProjectId,
+        string? displayName,
+        CancellationToken cancellationToken)
+    {
+        if (ExtraArguments(alias, paths, boardProjectId, displayName) is { } extra)
+        {
+            return Task.FromResult(ToolResults.Failure(new ToolError(
+                ToolErrorCodes.ParamConflict,
+                $"action Sync takes no other arguments: drop {string.Join(", ", extra)}.",
+                extra[0])));
+        }
+
+        return ToolResults.ExecuteAsync(async ct =>
+            ToolResults.Success(ProjectSyncView.From(await sync.SyncAsync(ct))), cancellationToken);
     }
 
     private Task<CallToolResult> Add(
@@ -280,6 +302,8 @@ internal sealed class ProjectsTool(IProjectRegistryStore registry)
         Paths = record.Paths,
         BoardProjectId = record.BoardProjectId,
         DisplayName = record.DisplayName,
+        Description = record.Description,
+        BoardGone = record.BoardGone ? true : null,
     };
 
     private static string? TrimToNull(string? value) =>

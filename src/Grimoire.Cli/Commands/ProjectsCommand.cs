@@ -14,15 +14,16 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var store = services.GetRequiredService<IProjectRegistryStore>();
-        return Task.FromResult(invocation.Positional.FirstOrDefault() switch
+        return invocation.Positional.FirstOrDefault() switch
         {
-            null or "list" => List(store),
-            "add" => Add(store, invocation),
-            "update" => Update(store, invocation),
-            "remove" => Remove(store, invocation),
+            null or "list" => Task.FromResult(List(store)),
+            "add" => Task.FromResult(Add(store, invocation)),
+            "update" => Task.FromResult(Update(store, invocation)),
+            "remove" => Task.FromResult(Remove(store, invocation)),
+            "sync" => SyncAsync(services, cancellationToken),
             var action => throw new UsageException(
-                $"Unknown projects action '{action}' (expected: list, add, update, remove).", invocation.Spec),
-        });
+                $"Unknown projects action '{action}' (expected: list, add, update, remove, sync).", invocation.Spec),
+        };
     }
 
     private int List(IProjectRegistryStore store)
@@ -35,19 +36,63 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         }
 
         var aliasWidth = records.Max(record => record.Alias.Length);
-        var boardWidth = Math.Max("board".Length, records.Max(record => Optional(record.BoardProjectId).Length));
+        var boardWidth = Math.Max("board".Length, records.Max(record => BoardColumn(record).Length));
         var nameWidth = Math.Max("display name".Length, records.Max(record => Optional(record.DisplayName).Length));
         environment.Output.WriteLine(
             $"{"alias".PadRight(aliasWidth)}  {"board".PadRight(boardWidth)}  {"display name".PadRight(nameWidth)}  paths");
         foreach (var record in records)
         {
             environment.Output.WriteLine(
-                $"{record.Alias.PadRight(aliasWidth)}  {Optional(record.BoardProjectId).PadRight(boardWidth)}  " +
+                $"{record.Alias.PadRight(aliasWidth)}  {BoardColumn(record).PadRight(boardWidth)}  " +
                 $"{Optional(record.DisplayName).PadRight(nameWidth)}  {string.Join(", ", record.Paths)}");
         }
 
         return ExitCodes.Ok;
     }
+
+    private async Task<int> SyncAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        ProjectSyncReport report;
+        try
+        {
+            report = await services.GetRequiredService<ProjectSyncService>().SyncAsync(cancellationToken);
+        }
+        catch (ProjectRegistryStaleException ex)
+        {
+            throw new CommandException("registry_conflict", ex.Message, ExitCodes.Config);
+        }
+
+        WriteReport(report);
+        return ExitCodes.Ok;
+    }
+
+    private void WriteReport(ProjectSyncReport report)
+    {
+        if (report.Added.Count == 0 && report.Updated.Count == 0 && report.Gone.Count == 0 && report.Skipped.Count == 0)
+        {
+            environment.Output.WriteLine("The project registry is already in sync with the Overmind host.");
+            return;
+        }
+
+        environment.Output.WriteLine(
+            $"Synced the project registry with the Overmind host: {report.Added.Count} added, " +
+            $"{report.Updated.Count} updated, {report.Gone.Count} board gone, {report.Skipped.Count} skipped.");
+        WriteChanges("+", report.Added);
+        WriteChanges("~", report.Updated);
+        WriteChanges("!", report.Gone);
+        WriteChanges("=", report.Skipped);
+    }
+
+    private void WriteChanges(string marker, IReadOnlyList<ProjectSyncChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            environment.Output.WriteLine($"{marker} {change.Subject}: {change.Detail}");
+        }
+    }
+
+    private static string BoardColumn(ProjectAliasRecord record) =>
+        record.BoardProjectId is null ? "-" : record.BoardGone ? $"{record.BoardProjectId} (gone)" : record.BoardProjectId;
 
     private int Add(IProjectRegistryStore store, CliInvocation invocation)
     {

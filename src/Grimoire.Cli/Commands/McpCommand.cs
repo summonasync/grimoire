@@ -16,8 +16,7 @@ internal sealed class McpCommand(CliEnvironment environment)
         var options = BuildHostOptions(
             ActorResolver.TryResolve(environment, invocation.Value("actor")),
             environment.Variable(McpHostOptions.TomeEnvironmentVariable),
-            environment.Variable(ActorResolver.EnvironmentVariable),
-            config.Projects);
+            environment.Variable(ActorResolver.EnvironmentVariable));
         environment.Error.WriteLine($"Grimoire MCP server '{options.ServerName}' v{options.ServerVersion} listening on stdio");
         return await McpHost.RunAsync(options, services, cancellationToken);
     }
@@ -25,14 +24,12 @@ internal sealed class McpCommand(CliEnvironment environment)
     internal static McpHostOptions BuildHostOptions(
         MemoryActor? actor,
         string? envTome = null,
-        string? envActor = null,
-        IReadOnlyList<ProjectAliasRecord>? projects = null) => new()
+        string? envActor = null) => new()
         {
             ServerVersion = VersionText(),
             Actor = actor,
             EnvTome = envTome,
             EnvActor = envActor,
-            Projects = projects ?? [],
         };
 
     private static string VersionText() =>

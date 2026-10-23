@@ -10,7 +10,7 @@ internal sealed class FakeProjectRegistryStore(IReadOnlyList<ProjectAliasRecord>
 
     public IReadOnlyList<ProjectAliasRecord> Records => _records;
 
-    public IReadOnlyList<ProjectAliasRecord> Read() => _records;
+    public IReadOnlyList<ProjectAliasRecord> Read() => [.. _records];
 
     public string Mutate(Func<List<ProjectAliasRecord>, string> mutate)
     {

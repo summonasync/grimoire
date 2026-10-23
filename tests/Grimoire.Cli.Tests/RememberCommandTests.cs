@@ -7,15 +7,17 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class RememberCommandTests : IDisposable
 {
-    private readonly TestHost _host = new(new StubEmbeddings(new Dictionary<string, float[]>
-    {
-        ["prefers dark mode"] = [1f, 0f],
-        ["chose qdrant"] = [1f, 0f],
-        ["retry loop"] = [1f, 0f],
-        ["wip idea"] = [1f, 0f],
-        ["long term note"] = [1f, 0f],
-        ["note"] = [1f, 0f],
-    }));
+    private readonly TestHost _host = new(
+        new StubEmbeddings(new Dictionary<string, float[]>
+        {
+            ["prefers dark mode"] = [1f, 0f],
+            ["chose qdrant"] = [1f, 0f],
+            ["retry loop"] = [1f, 0f],
+            ["wip idea"] = [1f, 0f],
+            ["long term note"] = [1f, 0f],
+            ["note"] = [1f, 0f],
+        }),
+        projects: TestServices.DefaultProjects);
 
     [Fact]
     public async Task Remember_DefaultsToProjectScopeJournalAndHumanActor()
@@ -270,7 +272,8 @@ public sealed class RememberCommandTests : IDisposable
         new(
             new StubEmbeddings(new Dictionary<string, float[]> { ["prefers dark mode"] = [1f, 0f], ["chose qdrant"] = [1f, 0f] }),
             claims: claims,
-            variables: variables);
+            variables: variables,
+            projects: TestServices.DefaultProjects);
 
     public void Dispose() => _host.Dispose();
 }

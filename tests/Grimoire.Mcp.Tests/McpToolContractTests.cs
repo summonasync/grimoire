@@ -39,7 +39,7 @@ public sealed class McpToolContractTests
         data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
         data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
         data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);
-        data.Add("projects", ["strict-case", "owner config", "kebab-case", "absolute", "whole path list", "next start"]);
+        data.Add("projects", ["strict-case", "owner config", "kebab-case", "absolute", "whole path list", "never deletes"]);
         return data;
     }
 
@@ -73,7 +73,7 @@ public sealed class McpToolContractTests
         data.Add("memory_recall", "kind", ["Journal", "Fact"]);
         data.Add("memory_scry", "attribution", ["None", "Light", "Full"]);
         data.Add("memory_brief", "scopes", ["Session", "Project", "Global", "Personal"]);
-        data.Add("projects", "action", ["List", "Add", "Update", "Remove"]);
+        data.Add("projects", "action", ["List", "Add", "Update", "Remove", "Sync"]);
         return data;
     }
 

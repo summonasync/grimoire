@@ -17,8 +17,10 @@ internal sealed class FakeServiceProvider : IServiceProvider
         GcOptions? gcOptions = null,
         IGcStateStore? gcState = null,
         ICallerPathProvider? callerPaths = null,
-        IProjectRegistryStore? registryStore = null)
+        IProjectRegistryStore? registryStore = null,
+        IBoardProjectSource? board = null)
     {
+        IProjectRegistryStore effectiveRegistryStore = registryStore ?? new FakeProjectRegistryStore();
         _services = new Dictionary<Type, object>
         {
             [typeof(IMemoryStore)] = store,
@@ -28,7 +30,9 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(GcOptions)] = gcOptions ?? new GcOptions(),
             [typeof(IGcStateStore)] = gcState ?? new FakeGcStateStore(),
             [typeof(ICallerPathProvider)] = callerPaths ?? new FakeCallerPathProvider(DefaultCallerPath),
-            [typeof(IProjectRegistryStore)] = registryStore ?? new FakeProjectRegistryStore(),
+            [typeof(IProjectRegistryStore)] = effectiveRegistryStore,
+            [typeof(IProjectRegistry)] = new LiveProjectRegistry(effectiveRegistryStore),
+            [typeof(IBoardProjectSource)] = board ?? new FakeBoardProjectSource(),
         };
 
         if (engineOptions is not null)

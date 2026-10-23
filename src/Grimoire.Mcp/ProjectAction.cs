@@ -9,4 +9,6 @@ public enum ProjectAction
     Update,
 
     Remove,
+
+    Sync,
 }

@@ -212,8 +212,10 @@ internal static class CommandCatalog
         new CommandSpec
         {
             Name = "projects",
-            Summary = "Manage the project registry: aliases, local paths, board ids and display names.",
-            Syntax = "projects [list | add <alias> <path>... | update <alias> [path]... | remove <alias>]",
+            Summary = "Manage the project registry: aliases, local paths, board ids and display names. " +
+                      "Sync pulls the project list from the local Overmind host, matching by board id; " +
+                      "it adds new projects with a generated alias and marks vanished ones, never deleting.",
+            Syntax = "projects [list | add <alias> <path>... | update <alias> [path]... | remove <alias> | sync]",
             Flags = [ProjectDisplayName, ProjectBoardId],
         },
     ];

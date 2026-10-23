@@ -1,5 +1,6 @@
 using Grimoire.Core;
 using Grimoire.Infrastructure.Autostart;
+using Grimoire.Infrastructure.Board;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
@@ -15,8 +16,10 @@ internal static class CliServices
     {
         var services = new ServiceCollection();
         services.AddSingleton<IProjectRegistryStore>(new ProjectRegistryFileStore(configPath));
-        services.AddSingleton<IProjectRegistry>(new ProjectRegistry(options.Projects));
+        services.AddSingleton<IProjectRegistry>(sp => new LiveProjectRegistry(sp.GetRequiredService<IProjectRegistryStore>()));
         services.AddSingleton<ProjectTagResolver>();
+        services.AddSingleton<IBoardProjectSource>(sp => new OvermindBoardProjectSource(sp.GetRequiredService<HttpClient>()));
+        services.AddSingleton<ProjectSyncService>();
         services.AddSingleton<IQdrantVectorDb>(_ => new QdrantVectorDb(options.Qdrant.Endpoint, options.Qdrant.ApiKey));
         services.AddSingleton(sp => new QdrantCollectionBootstrapper(
             sp.GetRequiredService<IQdrantVectorDb>(),

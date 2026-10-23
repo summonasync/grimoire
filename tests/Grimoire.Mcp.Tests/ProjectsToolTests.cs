@@ -10,10 +10,11 @@ public sealed class ProjectsToolTests
         new ProjectAliasRecord { Alias = "alpha", Paths = ["/src/alpha", "/src/alpha-wt"], BoardProjectId = "b-1", DisplayName = "Alpha" },
     ]);
 
-    private static async Task<(McpTestSession Session, FakeProjectRegistryStore Registry)> StartAsync()
+    private static async Task<(McpTestSession Session, FakeProjectRegistryStore Registry)> StartAsync(
+        FakeBoardProjectSource? board = null)
     {
         var registry = new FakeProjectRegistryStore(Seed.Records);
-        var session = await McpTestSession.StartAsync(registryStore: registry);
+        var session = await McpTestSession.StartAsync(registryStore: registry, board: board);
         return (session, registry);
     }
 
@@ -382,6 +383,108 @@ public sealed class ProjectsToolTests
     }
 
     [Fact]
+    public async Task Sync_AddsNewBoardProjectsWithALocalAlias()
+    {
+        var source = new FakeBoardProjectSource(
+        [
+            new BoardProject("b-9", "Slurp.AI", "index it", "/src/slurpy"),
+        ]);
+        var (session, registry) = await StartAsync(source);
+
+        var result = await session.Client.CallToolAsync("projects", new Dictionary<string, object?>
+        {
+            ["action"] = "Sync",
+        });
+
+        result.ShouldSucceed();
+        var added = result.Payload().GetProperty("added").EnumerateArray().ShouldHaveSingleItem();
+        added.GetProperty("subject").GetString().ShouldBe("slurp-ai");
+        added.GetProperty("detail").GetString().ShouldContain("/src/slurpy");
+        var record = registry.Records.Single(entry => entry.BoardProjectId == "b-9");
+        record.Alias.ShouldBe("slurp-ai");
+        record.Paths.ShouldBe(["/src/slurpy"]);
+        record.Description.ShouldBe("index it");
+        record.BoardGone.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Sync_MarksVanishedBoardProjectsAndKeepsTheAlias()
+    {
+        var (session, registry) = await StartAsync();
+
+        var result = await session.Client.CallToolAsync("projects", new Dictionary<string, object?>
+        {
+            ["action"] = "Sync",
+        });
+
+        result.ShouldSucceed();
+        var gone = result.Payload().GetProperty("gone").EnumerateArray().ShouldHaveSingleItem();
+        gone.GetProperty("subject").GetString().ShouldBe("alpha");
+        var alpha = registry.Records.Single(entry => entry.Alias == "alpha");
+        alpha.BoardGone.ShouldBeTrue();
+        alpha.BoardProjectId.ShouldBe("b-1");
+        alpha.Paths.ShouldBe(["/src/alpha", "/src/alpha-wt"]);
+    }
+
+    [Fact]
+    public async Task Sync_WithMutationArguments_IsParamConflict()
+    {
+        var (session, registry) = await StartAsync();
+
+        var result = await session.Client.CallToolAsync("projects", new Dictionary<string, object?>
+        {
+            ["action"] = "Sync",
+            ["alias"] = "grimoire",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.ParamConflict);
+        param.ShouldBe("alias");
+        message.ShouldContain("action Sync takes no other arguments");
+        registry.Mutations.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Sync_BoardUnavailable_MapsToUpstreamUnavailableWithoutRegistryTouch()
+    {
+        var source = new FakeBoardProjectSource { Failure = new UpstreamUnavailableException("overmind") };
+        var (session, registry) = await StartAsync(source);
+
+        var result = await session.Client.CallToolAsync("projects", new Dictionary<string, object?>
+        {
+            ["action"] = "Sync",
+        });
+
+        var (code, message, _) = result.Error();
+        code.ShouldBe(ToolErrorCodes.UpstreamUnavailable);
+        message.ShouldContain("overmind");
+        message.ShouldContain("Nothing was written by this call");
+        registry.Mutations.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Sync_MakesANewAliasResolvableWithoutARestart()
+    {
+        var source = new FakeBoardProjectSource(
+        [
+            new BoardProject("b-9", "Slurp.AI", null, "/src/slurpy"),
+        ]);
+        var (session, _) = await StartAsync(source);
+        await session.Client.CallToolAsync("projects", new Dictionary<string, object?> { ["action"] = "Sync" });
+        session.Embeddings.Register("freshly synced note", [1f, 0f]);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "freshly synced note",
+            ["scope"] = "Project",
+            ["projectId"] = "slurp-ai",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("projectId").GetString().ShouldBe("slurp-ai");
+    }
+
+    [Fact]
     public async Task WrongCaseAction_RejectedBeforeAnyRegistryTouch()
     {
         var (session, registry) = await StartAsync();
@@ -398,7 +501,7 @@ public sealed class ProjectsToolTests
         param.ShouldBe("action");
         message.ShouldContain("'add'");
         message.ShouldContain("case-sensitive");
-        foreach (var token in new[] { "List", "Add", "Update", "Remove" })
+        foreach (var token in new[] { "List", "Add", "Update", "Remove", "Sync" })
         {
             message.ShouldContain(token, Case.Sensitive);
         }

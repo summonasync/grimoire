@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Shouldly;
@@ -293,15 +294,129 @@ public sealed class ProjectsCommandTests : IDisposable
         var code = await _host.RunAsync("projects", "export");
 
         code.ShouldBe(ExitCodes.Usage);
-        _host.Output.ToString().ShouldContain("expected: list, add, update, remove");
+        _host.Output.ToString().ShouldContain("expected: list, add, update, remove, sync");
     }
+
+    [Fact]
+    public async Task Sync_AddsNewBoardProjectsWithGeneratedAliasesAndPaths()
+    {
+        Seed(SeedConfig);
+        Board().Projects =
+        [
+            new BoardProject("99ee", "Slurp.AI", "index it", "/home/u/Slurp.AI"),
+        ];
+
+        var code = await _host.RunAsync("projects", "sync");
+
+        code.ShouldBe(ExitCodes.Ok);
+        var output = _host.Output.ToString();
+        output.ShouldContain("1 added");
+        output.ShouldContain("+ slurp-ai: board project 99ee ('Slurp.AI') at /home/u/Slurp.AI");
+        var fresh = LoadRegistry().Single(record => record.BoardProjectId == "99ee");
+        fresh.Alias.ShouldBe("slurp-ai");
+        fresh.Paths.ShouldBe(["/home/u/Slurp.AI"]);
+        fresh.DisplayName.ShouldBe("Slurp.AI");
+        fresh.Description.ShouldBe("index it");
+    }
+
+    [Fact]
+    public async Task Sync_RefreshesMatchedRecordsByBoardId()
+    {
+        Seed(SeedConfig);
+        Board().Projects = [new BoardProject("7450", "Grimoire Hub", null, "/home/u/elsewhere")];
+
+        var code = await _host.RunAsync("projects", "sync");
+
+        code.ShouldBe(ExitCodes.Ok);
+        _host.Output.ToString().ShouldContain("~ grimoire: display name 'Grimoire' -> 'Grimoire Hub'");
+        var grimoire = LoadRegistry().Single(record => record.Alias == "grimoire");
+        grimoire.DisplayName.ShouldBe("Grimoire Hub");
+        grimoire.Paths.ShouldBe(["/home/u/grimoire"]);
+    }
+
+    [Fact]
+    public async Task Sync_BoardProjectGone_MarksTheRecordAndKeepsTheAlias()
+    {
+        Seed(SeedConfig);
+
+        var code = await _host.RunAsync("projects", "sync");
+
+        code.ShouldBe(ExitCodes.Ok);
+        var output = _host.Output.ToString();
+        output.ShouldContain("1 board gone");
+        output.ShouldContain("! grimoire: board project 7450 is gone");
+        output.ShouldContain("grimoire projects remove grimoire");
+        var registry = LoadRegistry();
+        registry.ShouldContain(record => record.Alias == "grimoire");
+        registry.Single(record => record.Alias == "grimoire").BoardGone.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Sync_ListShowsTheGoneMarker()
+    {
+        Seed(SeedConfig);
+        await _host.RunAsync("projects", "sync");
+
+        var code = await _host.RunAsync("projects", "list");
+
+        code.ShouldBe(ExitCodes.Ok);
+        _host.Output.ToString().ShouldContain("7450 (gone)");
+    }
+
+    [Fact]
+    public async Task Sync_HostDown_FailsUpstreamAndLeavesTheFileByteIdentical()
+    {
+        Seed(SeedConfig);
+        var original = File.ReadAllBytes(_host.ConfigPath);
+        Board().Failure = new UpstreamUnavailableException("overmind");
+
+        var code = await _host.RunAsync("projects", "sync");
+
+        code.ShouldBe(ExitCodes.UpstreamUnavailable);
+        _host.Output.ToString().ShouldContain("error [upstream_unavailable]");
+        File.ReadAllBytes(_host.ConfigPath).ShouldBe(original);
+    }
+
+    [Fact]
+    public async Task Sync_NoDifferences_ReportsAlreadyInSync()
+    {
+        Seed(SeedConfig);
+        Board().Projects =
+        [
+            new BoardProject("7450", "Grimoire", null, "/home/u/grimoire"),
+        ];
+
+        var code = await _host.RunAsync("projects", "sync");
+
+        code.ShouldBe(ExitCodes.Ok);
+        _host.Output.ToString().ShouldContain("already in sync");
+    }
+
+    [Fact]
+    public async Task Sync_MakesNewAliasesResolvableWithoutARestart()
+    {
+        using var host = new TestHost(
+            new StubEmbeddings(new Dictionary<string, float[]> { ["synced project note"] = [1f, 0f] }));
+        Seed(host.ConfigPath, SeedConfig);
+        host.Board.Projects = [new BoardProject("99ee", "Slurp.AI", null, "/home/u/Slurp.AI")];
+        await host.RunAsync("projects", "sync");
+
+        var code = await host.RunAsync("remember", "synced project note", "--scope", "project", "--project", "slurp-ai");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.Upserted.ShouldHaveSingleItem().ProjectId.ShouldBe("slurp-ai");
+    }
+
+    private FakeBoardProjectSource Board() => _host.Board;
 
     private IReadOnlyList<ProjectAliasRecord> LoadRegistry() => new ConfigLoader(_host.ConfigPath).Load().Projects;
 
-    private void Seed(string json)
+    private void Seed(string json) => Seed(_host.ConfigPath, json);
+
+    private static void Seed(string configPath, string json)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_host.ConfigPath)!);
-        File.WriteAllText(_host.ConfigPath, json);
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        File.WriteAllText(configPath, json);
     }
 
     public void Dispose() => _host.Dispose();
