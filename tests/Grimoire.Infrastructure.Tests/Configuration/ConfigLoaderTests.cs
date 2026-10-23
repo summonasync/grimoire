@@ -36,6 +36,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Embedding.Dimensions.ShouldBe(768);
         options.Memory.SessionTtlHours.ShouldBe(24);
         options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
+        options.Memory.RecallForeignProjectFactor.ShouldBe(0.6);
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(0.5);
         options.Memory.RecencyHalfLifeDays.Project.ShouldBe(30);
         options.Memory.RecencyHalfLifeDays.Global.ShouldBe(90);
