@@ -10,7 +10,7 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class ReindexCommandTests : IDisposable
 {
-    private const string TargetModel = "nomic-embed-text";
+    private const string TargetModel = "qwen3-embedding";
 
     private readonly RecordingVectorDb _db = new() { CollectionExists = true };
 
