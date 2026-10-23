@@ -15,6 +15,8 @@ internal static class CliServices
     {
         var services = new ServiceCollection();
         services.AddSingleton<IProjectRegistryStore>(new ProjectRegistryFileStore(configPath));
+        services.AddSingleton<IProjectRegistry>(new ProjectRegistry(options.Projects));
+        services.AddSingleton<ProjectTagResolver>();
         services.AddSingleton<IQdrantVectorDb>(_ => new QdrantVectorDb(options.Qdrant.Endpoint, options.Qdrant.ApiKey));
         services.AddSingleton(sp => new QdrantCollectionBootstrapper(
             sp.GetRequiredService<IQdrantVectorDb>(),

@@ -8,6 +8,12 @@ namespace Grimoire.Cli.Tests;
 
 internal static class TestServices
 {
+    public static readonly IReadOnlyList<ProjectAliasRecord> DefaultProjects =
+    [
+        new ProjectAliasRecord { Alias = "sandbox", Paths = ["/agents/sandbox"] },
+        new ProjectAliasRecord { Alias = "grimoire", Paths = ["/src/grimoire"] },
+    ];
+
     public static ServiceProvider Build(
         RecordingMemoryStore store,
         StubEmbeddings embeddings,
@@ -17,11 +23,15 @@ internal static class TestServices
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
         IGcStateStore? gcState = null,
-        string? configPath = null)
+        string? configPath = null,
+        ICallerPathProvider? callerPaths = null,
+        IReadOnlyList<ProjectAliasRecord>? projects = null)
     {
         var vectorDb = db ?? new RecordingVectorDb();
         var services = new ServiceCollection();
         services.AddSingleton<IProjectRegistryStore>(new ProjectRegistryFileStore(configPath));
+        services.AddSingleton<IProjectRegistry>(new ProjectRegistry(projects ?? DefaultProjects));
+        services.AddSingleton<ProjectTagResolver>();
         services.AddSingleton<IQdrantVectorDb>(vectorDb);
         services.AddSingleton(new QdrantCollectionBootstrapper(vectorDb, "grimoire"));
         services.AddSingleton(sp => new EmbeddingReindexer(
@@ -34,7 +44,7 @@ internal static class TestServices
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());
-        services.AddSingleton<ICallerPathProvider>(new FixedCallerPath("/agents/sandbox"));
+        services.AddSingleton<ICallerPathProvider>(callerPaths ?? new FixedCallerPath("/agents/sandbox"));
         services.AddSingleton(options ?? TunedOptions());
         services.AddSingleton(gcOptions ?? new GcOptions());
         services.AddSingleton(gcState ?? new FakeGcStateStore());
@@ -67,10 +77,5 @@ internal static class TestServices
     private sealed class NullClaimProvider : IActorClaimProvider
     {
         public Task<ActorClaim?> ReadAsync(CancellationToken cancellationToken) => Task.FromResult<ActorClaim?>(null);
-    }
-
-    private sealed class FixedCallerPath(string path) : ICallerPathProvider
-    {
-        public string Path { get; } = path;
     }
 }

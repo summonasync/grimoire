@@ -9,10 +9,14 @@ namespace Grimoire.Api.Tests;
 
 public sealed class GrimoireApiFactory : IDisposable
 {
+    public const string DefaultCallerPath = "/agents/api-tests";
+
     private readonly MemoryEngineOptions? _engineOptions;
     private readonly string? _staticRootPath;
     private readonly string? _envTome;
     private readonly string? _envActor;
+    private readonly IReadOnlyList<ProjectAliasRecord>? _projects;
+    private readonly string? _callerPath;
     private ServiceProvider? _ports;
     private WebApplication? _app;
 
@@ -20,20 +24,30 @@ public sealed class GrimoireApiFactory : IDisposable
     {
     }
 
-    private GrimoireApiFactory(MemoryEngineOptions? engineOptions, string? staticRootPath, string? envTome, string? envActor)
+    private GrimoireApiFactory(
+        MemoryEngineOptions? engineOptions,
+        string? staticRootPath,
+        string? envTome,
+        string? envActor,
+        IReadOnlyList<ProjectAliasRecord>? projects,
+        string? callerPath)
     {
         _engineOptions = engineOptions;
         _staticRootPath = staticRootPath;
         _envTome = envTome;
         _envActor = envActor;
+        _projects = projects;
+        _callerPath = callerPath;
     }
 
     public static GrimoireApiFactory Create(
         MemoryEngineOptions? engineOptions = null,
         string? staticRootPath = null,
         string? envTome = null,
-        string? envActor = null) =>
-        new(engineOptions, staticRootPath, envTome, envActor);
+        string? envActor = null,
+        IReadOnlyList<ProjectAliasRecord>? projects = null,
+        string? callerPath = null) =>
+        new(engineOptions, staticRootPath, envTome, envActor, projects, callerPath);
 
     public FakeMemoryStore Store { get; } = new();
 
@@ -99,6 +113,8 @@ public sealed class GrimoireApiFactory : IDisposable
         services.AddSingleton<IMemoryStore>(Store);
         services.AddSingleton<IEmbeddingProvider>(Embeddings);
         services.AddSingleton<IClock>(Clock);
+        services.AddSingleton<IProjectRegistry>(new ProjectRegistry(_projects ?? []));
+        services.AddSingleton<ICallerPathProvider>(new FixedCallerPath(_callerPath ?? DefaultCallerPath));
         services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(60) });
         services.AddSingleton<IGcStateStore>(GcState);
         if (_engineOptions is not null)

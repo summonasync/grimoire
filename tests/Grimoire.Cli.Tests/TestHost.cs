@@ -17,14 +17,16 @@ internal sealed class TestHost : IDisposable
         IActorClaimProvider? claims = null,
         IReadOnlyDictionary<string, string>? variables = null,
         GcOptions? gcOptions = null,
-        FakeGcStateStore? gcState = null)
+        FakeGcStateStore? gcState = null,
+        ICallerPathProvider? callerPaths = null,
+        IReadOnlyList<ProjectAliasRecord>? projects = null)
     {
         Store = new RecordingMemoryStore();
         Embeddings = embeddings ?? new StubEmbeddings(new Dictionary<string, float[]>());
         Clock = new FakeClock();
         GcState = gcState ?? new FakeGcStateStore();
         ConfigPath = Path.Combine(_directory, "config.json");
-        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath);
+        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath, callerPaths, projects);
         Output = new StringWriter();
         Env = new CliEnvironment
         {
