@@ -63,10 +63,25 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
 
         return ToolResults.ExecuteAsync(async ct =>
         {
-            var own = await actors.ResolveTomeAsync(null, ct);
-            var targets = tomes is { Length: > 0 }
-                ? [.. tomes.Select(TomeKey.Normalize).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)]
-                : (await DiscoverTomesAsync(ct)).Where(tome => tome != own).ToArray();
+            string[] targets;
+            if (tomes is { Length: > 0 })
+            {
+                var requested = tomes.Select(TomeKey.Normalize).Distinct()
+                    .OrderBy(tome => tome, StringComparer.Ordinal).ToArray();
+                var known = await KnownTomeKeysAsync(ct);
+                var unknown = requested.Where(tome => !known.Contains(tome)).ToArray();
+                if (unknown.Length > 0)
+                {
+                    return ToolResults.Failure(UnknownTomeError(nameof(tomes), unknown, known));
+                }
+
+                targets = requested;
+            }
+            else
+            {
+                var own = await actors.ResolveTomeAsync(null, ct);
+                targets = (await DiscoverTomesAsync(ct)).Where(tome => tome != own).ToArray();
+            }
 
             if (targets.Length == 0)
             {
@@ -102,6 +117,24 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
     {
         var records = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
         return [.. records.Select(record => record.Tome).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)];
+    }
+
+    private async Task<IReadOnlyList<string>> KnownTomeKeysAsync(CancellationToken cancellationToken)
+    {
+        var active = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
+        var tombstoned = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Tombstoned }, cancellationToken);
+        return [.. active.Concat(tombstoned).Select(record => record.Tome).Distinct()
+            .OrderBy(tome => tome, StringComparer.Ordinal)];
+    }
+
+    private static ToolError UnknownTomeError(string paramName, string[] unknown, IReadOnlyList<string> known)
+    {
+        var unknownList = string.Join(", ", unknown.Select(tome => $"'{tome}'"));
+        var knownList = known.Count == 0 ? "(none yet)" : string.Join(", ", known);
+        return new ToolError(
+            ToolErrorCodes.InvalidRequest,
+            $"{paramName}: {unknownList} is not a known tome. Known tome keys (the memory_stats.byTome key set): {knownList}.",
+            paramName);
     }
 
     private static ScryHit ToHit(RecallMatch match, ScryAttribution attribution)

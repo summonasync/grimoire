@@ -206,6 +206,73 @@ public sealed class ScryToolTests
         param.ShouldBe("tomes");
     }
 
+    [Fact]
+    public async Task Scry_UnknownTomeKey_IsRejectedNamingTheKnownKeys()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tomes"] = new[] { "nonesuch-tome" },
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tomes");
+        message.ShouldContain("'nonesuch-tome'");
+        message.ShouldContain("Known tome keys");
+        message.ShouldContain("alpha");
+        message.ShouldContain("byTome");
+    }
+
+    [Fact]
+    public async Task Scry_RejectionKeys_MatchTheStatsByTomeKeys()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+        var retired = await RememberAsync(session, "beta retired note", tome: "beta");
+        await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = retired.GetProperty("memoryId").GetGuid().ToString(),
+            ["reason"] = "retire the beta note",
+            ["tome"] = "beta",
+        });
+
+        var stats = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+        stats.ShouldSucceed();
+        stats.Payload().GetProperty("byTome").EnumerateObject().Select(property => property.Name)
+            .OrderBy(name => name, StringComparer.Ordinal).ShouldBe(["alpha", "beta"]);
+
+        var scry = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tomes"] = new[] { "gamma" },
+        });
+
+        var (_, message, _) = scry.Error();
+        message.ShouldContain("alpha");
+        message.ShouldContain("beta");
+    }
+
+    [Fact]
+    public async Task Scry_MixedKnownAndUnknownTomes_RejectedWithoutPartialSearch()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tomes"] = new[] { "alpha", "nonesuch-tome" },
+        });
+
+        var (code, _, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("tomes");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

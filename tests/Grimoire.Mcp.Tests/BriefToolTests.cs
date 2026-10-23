@@ -67,6 +67,30 @@ public sealed class BriefToolTests
     }
 
     [Fact]
+    public async Task Brief_StartupContract_TeachesTheTomeIdentityDoors()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var hint = result.Payload().GetProperty("hint").GetString()!;
+        var conventions = hint[hint.IndexOf("Conventions", StringComparison.Ordinal)..];
+        conventions.ShouldContain("your tome is the Tome field of this brief, and the tome keys scry accepts are the memory_stats.byTome keys");
+    }
+
+    [Fact]
+    public async Task Brief_DefaultPath_NamesTheResolvedTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tome").GetString().ShouldBe(McpTestSession.ClientActor);
+    }
+
+    [Fact]
     public async Task Brief_StaleSimilarJournal_NamesThePendingEntries()
     {
         await using var session = await McpTestSession.StartAsync();
