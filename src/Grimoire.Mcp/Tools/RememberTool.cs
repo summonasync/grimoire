@@ -14,9 +14,9 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
 
     public const string Description =
         "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - " +
-        "with your actor provenance on it. Call it when the human states a preference, decision or correction " +
-        "and record it verbatim; a near-duplicate supersedes the older record, an identical write replays it, " +
-        "and never store secrets.";
+        "with your actor provenance on it. Call it when the human states a preference, decision or correction: " +
+        "write durable facts in English and keep the human's verbatim quotes as spoken; a near-duplicate " +
+        "supersedes the older record, an identical write replays it, and never store secrets.";
 
     public Task<CallToolResult> Remember(
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]

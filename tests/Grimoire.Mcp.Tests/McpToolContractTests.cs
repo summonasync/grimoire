@@ -27,7 +27,7 @@ public sealed class McpToolContractTests
     public static TheoryData<string, string[]> TeachingKeywords()
     {
         var data = new TheoryData<string, string[]>();
-        data.Add("memory_remember", ["supersedes", "actor provenance", "never store secrets", "tome"]);
+        data.Add("memory_remember", ["supersedes", "actor provenance", "never store secrets", "tome", "durable facts in English", "quotes as spoken"]);
         data.Add("memory_recall", ["before you assume", "memory_scry", "tome", "access stats", "narrow with scope"]);
         data.Add("memory_forget", ["tombstone", "forgotten=false", "tome"]);
         data.Add("memory_restore", ["undo door", "one active truth", "restored=false", "correction trail", "tome", "converges"]);

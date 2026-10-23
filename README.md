@@ -139,6 +139,9 @@ Standing rules, enforced from day one:
 - **No LLM in the core.** The core stores, scores and clusters; agents do the
   thinking. Journal → knowledge compaction: the core finds candidate clusters,
   an agent distills them into facts and tombstones the consumed entries.
+- **Language canon.** Durable facts are written in English; the human's
+  verbatim quotes stay as spoken — a convention the tool descriptions teach,
+  not a store-enforced rule.
 
 ## MCP tools
 
