@@ -162,4 +162,45 @@ public sealed class ListToolTests
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("limit");
     }
+
+    [Fact]
+    public async Task List_TagsFilter_ReturnsTheBoardLinkTagRecord_AndMissesUnknownTags()
+    {
+        const string boardLinkTag = "overmind://entry/dbd64079-ea55-4b90-82a9-842aca5f3a28";
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("board decision provenance", new float[] { 1, 0, 0 });
+        session.Embeddings.Register("unrelated grocery note", new float[] { 0, 1, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "board decision provenance",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tags"] = new[] { boardLinkTag },
+        });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "unrelated grocery note",
+            ["scope"] = "Global",
+        });
+
+        var hit = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["tags"] = new[] { boardLinkTag },
+        });
+
+        hit.ShouldSucceed();
+        var payload = hit.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.GetProperty("memories")[0].GetProperty("content").GetString().ShouldBe("board decision provenance");
+        payload.GetProperty("memories")[0].GetProperty("tags").EnumerateArray()
+            .Select(tag => tag.GetString()).ShouldBe([boardLinkTag]);
+
+        var miss = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["tags"] = new[] { "overmind://entry/00000000-0000-0000-0000-000000000000" },
+        });
+
+        miss.ShouldSucceed();
+        miss.Payload().GetProperty("count").GetInt32().ShouldBe(0);
+    }
 }

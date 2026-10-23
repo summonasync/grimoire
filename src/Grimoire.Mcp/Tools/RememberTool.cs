@@ -31,7 +31,7 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         string? projectId = null,
         [Description("Only for scope=Session: identifies the current session.")]
         string? sessionId = null,
-        [Description("Optional free-form tags used by filtered recall and list.")]
+        [Description("Optional free-form tags used by filtered recall and list; a board-entity link rides as a tag shaped overmind://entry/<uuid>.")]
         string[]? tags = null,
         [Description("0..1, default 0.5. Higher survives recency decay longer; use 0.9+ for hard decisions and rules.")]
         double importance = 0.5,

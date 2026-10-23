@@ -97,9 +97,11 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
         "cluster, then memory_forget each consumed entry with a reason like 'compacted into <new id>'; never " +
         "tombstone entries you did not actually distill. Conventions: reads accept tome= for another tome you " +
         "own, writes never cross tomes, memory_scry is the one cross-tome read; your tome is the Tome field " +
-        "of this brief, and the tome keys scry accepts are the memory_stats.byTome keys; upstream_unavailable " +
-        "means the store or embedding provider is unreachable - reads returned nothing, writes landed " +
-        "nothing, and the retry is safe when infra is back.";
+        "of this brief, and the tome keys scry accepts are the memory_stats.byTome keys. Routing: facts to " +
+        "grimoire, live process state to the Overmind board; link a board entity with a tag shaped " +
+        "overmind://entry/<uuid> - recall and list filter by tags. upstream_unavailable means the store or " +
+        "embedding provider is unreachable - reads returned nothing, writes landed nothing, and the retry is " +
+        "safe when infra is back.";
 
     private static bool IsEmpty(BriefResult result) =>
         result.PersonaState == BriefSectionState.Empty &&

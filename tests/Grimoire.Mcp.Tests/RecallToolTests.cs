@@ -203,6 +203,39 @@ public sealed class RecallToolTests
         param.ShouldBe("tome");
     }
 
+    [Fact]
+    public async Task Recall_TagsFilter_ReturnsARecordCarryingTheBoardLinkTag()
+    {
+        const string boardLinkTag = "overmind://entry/dbd64079-ea55-4b90-82a9-842aca5f3a28";
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("board decision provenance", VectorA);
+        session.Embeddings.Register("unrelated grocery note", VectorB);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "board decision provenance",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tags"] = new[] { boardLinkTag },
+        });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "unrelated grocery note",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "board decision provenance",
+            ["tags"] = new[] { boardLinkTag },
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.GetProperty("matches")[0].GetProperty("tags").EnumerateArray()
+            .Select(tag => tag.GetString()).ShouldBe([boardLinkTag]);
+    }
+
     private static async Task<CallToolResult> Remember(McpTestSession session, string content, string projectId)
     {
         return await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>

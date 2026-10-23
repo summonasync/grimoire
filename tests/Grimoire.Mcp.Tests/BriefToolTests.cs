@@ -80,6 +80,20 @@ public sealed class BriefToolTests
     }
 
     [Fact]
+    public async Task Brief_StartupContract_TeachesTheRoutingContract()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var hint = result.Payload().GetProperty("hint").GetString()!;
+        var conventions = hint[hint.IndexOf("Conventions", StringComparison.Ordinal)..];
+        conventions.ShouldContain("Routing: facts to grimoire, live process state to the Overmind board; " +
+            "link a board entity with a tag shaped overmind://entry/<uuid> - recall and list filter by tags.");
+    }
+
+    [Fact]
     public async Task Brief_DefaultPath_NamesTheResolvedTome()
     {
         await using var session = await McpTestSession.StartAsync();
