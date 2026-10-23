@@ -17,11 +17,11 @@ pluggable port. Memory is partitioned into tomes (ADR-007) — persona-isolated 
 keyed by the writer's actor alias; `memory_scry` is the one deliberate cross-tome read.
 Full topology: `CONTEXT.md`.
 
-Current state: landed — the MVP (`001-agent-memory-mvp`), `003-honest-writes`,
-`004-agent-startup-brief` and `008-books-and-universe` (the Tome/Scry tenant model, ADR-007;
-slug keeps its decision-time working title). In flight: `005`–`007`. Live status lives on
-the Overmind board, never in these files. Work planning happens ONLY through the Overmind
-MCP tools.
+Current state: landed and acceptance-verified — the MVP, honest writes, startup brief,
+corrections (restore/chains), the teaching contract, ops trust, the Tome/Scry tenant model
+(ADR-007), the UI redesign and the CLI shipping lane. The live feature list, statuses and
+what is in flight live on the Overmind board, never in these files. Work planning happens
+ONLY through the Overmind MCP tools.
 
 ## Stack
 
@@ -55,7 +55,9 @@ MCP tools.
   reference each other.
 - No new NuGet/npm packages without OSI license vetting (nuget-licensing-guard rules) and
   central pinning in `Directory.Packages.props`.
-- No git commits or pushes unless the user explicitly asked in the current session.
+- Commit-by-feature (owner ruling 2026-10-21): agents commit their own work at task close
+  and at the feature's handoff into review; push only on the user's explicit ask in the
+  current session; the feature's done flip is the human's door.
 - `BACKLOG/` is a read-only mirror — all planning writes go through the Overmind MCP.
 - Removed requirements/decisions get `<removed YYYY-MM-DD — reason>` tombstones, never
   silent deletion.

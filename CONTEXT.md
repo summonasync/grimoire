@@ -9,9 +9,10 @@ Grimoire is a local agent memory service: short-term (session), long-term (proje
 and personal memory for AI coding agents, plus the tooling around it. One binary, three faces:
 
 - **MCP server** (`grimoire mcp`, stdio) — the agent-facing surface: `memory_remember`,
-  `memory_recall`, `memory_brief`, `memory_scry`, `memory_forget`, `memory_list`,
-  `memory_persona_get`, `memory_compact_candidates`, `memory_stats`. Every tool takes a
-  `tome` param; omit it to work in your resolved tome (see Tomes below).
+  `memory_recall`, `memory_brief`, `memory_scry`, `memory_forget`, `memory_history`,
+  `memory_restore`, `memory_list`, `memory_persona_get`, `memory_compact_candidates`,
+  `memory_stats`. Every tool takes a `tome` param; omit it to work in your resolved tome
+  (see Tomes below).
 - **Local web server** (`grimoire serve`, loopback HTTP + static SPA) — the human-facing
   surface: browse/search/edit memories, edit persona, scry across tomes, view settings and
   stats; also runs the background GC sweep.
