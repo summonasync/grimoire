@@ -152,6 +152,7 @@ public sealed class EmbeddingReindexerTests
         public static async Task<Harness> SeededAsync(params string[] contents)
         {
             var harness = new Harness(new FakeQdrantVectorDb(), new FakeEmbeddingProvider(Vectors()));
+            await harness.Bootstrapper.EnsureAsync(OldModel, CancellationToken.None);
             var ids = new List<Guid>();
 
             foreach (var (index, content) in contents.Index())

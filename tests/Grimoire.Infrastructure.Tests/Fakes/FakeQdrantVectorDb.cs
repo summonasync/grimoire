@@ -15,6 +15,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public int CreateCollectionCount { get; private set; }
 
+    public int DroppedCount { get; private set; }
+
     public int? CreatedDimensions { get; private set; }
 
     public List<(string Field, PayloadSchemaType Type)> CreatedIndexes { get; } = [];
@@ -70,6 +72,13 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
         CreateCollectionCount++;
         CreatedDimensions = dimensions;
         CollectionExists = true;
+        return Task.CompletedTask;
+    }
+
+    public Task DropCollectionAsync(string collection, CancellationToken cancellationToken)
+    {
+        DroppedCount++;
+        CollectionExists = false;
         return Task.CompletedTask;
     }
 

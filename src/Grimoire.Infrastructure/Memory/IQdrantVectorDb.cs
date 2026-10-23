@@ -10,6 +10,8 @@ public interface IQdrantVectorDb
 
     Task CreateCollectionAsync(string collection, int dimensions, CancellationToken cancellationToken);
 
+    Task DropCollectionAsync(string collection, CancellationToken cancellationToken);
+
     Task CreatePayloadIndexAsync(string collection, string field, PayloadSchemaType type, CancellationToken cancellationToken);
 
     Task UpsertAsync(string collection, IReadOnlyList<PointStruct> points, CancellationToken cancellationToken);

@@ -81,6 +81,9 @@ internal static class CommandCatalog
     private static readonly FlagSpec DisableAtLogin = FlagSpec.Switch(
         "disable-at-login", "Remove the console from the desktop login session and exit.");
 
+    private static readonly FlagSpec Yes = FlagSpec.Switch(
+        "yes", "Confirm the drop. Without it the command refuses and changes nothing.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -169,6 +172,13 @@ internal static class CommandCatalog
             Name = "reindex",
             Summary = "Re-embed every active memory with the configured embedding model. Resumable: an interrupted run leaves the store read-refused until reindex completes.",
             Syntax = "reindex",
+        },
+        new CommandSpec
+        {
+            Name = "drop-collection",
+            Summary = "Delete the whole Qdrant collection — every memory, tombstones included. Destructive and irreversible; operations stay refused until the store is recreated.",
+            Syntax = "drop-collection",
+            Flags = [Yes],
         },
         new CommandSpec
         {

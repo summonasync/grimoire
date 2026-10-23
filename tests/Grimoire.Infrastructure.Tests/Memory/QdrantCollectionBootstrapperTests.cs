@@ -137,5 +137,31 @@ public sealed class QdrantCollectionBootstrapperTests
             ["status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"], ignoreOrder: true);
     }
 
+    [Fact]
+    public async Task EnsurePresent_WhenCollectionMissing_ThrowsReindexRequiredWithoutCreating()
+    {
+        var db = new FakeQdrantVectorDb();
+        var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
+
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => bootstrapper.EnsurePresentAsync(Fingerprint(), CancellationToken.None));
+
+        db.CreateCollectionCount.ShouldBe(0);
+        exception.Message.ShouldContain("missing");
+        exception.Message.ShouldContain("`grimoire init`");
+    }
+
+    [Fact]
+    public async Task EnsurePresent_WhenCollectionExistsWithCurrentFingerprint_Passes()
+    {
+        var db = new FakeQdrantVectorDb { CollectionExists = true };
+        var bootstrapper = new QdrantCollectionBootstrapper(db, "grimoire");
+        await bootstrapper.EnsureAsync(Fingerprint(), CancellationToken.None);
+
+        await bootstrapper.EnsurePresentAsync(Fingerprint(), CancellationToken.None);
+
+        db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
+    }
+
     private static EmbeddingFingerprint Fingerprint() => EmbeddingFingerprint.From("nomic-embed-text", 4);
 }
