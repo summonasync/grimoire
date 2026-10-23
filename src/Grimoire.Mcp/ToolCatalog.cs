@@ -25,6 +25,7 @@ internal static class ToolCatalog
         var projectTags = new ProjectTagResolver(projects);
         var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
+        var registryStore = Require<IProjectRegistryStore>(services);
         var actors = new MemoryActorProvider(
             options.Actor,
             options.EnvTome,
@@ -46,6 +47,7 @@ internal static class ToolCatalog
             Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store, actors).GetCandidates, readOnly: true, destructive: false, idempotent: true),
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
+            Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore).Projects, readOnly: false, destructive: true, idempotent: false),
         ];
     }
 

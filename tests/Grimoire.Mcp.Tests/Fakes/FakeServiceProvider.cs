@@ -16,7 +16,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
         IGcStateStore? gcState = null,
-        ICallerPathProvider? callerPaths = null)
+        ICallerPathProvider? callerPaths = null,
+        IProjectRegistryStore? registryStore = null)
     {
         _services = new Dictionary<Type, object>
         {
@@ -27,6 +28,7 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(GcOptions)] = gcOptions ?? new GcOptions(),
             [typeof(IGcStateStore)] = gcState ?? new FakeGcStateStore(),
             [typeof(ICallerPathProvider)] = callerPaths ?? new FakeCallerPathProvider(DefaultCallerPath),
+            [typeof(IProjectRegistryStore)] = registryStore ?? new FakeProjectRegistryStore(),
         };
 
         if (engineOptions is not null)

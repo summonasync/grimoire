@@ -11,9 +11,10 @@ namespace Grimoire.Cli;
 
 internal static class CliServices
 {
-    public static ServiceProvider Build(GrimoireOptions options)
+    public static ServiceProvider Build(GrimoireOptions options, string? configPath = null)
     {
         var services = new ServiceCollection();
+        services.AddSingleton<IProjectRegistryStore>(new ProjectRegistryFileStore(configPath));
         services.AddSingleton<IQdrantVectorDb>(_ => new QdrantVectorDb(options.Qdrant.Endpoint, options.Qdrant.ApiKey));
         services.AddSingleton(sp => new QdrantCollectionBootstrapper(
             sp.GetRequiredService<IQdrantVectorDb>(),

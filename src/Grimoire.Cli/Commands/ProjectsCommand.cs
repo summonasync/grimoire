@@ -1,5 +1,4 @@
 using Grimoire.Cli.CommandLine;
-using Grimoire.Cli.Configuration;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,20 +13,21 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
+        var store = services.GetRequiredService<IProjectRegistryStore>();
         return Task.FromResult(invocation.Positional.FirstOrDefault() switch
         {
-            null or "list" => List(),
-            "add" => Add(invocation),
-            "update" => Update(invocation),
-            "remove" => Remove(invocation),
+            null or "list" => List(store),
+            "add" => Add(store, invocation),
+            "update" => Update(store, invocation),
+            "remove" => Remove(store, invocation),
             var action => throw new UsageException(
                 $"Unknown projects action '{action}' (expected: list, add, update, remove).", invocation.Spec),
         });
     }
 
-    private int List()
+    private int List(IProjectRegistryStore store)
     {
-        var records = ReadRecords();
+        var records = store.Read();
         if (records.Count == 0)
         {
             environment.Output.WriteLine("No projects registered.");
@@ -49,7 +49,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         return ExitCodes.Ok;
     }
 
-    private int Add(CliInvocation invocation)
+    private int Add(IProjectRegistryStore store, CliInvocation invocation)
     {
         if (invocation.Positional.Count < 3)
         {
@@ -74,7 +74,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
             DisplayName = TrimToNull(invocation.Value("display-name")),
         };
 
-        return Mutate(records =>
+        return Mutate(store, records =>
         {
             if (records.Any(existing => existing.Alias.Equals(alias, StringComparison.Ordinal)))
             {
@@ -86,7 +86,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         });
     }
 
-    private int Update(CliInvocation invocation)
+    private int Update(IProjectRegistryStore store, CliInvocation invocation)
     {
         if (invocation.Positional.Count < 2)
         {
@@ -106,7 +106,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         }
 
         EnsureAbsolutePaths(invocation.Spec, paths);
-        return Mutate(records =>
+        return Mutate(store, records =>
         {
             var index = records.FindIndex(record => record.Alias.Equals(alias, StringComparison.Ordinal));
             if (index < 0)
@@ -149,7 +149,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         });
     }
 
-    private int Remove(CliInvocation invocation)
+    private int Remove(IProjectRegistryStore store, CliInvocation invocation)
     {
         if (invocation.Positional.Count < 2)
         {
@@ -157,7 +157,7 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         }
 
         var alias = invocation.Positional[1];
-        return Mutate(records =>
+        return Mutate(store, records =>
         {
             var index = records.FindIndex(record => record.Alias.Equals(alias, StringComparison.Ordinal));
             if (index < 0)
@@ -171,47 +171,24 @@ internal sealed class ProjectsCommand(CliEnvironment environment)
         });
     }
 
-    private int Mutate(Func<List<ProjectAliasRecord>, string> mutate)
+    private int Mutate(IProjectRegistryStore store, Func<List<ProjectAliasRecord>, string> mutate)
     {
-        var path = environment.ConfigPath;
-        var (previous, existed) = ConfigFile.Read(path);
-        var root = existed ? ConfigFile.ParseRoot(previous!, path) : ConfigFile.DefaultsRoot();
-        var records = new List<ProjectAliasRecord>(ProjectRegistrySection.Read(root));
-        var report = mutate(records);
-        var errors = ProjectRegistryValidator.Validate(records);
-        if (errors.Count > 0)
-        {
-            throw new CommandException("config", $"Project registry is invalid: {string.Join(" ", errors)}", ExitCodes.Config);
-        }
-
-        ProjectRegistrySection.Write(root, records);
-        ConfigFile.Write(path, root.ToJsonString(ConfigFile.WriteOptions));
+        string report;
         try
         {
-            _ = new ConfigLoader(path).Load();
+            report = store.Mutate(mutate);
+        }
+        catch (ProjectRegistryMutationException ex)
+        {
+            throw new CommandException("config", ex.Message, ExitCodes.Config);
         }
         catch (ConfigException ex)
         {
-            if (existed)
-            {
-                ConfigFile.Write(path, previous!);
-            }
-            else
-            {
-                File.Delete(path);
-            }
-
             throw new CommandException("config", ex.Message, ExitCodes.Config);
         }
 
         environment.Output.WriteLine(report);
         return ExitCodes.Ok;
-    }
-
-    private IReadOnlyList<ProjectAliasRecord> ReadRecords()
-    {
-        var (text, existed) = ConfigFile.Read(environment.ConfigPath);
-        return existed ? ProjectRegistrySection.Read(ConfigFile.ParseRoot(text!, environment.ConfigPath)) : [];
     }
 
     private static void EnsureAbsolutePaths(CommandSpec spec, IReadOnlyList<string> paths)

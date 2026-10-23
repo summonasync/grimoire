@@ -6,6 +6,9 @@ internal static class ToolErrorMapper
 {
     public static ToolError Map(Exception exception) => exception switch
     {
+        ProjectRegistryMutationException registryMutation => new ToolError(
+            ToolErrorCodes.InvalidRequest,
+            FirstLine(registryMutation.Message)).NothingApplied(),
         UpstreamUnavailableException upstream => new ToolError(
             ToolErrorCodes.UpstreamUnavailable,
             $"Upstream '{upstream.Upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +

@@ -23,8 +23,8 @@ internal sealed class TestHost : IDisposable
         Embeddings = embeddings ?? new StubEmbeddings(new Dictionary<string, float[]>());
         Clock = new FakeClock();
         GcState = gcState ?? new FakeGcStateStore();
-        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState);
         ConfigPath = Path.Combine(_directory, "config.json");
+        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath);
         Output = new StringWriter();
         Env = new CliEnvironment
         {

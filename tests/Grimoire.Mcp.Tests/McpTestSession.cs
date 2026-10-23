@@ -24,6 +24,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeEmbeddingProvider embeddings,
         FakeClock clock,
         FakeGcStateStore gcState,
+        FakeProjectRegistryStore registry,
         McpClient client,
         Channel<JsonRpcMessage> clientToServer,
         Channel<JsonRpcMessage> serverToClient,
@@ -34,6 +35,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         Embeddings = embeddings;
         Clock = clock;
         Gc = gcState;
+        Registry = registry;
         Client = client;
         _clientToServer = clientToServer;
         _serverToClient = serverToClient;
@@ -49,12 +51,14 @@ internal sealed class McpTestSession : IAsyncDisposable
 
     public FakeGcStateStore Gc { get; }
 
+    public FakeProjectRegistryStore Registry { get; }
+
     public McpClient Client { get; }
 
     public static IReadOnlyList<ProjectAliasRecord> DefaultProjects { get; } =
     [
         new ProjectAliasRecord { Alias = "grimoire", Paths = ["/src/grimoire"] },
-        new ProjectAliasRecord { Alias = "alpha", Paths = ["/src/alpha"] },
+        new ProjectAliasRecord { Alias = "alpha", Paths = ["/src/alpha"], BoardProjectId = "board-1", DisplayName = "Alpha" },
         new ProjectAliasRecord { Alias = "beta", Paths = ["/src/beta"] },
     ];
 
@@ -65,15 +69,18 @@ internal sealed class McpTestSession : IAsyncDisposable
         GcOptions? gcOptions = null,
         FakeGcStateStore? gcState = null,
         string? callerPath = null,
-        IReadOnlyList<ProjectAliasRecord>? projects = null)
+        IReadOnlyList<ProjectAliasRecord>? projects = null,
+        FakeProjectRegistryStore? registryStore = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
         var gc = gcState ?? new FakeGcStateStore();
+        var registry = registryStore ?? new FakeProjectRegistryStore(DefaultProjects);
         var services = new FakeServiceProvider(
             store, embeddings, clock, engineOptions, claims, gcOptions, gc,
-            callerPath is null ? null : new FakeCallerPathProvider(callerPath));
+            callerPath is null ? null : new FakeCallerPathProvider(callerPath),
+            registry);
         var options = (hostOptions ?? new McpHostOptions()) with { Projects = projects ?? DefaultProjects };
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
@@ -92,7 +99,8 @@ internal sealed class McpTestSession : IAsyncDisposable
             ClientInfo = new Implementation { Name = ClientName, Version = "0.1.0" },
         })).WaitAsync(TimeSpan.FromSeconds(15));
 
-        return new McpTestSession(store, embeddings, clock, gc, client, clientToServer, serverToClient, serverRun, cancellation);
+        return new McpTestSession(
+            store, embeddings, clock, gc, registry, client, clientToServer, serverToClient, serverRun, cancellation);
     }
 
     public async ValueTask DisposeAsync()

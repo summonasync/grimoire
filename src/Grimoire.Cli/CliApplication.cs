@@ -30,7 +30,7 @@ internal static class CliApplication
             var invocation = CommandLineParser.Parse(args);
             var config = env.Config.Load();
             var ownsServices = env.Services is null;
-            var services = env.Services ?? CliServices.Build(config);
+            var services = env.Services ?? CliServices.Build(config, env.ConfigPath);
             using var cancellation = LinkCancellation(cancellationToken, out var detach);
             try
             {

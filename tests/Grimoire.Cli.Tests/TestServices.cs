@@ -1,5 +1,6 @@
 using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
+using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,10 +16,12 @@ internal static class TestServices
         RecordingVectorDb? db = null,
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
-        IGcStateStore? gcState = null)
+        IGcStateStore? gcState = null,
+        string? configPath = null)
     {
         var vectorDb = db ?? new RecordingVectorDb();
         var services = new ServiceCollection();
+        services.AddSingleton<IProjectRegistryStore>(new ProjectRegistryFileStore(configPath));
         services.AddSingleton<IQdrantVectorDb>(vectorDb);
         services.AddSingleton(new QdrantCollectionBootstrapper(vectorDb, "grimoire"));
         services.AddSingleton(sp => new EmbeddingReindexer(

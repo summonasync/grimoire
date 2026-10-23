@@ -136,6 +136,11 @@ internal static class ToolSurfaceProbes
         await Probe(session, probes, "memory_compact_candidates", new Dictionary<string, object?>());
         await Probe(session, probes, "memory_stats", new Dictionary<string, object?>());
 
+        await Probe(session, probes, "projects", new Dictionary<string, object?>
+        {
+            ["action"] = "List",
+        });
+
         return probes;
     }
 
