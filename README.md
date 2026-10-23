@@ -158,6 +158,8 @@ Standing rules, enforced from day one:
 | `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest |
 | `memory_compact_candidates` | get journal clusters worth distilling into facts |
 | `memory_forget` | retract with a reason (tombstone, never delete) |
+| `memory_history` | walk a memory's full supersede chain before trusting or overwriting it |
+| `memory_restore` | reverse a correction that was itself a mistake — the record returns, the superseder is tombstoned |
 | `memory_list` | browse recent active memories |
 | `memory_persona_get` | read the tome's persona document |
 | `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
