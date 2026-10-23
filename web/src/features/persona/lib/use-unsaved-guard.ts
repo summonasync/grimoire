@@ -15,17 +15,19 @@ export function useUnsavedGuard(active: boolean): void {
       event.returnValue = confirmMessage;
     };
 
-    const findTabLink = (target: EventTarget | null): HTMLAnchorElement | null => {
+    const isGuardedClick = (target: EventTarget | null): boolean => {
       if (!(target instanceof Element)) {
-        return null;
+        return false;
       }
-      const anchor = target.closest("a[href^='#']");
-      return anchor instanceof HTMLAnchorElement ? anchor : null;
+      if (target.closest("[data-unsaved-guard]") !== null) {
+        return true;
+      }
+      const anchor = target.closest<HTMLAnchorElement>("a[href^='#']");
+      return anchor !== null && anchor.hash !== window.location.hash;
     };
 
     const handleCaptureClick = (event: MouseEvent): void => {
-      const anchor = findTabLink(event.target);
-      if (anchor === null || anchor.hash === window.location.hash) {
+      if (!isGuardedClick(event.target)) {
         return;
       }
       if (!window.confirm(confirmMessage)) {

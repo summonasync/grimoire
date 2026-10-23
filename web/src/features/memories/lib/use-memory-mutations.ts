@@ -1,9 +1,16 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { shelfKeys } from "@/features/shelf";
+import { statsKeys } from "@/features/stats";
 import { createMemory, forgetMemory, patchMemory, restoreMemory } from "../api";
 import { memoryKeys } from "../queries";
-import type { CreateMemoryInput, PatchMemoryInput, RestoreMemoryInput } from "../types";
+import type {
+  CreateMemoryInput,
+  ForgetMemoryInput,
+  PatchMemoryInput,
+  RestoreMemoryInput,
+} from "../types";
 
 function useInvalidateMemories() {
   const queryClient = useQueryClient();
@@ -11,6 +18,8 @@ function useInvalidateMemories() {
     void queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
     void queryClient.invalidateQueries({ queryKey: memoryKeys.detail(id) });
     void queryClient.invalidateQueries({ queryKey: memoryKeys.history(id) });
+    void queryClient.invalidateQueries({ queryKey: shelfKeys.census() });
+    void queryClient.invalidateQueries({ queryKey: statsKeys.all });
   };
 }
 
@@ -18,10 +27,11 @@ export function useCreateMemory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateMemoryInput) => createMemory(input),
-    onSuccess: (result) => {
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: memoryKeys.all });
-      void result;
+      void queryClient.invalidateQueries({ queryKey: shelfKeys.census() });
+      void queryClient.invalidateQueries({ queryKey: statsKeys.all });
     },
   });
 }
@@ -37,7 +47,7 @@ export function usePatchMemory(id: string) {
 export function useForgetMemory(id: string) {
   const invalidate = useInvalidateMemories();
   return useMutation({
-    mutationFn: (reason: string) => forgetMemory(id, reason),
+    mutationFn: (input: ForgetMemoryInput) => forgetMemory(id, input.reason, input.tome),
     onSuccess: (forgotten) => invalidate(forgotten.id),
   });
 }

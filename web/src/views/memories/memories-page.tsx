@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
 import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
+import { Icon } from "@/shared/ui/icons";
 import { Panel } from "@/shared/ui/panel";
 import { useTomeFilter } from "@/widgets/app-shell/tome-context";
 import { MemoryCreateForm } from "@/features/memories/components/memory-create-form";
@@ -41,14 +42,28 @@ export function MemoriesPage() {
         title="Memories"
         description="Browse and manage what your agents remember."
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            icon={creating ? "close" : "plus"}
-            onClick={() => setCreating((current) => !current)}
-          >
-            {creating ? "Cancel" : "Add memory"}
-          </Button>
+          <>
+            <span className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs">
+              <Icon name="book" className="size-3.5 text-muted" />
+              <span className="text-muted">Tome</span>
+              <span className="font-medium">{effectiveTome ?? list.data?.tome ?? "—"}</span>
+            </span>
+            <a
+              href="#shelf"
+              className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+            >
+              <Icon name="arrowLeft" className="size-3.5" />
+              Shelf
+            </a>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={creating ? "close" : "plus"}
+              onClick={() => setCreating((current) => !current)}
+            >
+              {creating ? "Cancel" : "Add memory"}
+            </Button>
+          </>
         }
       />
 

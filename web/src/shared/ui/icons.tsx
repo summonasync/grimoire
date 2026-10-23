@@ -27,6 +27,7 @@ export type IconName =
   | "tag"
   | "star"
   | "book"
+  | "shelf"
   | "pulse"
   | "spark"
   | "database"
@@ -169,6 +170,13 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M4 5h7a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4z" />
       <path d="M20 5h-7a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h7z" />
+    </>
+  ),
+  shelf: (
+    <>
+      <path d="M4 4h16v16H4z" />
+      <path d="M4 11h16" />
+      <path d="M8 14.5V20M12 14.5V20M16 14.5V20" />
     </>
   ),
   pulse: <path d="M2 12h4l3-7 4 14 3-7h6" />,

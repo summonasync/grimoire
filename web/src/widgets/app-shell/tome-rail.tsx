@@ -25,6 +25,7 @@ export function TomeRail() {
             <li key={tome}>
               <button
                 type="button"
+                data-unsaved-guard
                 onClick={() => setTome(active === tome ? null : tome)}
                 aria-current={active === tome ? "true" : undefined}
                 className={cn(
@@ -47,6 +48,7 @@ export function TomeRail() {
       {active && (
         <button
           type="button"
+          data-unsaved-guard
           onClick={() => setTome(null)}
           className="mt-2 flex items-center gap-1 px-2 text-[0.7rem] text-muted transition-colors hover:text-accent"
         >

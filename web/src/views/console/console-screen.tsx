@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { healthQueryOptions } from "@/shared/api/health";
 import { versionQueryOptions } from "@/shared/api/version";
@@ -29,7 +28,7 @@ function QuickAction({
   subtitle: string;
 }) {
   return (
-    <Link
+    <a
       href={href}
       className="flex items-center gap-2.5 rounded-lg border border-border-strong/80 bg-background/50 px-3.5 py-2.5 transition-colors hover:border-accent hover:bg-accent-soft"
     >
@@ -38,7 +37,7 @@ function QuickAction({
         <span className="block text-sm leading-tight font-medium">{title}</span>
         <span className="block text-[0.7rem] text-muted">{subtitle}</span>
       </span>
-    </Link>
+    </a>
   );
 }
 

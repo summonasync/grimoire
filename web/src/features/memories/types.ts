@@ -30,6 +30,7 @@ export interface CreateMemoryInput {
   content: string;
   scope: MemoryScope;
   kind?: MemoryKind;
+  tome?: string;
   projectId?: string;
   sessionId?: string;
   tags?: string[];
@@ -48,6 +49,11 @@ export interface PatchMemoryInput {
   tags?: string[];
   importance?: number;
   reason: string;
+}
+
+export interface ForgetMemoryInput {
+  reason: string;
+  tome?: string;
 }
 
 export interface SupersederState {

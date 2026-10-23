@@ -10,8 +10,12 @@ import { personaSections } from "../lib/persona-document";
 import { usePersonaEditor } from "../lib/use-persona-editor";
 import { PersonaSectionField } from "./persona-section-field";
 
-export function PersonaEditor() {
-  const editor = usePersonaEditor();
+interface PersonaEditorProps {
+  tome: string | null;
+}
+
+export function PersonaEditor({ tome }: PersonaEditorProps) {
+  const editor = usePersonaEditor(tome);
   const stats = useQuery(statsQueryOptions());
   const health = useQuery(healthQueryOptions());
 
@@ -43,9 +47,16 @@ export function PersonaEditor() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-2 rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-xs">
             <Icon name="book" className="size-3.5 text-muted" />
-            <span className="text-muted">Active tome</span>
-            <span className="font-medium">{stats.data?.tome ?? "—"}</span>
+            <span className="text-muted">{tome ? "Tome" : "Active tome"}</span>
+            <span className="font-medium">{tome ?? stats.data?.tome ?? "—"}</span>
           </span>
+          <a
+            href="#shelf"
+            className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            <Icon name="arrowLeft" className="size-3.5" />
+            Shelf
+          </a>
           {health.data && (
             <span
               className={

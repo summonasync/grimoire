@@ -20,9 +20,9 @@ function toFailure(error: Error | null): ApiFailure | null {
   return { code: "network_error", message: error.message || "The request failed." };
 }
 
-export function usePersonaEditor() {
+export function usePersonaEditor(tome: string | null) {
   const queryClient = useQueryClient();
-  const query = useQuery(personaQueryOptions());
+  const query = useQuery(personaQueryOptions(tome));
   const [draft, setDraft] = useState<PersonaDocument | null>(null);
   const [savedTome, setSavedTome] = useState<string | null>(null);
   const dirtyRef = useRef(false);
@@ -43,11 +43,11 @@ export function usePersonaEditor() {
   useUnsavedGuard(isDirty);
 
   const saveMutation = useMutation({
-    mutationFn: (document: PersonaDocument) => updatePersona(document),
+    mutationFn: (document: PersonaDocument) => updatePersona(document, tome),
     onSuccess: (saved) => {
       setDraft(saved.document);
       setSavedTome(saved.tome);
-      queryClient.setQueryData(personaKeys.document(), saved.document);
+      queryClient.setQueryData(personaKeys.document(tome), saved.document);
     },
   });
 

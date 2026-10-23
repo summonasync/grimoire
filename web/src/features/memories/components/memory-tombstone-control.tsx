@@ -19,12 +19,15 @@ export function MemoryTombstoneControl({ record }: MemoryTombstoneControlProps) 
     if (trimmedReason.length === 0 || forget.isPending) {
       return;
     }
-    forget.mutate(trimmedReason, {
-      onSuccess: () => {
-        setConfirming(false);
-        setReason("");
+    forget.mutate(
+      { reason: trimmedReason, tome: record.tome },
+      {
+        onSuccess: () => {
+          setConfirming(false);
+          setReason("");
+        },
       },
-    });
+    );
   };
 
   const reset = () => {

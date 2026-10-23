@@ -41,6 +41,7 @@ export {
 export type {
   CreateMemoryInput,
   CreateMemoryResult,
+  ForgetMemoryInput,
   HistoryEntry,
   HistoryResult,
   MemoryListParams,

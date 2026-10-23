@@ -65,8 +65,11 @@ export function patchMemory(id: string, input: PatchMemoryInput): Promise<Memory
   return apiFetch<MemoryRecord>(`/api/memories/${id}`, jsonRequest("PATCH", input));
 }
 
-export function forgetMemory(id: string, reason: string): Promise<MemoryRecord> {
-  return apiFetch<MemoryRecord>(`/api/memories/${id}/forget`, jsonRequest("POST", { reason }));
+export function forgetMemory(id: string, reason: string, tome?: string): Promise<MemoryRecord> {
+  return apiFetch<MemoryRecord>(
+    `/api/memories/${id}/forget`,
+    jsonRequest("POST", { reason, ...(tome ? { tome } : {}) }),
+  );
 }
 
 export function restoreMemory(id: string, input: RestoreMemoryInput): Promise<RestoreMemoryResult> {
