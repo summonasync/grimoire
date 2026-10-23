@@ -11,6 +11,10 @@ namespace Grimoire.Infrastructure.Memory;
 /// of the target model are skipped on re-runs; every store upsert stamps that marker, so
 /// records written between reindexes are skipped too. Tombstoned and superseded records
 /// are never re-embedded; the sweep covers all tomes because it is an ops command.
+/// A collection whose vector dimensions differ from the target cannot carry re-embedded
+/// vectors, so reindex rebuilds it in place: drop, recreate under the target dimensions
+/// with a fresh fingerprint marker, and report the discarded active-record count — the
+/// owner accepts the store being disposable across embedding changes.
 /// </summary>
 public sealed class EmbeddingReindexer(
     IQdrantVectorDb db,
@@ -34,9 +38,18 @@ public sealed class EmbeddingReindexer(
             return new ReindexOutcome(0, 0, 0);
         }
 
+        var info = await db.GetCollectionInfoAsync(collection, cancellationToken);
+        if (CollectionDimensions.From(info) is { } existing && existing != target.Dimensions)
+        {
+            var discarded = (int)await db.CountAsync(collection, ActiveRecords(), cancellationToken);
+            await db.DropCollectionAsync(collection, cancellationToken);
+            await bootstrapper.EnsureAsync(target, cancellationToken);
+            return new ReindexOutcome(0, 0, 0, discarded, Recreated: true);
+        }
+
         await bootstrapper.BeginReindexAsync(target, cancellationToken);
 
-        var filter = MemoryFilterTranslator.Translate(new MemoryFilter { Status = MemoryStatus.Active });
+        var filter = ActiveRecords();
         var total = await db.CountAsync(collection, filter, cancellationToken);
         var processed = 0;
         var reembedded = 0;
@@ -75,6 +88,9 @@ public sealed class EmbeddingReindexer(
         await bootstrapper.CompleteReindexAsync(target, cancellationToken);
         return new ReindexOutcome(processed, reembedded, skipped);
     }
+
+    private static Filter ActiveRecords() =>
+        MemoryFilterTranslator.Translate(new MemoryFilter { Status = MemoryStatus.Active });
 
     private static bool CarriesTargetVector(IReadOnlyDictionary<string, Value> payload, EmbeddingFingerprint target) =>
         payload.TryGetValue(MemoryPayloadFields.VectorModel, out var model)

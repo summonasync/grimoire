@@ -19,6 +19,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public int? CreatedDimensions { get; private set; }
 
+    public int? CollectionDimensions { get; set; }
+
     public List<(string Field, PayloadSchemaType Type)> CreatedIndexes { get; } = [];
 
     public List<Filter> ScrolledFilters { get; } = [];
@@ -59,6 +61,17 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     {
         var info = new CollectionInfo { PointsCount = (ulong)_points.Count };
 
+        if (CollectionDimensions is { } dimensions)
+        {
+            info.Config = new CollectionConfig
+            {
+                Params = new CollectionParams
+                {
+                    VectorsConfig = new VectorsConfig { Params = new VectorParams { Size = (ulong)dimensions } },
+                },
+            };
+        }
+
         foreach (var (field, type) in CreatedIndexes)
         {
             info.PayloadSchema[field] = new PayloadSchemaInfo { DataType = type };
@@ -71,6 +84,7 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     {
         CreateCollectionCount++;
         CreatedDimensions = dimensions;
+        CollectionDimensions = dimensions;
         CollectionExists = true;
         return Task.CompletedTask;
     }
@@ -79,6 +93,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     {
         DroppedCount++;
         CollectionExists = false;
+        CollectionDimensions = null;
+        _points.Clear();
         return Task.CompletedTask;
     }
 

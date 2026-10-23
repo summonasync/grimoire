@@ -28,6 +28,13 @@ internal sealed class ReindexCommand(CliEnvironment environment)
             },
             cancellationToken);
 
+        if (outcome.Recreated)
+        {
+            environment.Output.WriteLine(
+                $"Collection '{config.Qdrant.Collection}' was recreated under {fingerprint.Dimensions} dimensions " +
+                $"for '{fingerprint.Model}'; {outcome.Discarded} active records of the previous embedding were discarded");
+        }
+
         environment.Output.WriteLine(
             $"Reindex complete: {outcome.Reembedded} re-embedded, {outcome.Skipped} already current, " +
             $"{outcome.Processed} scanned with '{config.Embedding.Model}' in {clock.Elapsed.TotalSeconds:F0}s");
