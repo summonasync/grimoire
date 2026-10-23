@@ -58,6 +58,15 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_memory", "Memory content must not be empty.");
             }
 
+            if (request.Scope == MemoryScope.Session && request.ProjectId is not null)
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "param_conflict",
+                    $"projectId only applies to scopes 'project', 'global' and 'personal'; omit it or change the scope " +
+                    $"(got projectId '{request.ProjectId}' with scope 'session').");
+            }
+
             var projectTag = projectTags.Resolve(request.Scope, request.ProjectId, callerPaths.Path);
             if (projectTag.Rejection is { } rejection)
             {

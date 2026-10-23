@@ -495,6 +495,44 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_SessionScopeWithProjectId_Returns400ParamConflict()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "session note",
+            scope = "session",
+            projectId = "grimoire",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("param_conflict");
+        message.ShouldContain("projectId only applies to scopes 'project', 'global' and 'personal'");
+        message.ShouldContain("(got projectId 'grimoire' with scope 'session')");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_SessionScopeWithoutProjectId_WritesSessionRecordWithoutTag()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["session note"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "session note",
+            scope = "session",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var record = factory.Store.Records.ShouldHaveSingleItem();
+        record.Scope.ShouldBe(MemoryScope.Session);
+        record.ProjectId.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Patch_ContentChange_ReEmbedsAndUpsertsSameId()
     {
         factory.Reset();

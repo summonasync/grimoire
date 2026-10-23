@@ -18,7 +18,17 @@ internal sealed class RememberCommand(CliEnvironment environment)
             services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
         var scope = CliValues.Scope(invocation.Spec, invocation.Value("scope"), MemoryScope.Project);
         var ttlHours = invocation.Value("ttl") is { } ttlText ? ParseTtlHours(invocation.Spec, scope, ttlText) : (double?)null;
-        var projectTag = ResolveProjectTag(invocation, scope, services);
+        var projectId = invocation.Value("project");
+        if (scope == MemoryScope.Session && projectId is not null)
+        {
+            throw new CommandException(
+                "param_conflict",
+                $"--project only applies to scopes 'project', 'global' and 'personal'; omit it or change the scope " +
+                $"(got --project '{projectId}' with scope 'session').",
+                ExitCodes.Usage);
+        }
+
+        var projectTag = ResolveProjectTag(projectId, scope, services);
         var request = new RememberRequest
         {
             Content = invocation.JoinedPositional(),
@@ -66,9 +76,8 @@ internal sealed class RememberCommand(CliEnvironment environment)
         return ExitCodes.Ok;
     }
 
-    private static ProjectTagResolution ResolveProjectTag(CliInvocation invocation, MemoryScope scope, IServiceProvider services)
+    private static ProjectTagResolution ResolveProjectTag(string? projectId, MemoryScope scope, IServiceProvider services)
     {
-        var projectId = invocation.Value("project");
         var callerPath = services.GetRequiredService<ICallerPathProvider>().Path;
         var resolution = services.GetRequiredService<ProjectTagResolver>().Resolve(scope, projectId, callerPath);
         if (resolution.Rejection is not { } rejection)
