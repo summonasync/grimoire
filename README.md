@@ -1,8 +1,33 @@
-# Grimoire
+```
+{  ·  ·  ·  ·  ·  }
+ |   .-------.   |
+ ·   | {:·:} |   ·
+ |   '-------'   |
+ ·      |·|      ·
+{  ·  ·  '·'  ·  }
 
-> **Persistent memory for AI coding agents.** Every decision, preference and
-> "the human said X" — written down, searchable, and remembered across sessions,
-> projects and agents. Local-first. No cloud. No LLM in the core.
+ ██████╗ ██████╗ ██╗███╗   ███╗ ██████╗ ██╗██████╗ ███████╗
+██╔════╝ ██╔══██╗██║████╗ ████║██╔═══██╗██║██╔══██╗██╔════╝
+██║  ███╗██████╔╝██║██╔████╔██║██║   ██║██║██████╔╝█████╗
+██║   ██║██╔══██╗██║██║╚██╔╝██║██║   ██║██║██╔══██╗██╔══╝
+╚██████╔╝██║  ██║██║██║ ╚═╝ ██║╚██████╔╝██║██║  ██║███████╗
+ ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝
+```
+
+**One shared memory. Every agent. Every project.**  
+*The book the summoner writes results into.*
+
+`await SummonAsync();` — part of the summoner's kit  
+overmind · **▸ grimoire** · squeezr · mindlash studio
+
+---
+
+## What it is
+
+Persistent memory for AI coding agents. Every decision, preference and
+"the human said X" — written down, searchable, and remembered across
+sessions, projects and agents. Local-first. No cloud. No LLM in the core:
+it stores, scores and clusters; the agents do the thinking.
 
 One binary, three faces:
 
@@ -12,11 +37,20 @@ One binary, three faces:
 | Web console | `grimoire serve` (loopback HTTP + SPA), opened by `grimoire ui` | the human — browse, edit, tune |
 | CLI | `grimoire <command>` | scripts and quick queries |
 
-**Status**: the MVP plus honest-writes, startup-brief and the tome model are landed
-and acceptance-verified end to end — all three faces (CLI, MCP stdio, loopback web
-console) round-trip against a live Qdrant + Ollama, 818 tests green. Live work
-tracking happens on the Overmind board; this README describes the shipped shape plus
-the frozen contracts.
+**Status**: the MVP plus honest-writes, startup-brief and the tome model are
+landed and acceptance-verified end to end — all three faces (CLI, MCP stdio,
+loopback web console) round-trip against a live Qdrant + Ollama, 818 tests
+green. Live work tracking happens on the Overmind board; this README
+describes the shipped shape plus the frozen contracts.
+
+## Why it exists
+
+A single developer with an agent crew can hold more context in flight than
+a single developer alone — but only if the crew carries what it learns
+between sessions and between projects. Otherwise you spend the day
+re-explaining the same preferences and decisions to four different CLIs,
+and the explanation is the work. Overmind holds what one project knows;
+Grimoire is the layer that survives the session — and every other project.
 
 ## The name
 
@@ -24,6 +58,21 @@ Seven rounds, seven themed universes, a pool of eight finalists, one user
 vote. [The bracket](audits/naming-tournament-2026-10-17.md) is part of the
 repo history. A grimoire is the agent's book of spells — everything it has
 learned about you, written down where the next session can find it.
+
+## Trade-offs
+
+Read these before you adopt. They are the same weight as the feature list —
+that is the deal.
+
+- **Semantic recall needs Qdrant + an embedding provider.** That is Docker
+  and Ollama on the machine before the memory gets smart.
+- **Loopback-only HTTP by design**: no remote console, no phone, no team
+  view.
+- **Young: 0.x.** Contracts are described as frozen in this README, but a
+  0.x is a 0.x.
+- **Value depends on discipline** — a memory store nobody writes to is an
+  empty room. The crew contract (write the moment a decision becomes known)
+  is part of the product, not an afterthought.
 
 ## Quickstart
 
@@ -46,12 +95,13 @@ grimoire ui       # opens http://grimoire.localhost:4770 in the default browser,
                   # starting the systemd user unit first when nothing is serving
 ```
 
-`grimoire ui` probes `http://127.0.0.1:<serve.port>/health`; when nothing answers it runs
-`systemctl --user start grimoire-serve` once and waits (10s budget) before opening. A console
-that never answers is a failure, not a blank tab: the command reports the remedy and exits 6.
-The address it shows is `grimoire.localhost` when that name resolves to loopback, otherwise the
-literal `127.0.0.1` — the health probe itself always uses the literal, because the server binds
-IPv4 loopback only.
+`grimoire ui` probes `http://127.0.0.1:<serve.port>/health`; when nothing
+answers it runs `systemctl --user start grimoire-serve` once and waits (10s
+budget) before opening. A console that never answers is a failure, not a
+blank tab: the command reports the remedy and exits 6. The address it shows
+is `grimoire.localhost` when that name resolves to loopback, otherwise the
+literal `127.0.0.1` — the health probe itself always uses the literal,
+because the server binds IPv4 loopback only.
 
 Login autostart is opt-in and reversible, and neither flag opens anything:
 
@@ -60,8 +110,9 @@ grimoire ui --enable-at-login    # writes ~/.config/autostart/grimoire-ui.deskto
 grimoire ui --disable-at-login   # removes it; reports cleanly when there is nothing to remove
 ```
 
-The entry names the binary you ran, so re-enabling after a release refreshes it. Running either
-flag twice is a no-op: a matching entry reports "already up to date" and is not rewritten.
+The entry names the binary you ran, so re-enabling after a release
+refreshes it. Running either flag twice is a no-op: a matching entry
+reports "already up to date" and is not rewritten.
 
 Wire an agent to the memory (stdio MCP):
 
@@ -77,9 +128,11 @@ Wire an agent to the memory (stdio MCP):
 
 ## Distribution
 
-The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs `Grimoire.<version>.nupkg` (version from
-`Directory.Build.props`, tool command `grimoire`). The public feed (nuget.org) is an owner decision
-still pending, so the shipped channel today is a local folder feed built from this repo:
+The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs
+`Grimoire.<version>.nupkg` (version from `Directory.Build.props`, tool
+command `grimoire`). The public feed (nuget.org) is an owner decision still
+pending, so the shipped channel today is a local folder feed built from
+this repo:
 
 ```bash
 dotnet pack src/Grimoire.Cli -c Release -o build/packages
@@ -88,20 +141,22 @@ grimoire --version    # -> grimoire 0.2.0
 ```
 
 `-g` lands `grimoire` on PATH (`~/.dotnet/tools` on Linux/macOS,
-`%USERPROFILE%\.dotnet\tools` on Windows; use `--tool-path <dir>` for anywhere else). One package
-covers win/mac/linux — as a framework-dependent tool it rides an installed .NET 10 runtime;
-machines without one need the runtime or the self-contained release binary instead.
-External installers (Overmind's assisted install) spawn exactly these commands and then probe
-`grimoire --version`.
+`%USERPROFILE%\.dotnet\tools` on Windows; use `--tool-path <dir>` for
+anywhere else). One package covers win/mac/linux — as a
+framework-dependent tool it rides an installed .NET 10 runtime; machines
+without one need the runtime or the self-contained release binary instead.
+External installers (Overmind's assisted install) spawn exactly these
+commands and then probe `grimoire --version`.
 
 The local infrastructure story is unchanged: Qdrant + Ollama via
-[`deploy/docker-compose.yml`](deploy/docker-compose.yml), isolated per-product variant
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml), isolated
+per-product variant
 [`deploy/docker-compose.grimoire.yml`](deploy/docker-compose.grimoire.yml).
 
 ## How memory works
 
-Every memory is one point in a Qdrant collection: a vector (embedding of the
-content) plus a payload. Two orthogonal dimensions:
+Every memory is one point in a Qdrant collection: a vector (embedding of
+the content) plus a payload. Two orthogonal dimensions:
 
 | | `journal` — subjective, append-heavy | `fact` — curated, provenance-tracked |
 |---|---|---|
@@ -110,12 +165,13 @@ content) plus a payload. Two orthogonal dimensions:
 | `global` | cross-project "the human said X" | cross-project encyclopedia |
 | `personal` | user habits and tastes | **persona** (identity / tone / rules) |
 
-Memories are partitioned into **tomes** (ADR-007) — persona/tenant containers keyed by
-the writer's actor alias. Each tome owns its persona, facts and journal; a coding crew
-shares one tome, product assistants get one each. An agent's tome resolves from an
-explicit param, `GRIMOIRE_TOME`, `GRIMOIRE_ACTOR`, the AGENTS.md claim block
-(`grimoire init --agent`) or clientInfo, falling back to the `default` tome. Isolation
-is the rule; `memory_scry` is the one deliberate cross-tome read — facts by default,
+Memories are partitioned into **tomes** (ADR-007) — persona/tenant
+containers keyed by the writer's actor alias. Each tome owns its persona,
+facts and journal; a coding crew shares one tome, product assistants get
+one each. An agent's tome resolves from an explicit param, `GRIMOIRE_TOME`,
+`GRIMOIRE_ACTOR`, the AGENTS.md claim block (`grimoire init --agent`) or
+clientInfo, falling back to the `default` tome. Isolation is the rule;
+`memory_scry` is the one deliberate cross-tome read — facts by default,
 journal opt-in, session never, anonymous by default.
 
 Recall is a hybrid score — similarity alone is not memory:
@@ -125,8 +181,8 @@ score = similarity × 0.5 ^ (age_days / halfLife(scope)) × (0.5 + 0.5 × import
 ```
 
 Half-lives per scope: session 0.5d, project 30d, global 90d, personal 180d.
-All defaults live in `~/.grimoire/config.json`, overridable with `GRIMOIRE_*`
-env vars.
+All defaults live in `~/.grimoire/config.json`, overridable with
+`GRIMOIRE_*` env vars.
 
 Standing rules, enforced from day one:
 
@@ -134,22 +190,24 @@ Standing rules, enforced from day one:
   timestamp); only the GC hard-deletes — expired session records and aged
   tombstones.
 - **Every write carries provenance** — agent alias+vendor, or `human`.
-- **Project writes carry a registered projectId.** scope=`project` is rejected at
-  the write door unless the projectId names an entry of the `projects` registry in
-  `~/.grimoire/config.json`; an unknown one is rejected with the registered set.
-  Omit it and the caller's working directory picks the project automatically
-  (longest-prefix match over registered paths, so worktrees resolve too) — the
-  MCP server inherits the cwd of the client that launched it, so start
-  `grimoire mcp` from the project root. On `global`/`personal` the projectId is
-  optional provenance.
-- **Loopback only.** The web face binds `127.0.0.1`, period — the bind guard
-  is tested against hostile environments.
-- **No LLM in the core.** The core stores, scores and clusters; agents do the
-  thinking. Journal → knowledge compaction: the core finds candidate clusters,
-  an agent distills them into facts and tombstones the consumed entries.
+- **Project writes carry a registered projectId.** scope=`project` is
+  rejected at the write door unless the projectId names an entry of the
+  `projects` registry in `~/.grimoire/config.json`; an unknown one is
+  rejected with the registered set. Omit it and the caller's working
+  directory picks the project automatically (longest-prefix match over
+  registered paths, so worktrees resolve too) — the MCP server inherits the
+  cwd of the client that launched it, so start `grimoire mcp` from the
+  project root. On `global`/`personal` the projectId is optional
+  provenance.
+- **Loopback only.** The web face binds `127.0.0.1`, period — the bind
+  guard is tested against hostile environments.
+- **No LLM in the core.** The core stores, scores and clusters; agents do
+  the thinking. Journal → knowledge compaction: the core finds candidate
+  clusters, an agent distills them into facts and tombstones the consumed
+  entries.
 - **Language canon.** Durable facts are written in English; the human's
-  verbatim quotes stay as spoken — a convention the tool descriptions teach,
-  not a store-enforced rule.
+  verbatim quotes stay as spoken — a convention the tool descriptions
+  teach, not a store-enforced rule.
 
 ## MCP tools
 
@@ -167,12 +225,13 @@ Standing rules, enforced from day one:
 | `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
 | `memory_stats` | counts, `pendingCompaction`, provider health |
 
-Tool descriptions are the extraction substitute — they are pinned by wire-level
-contract tests.
+Tool descriptions are the extraction substitute — they are pinned by
+wire-level contract tests.
 
 ## Configuration
 
-`~/.grimoire/config.json`, every key overridable via `GRIMOIRE_<SECTION>__<PROP>`:
+`~/.grimoire/config.json`, every key overridable via
+`GRIMOIRE_<SECTION>__<PROP>`:
 
 | Section | Keys (defaults) |
 |---|---|
@@ -210,3 +269,11 @@ Dependency direction: `Core ← Infrastructure / Mcp / Api ← Cli`. `Mcp` and
 [TECHNICAL-SOLUTIONS.md](TECHNICAL-SOLUTIONS.md) (ADR-001..007) — including
 the tome tenant model (ADR-007): persona-isolated tomes with one deliberate
 cross-tome read, `memory_scry`.
+
+---
+
+*summonasync — one dev, a swarm of agents, nothing leaves the machine.*  
+overmind · grimoire · squeezr · mindlash studio
+
+Everything here runs on your machine: the store lives in `~/.grimoire`, the
+web face binds `127.0.0.1` only. If it does not — that is a bug, file it.
