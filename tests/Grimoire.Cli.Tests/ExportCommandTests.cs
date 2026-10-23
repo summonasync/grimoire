@@ -12,7 +12,7 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class ExportCommandTests : IDisposable
 {
-    private const string TargetModel = "nomic-embed-text";
+    private const string TargetModel = "qwen3-embedding";
 
     private readonly TestHost _host = new();
 
@@ -26,7 +26,7 @@ public sealed class ExportCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         var header = HeaderOf(path);
         header.FormatVersion.ShouldBe(ExportFormat.Version);
-        header.Fingerprint.ShouldBe(EmbeddingFingerprint.From(TargetModel, 768));
+        header.Fingerprint.ShouldBe(EmbeddingFingerprint.From(TargetModel, 1024));
         header.ExportedAt.ShouldBe(FakeClock.DefaultStart);
     }
 

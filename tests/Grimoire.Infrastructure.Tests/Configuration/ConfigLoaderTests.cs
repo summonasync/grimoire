@@ -31,9 +31,9 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Qdrant.ApiKey.ShouldBeNull();
         options.Qdrant.Collection.ShouldBe("grimoire");
         options.Embedding.Provider.ShouldBe("ollama");
-        options.Embedding.Model.ShouldBe("nomic-embed-text");
+        options.Embedding.Model.ShouldBe("qwen3-embedding");
         options.Embedding.Endpoint.ShouldBe("http://localhost:11434");
-        options.Embedding.Dimensions.ShouldBe(768);
+        options.Embedding.Dimensions.ShouldBe(1024);
         options.Memory.SessionTtlHours.ShouldBe(24);
         options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(0.5);

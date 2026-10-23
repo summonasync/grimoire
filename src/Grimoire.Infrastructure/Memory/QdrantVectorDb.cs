@@ -40,6 +40,9 @@ public sealed class QdrantVectorDb : IQdrantVectorDb
             null,
             cancellationToken);
 
+    public Task DropCollectionAsync(string collection, CancellationToken cancellationToken) =>
+        _client.DeleteCollectionAsync(collection, null, cancellationToken);
+
     public Task CreatePayloadIndexAsync(string collection, string field, PayloadSchemaType type, CancellationToken cancellationToken) =>
         _client.CreatePayloadIndexAsync(collection, field, type, null, true, null, cancellationToken);
 

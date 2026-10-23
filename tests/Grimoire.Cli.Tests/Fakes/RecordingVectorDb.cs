@@ -11,7 +11,11 @@ public sealed class RecordingVectorDb : IQdrantVectorDb
 
     public int CreateCollectionCount { get; private set; }
 
+    public int DroppedCount { get; private set; }
+
     public int? CreatedDimensions { get; private set; }
+
+    public int? CollectionDimensions { get; set; }
 
     public List<(string Field, PayloadSchemaType Type)> CreatedIndexes { get; } = [];
 
@@ -23,6 +27,17 @@ public sealed class RecordingVectorDb : IQdrantVectorDb
     public Task<CollectionInfo> GetCollectionInfoAsync(string collection, CancellationToken cancellationToken)
     {
         var info = new CollectionInfo { PointsCount = (ulong)_points.Count };
+
+        if (CollectionDimensions is { } dimensions)
+        {
+            info.Config = new CollectionConfig
+            {
+                Params = new CollectionParams
+                {
+                    VectorsConfig = new VectorsConfig { Params = new VectorParams { Size = (ulong)dimensions } },
+                },
+            };
+        }
 
         foreach (var (field, type) in CreatedIndexes)
         {
@@ -36,7 +51,17 @@ public sealed class RecordingVectorDb : IQdrantVectorDb
     {
         CreateCollectionCount++;
         CreatedDimensions = dimensions;
+        CollectionDimensions = dimensions;
         CollectionExists = true;
+        return Task.CompletedTask;
+    }
+
+    public Task DropCollectionAsync(string collection, CancellationToken cancellationToken)
+    {
+        DroppedCount++;
+        CollectionExists = false;
+        CollectionDimensions = null;
+        _points.Clear();
         return Task.CompletedTask;
     }
 

@@ -13,6 +13,8 @@ public sealed class EmbeddingReindexerTests
 
     private static readonly EmbeddingFingerprint NewModel = EmbeddingFingerprint.From("bge-small", 4);
 
+    private static readonly EmbeddingFingerprint WiderModel = EmbeddingFingerprint.From("bge-base", 8);
+
     [Fact]
     public async Task Run_ReembedsActiveRecordsInBatches_StampsVectorModelAndKeepsPayload()
     {
@@ -130,6 +132,78 @@ public sealed class EmbeddingReindexerTests
         await harness.Bootstrapper.EnsureAsync(NewModel, CancellationToken.None);
     }
 
+    [Fact]
+    public async Task Run_DimensionsChangedWithoutDrop_RecreatesCollectionUnderNewDimensions()
+    {
+        var harness = await Harness.SeededAsync("alpha", "beta", "gamma");
+        var collectionsBefore = harness.Db.CreateCollectionCount;
+
+        var outcome = await harness.RunAsync(WiderModel, batchSize: 64, progress: null);
+
+        outcome.ShouldBe(new ReindexOutcome(0, 0, 0, 3, Recreated: true));
+        harness.Db.DroppedCount.ShouldBe(1);
+        harness.Db.CreateCollectionCount.ShouldBe(collectionsBefore + 1);
+        harness.Db.CollectionDimensions.ShouldBe(8);
+        harness.Provider.Requests.ShouldBeEmpty();
+        harness.Db.PointIds.ShouldBe([EmbeddingFingerprint.MarkerPointId]);
+        var marker = harness.Db.PayloadOf(EmbeddingFingerprint.MarkerPointId);
+        marker[EmbeddingFingerprint.ModelField].StringValue.ShouldBe(WiderModel.Model);
+        marker[EmbeddingFingerprint.DimensionsField].IntegerValue.ShouldBe(8);
+        marker.ShouldNotContainKey(EmbeddingFingerprint.ReindexStateField);
+    }
+
+    [Fact]
+    public async Task Run_DimensionsChanged_StoreRefusesReadsUntilReindexReopens()
+    {
+        var harness = await Harness.SeededAsync("alpha", "beta");
+        var changed = new QdrantMemoryStore(
+            harness.Db, "grimoire", new EmbeddingOptions { Model = WiderModel.Model, Dimensions = WiderModel.Dimensions });
+
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => changed.ListAsync(new MemoryFilter(), CancellationToken.None));
+        exception.Message.ShouldContain("run `grimoire reindex`");
+
+        await harness.RunAsync(WiderModel, batchSize: 64, progress: null);
+
+        (await changed.ListAsync(new MemoryFilter(), CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_AfterExplicitDrop_CreatesCollectionUnderNewDimensionsAndStampsNewWrites()
+    {
+        var harness = await Harness.SeededAsync("alpha", "beta");
+        await harness.Db.DropCollectionAsync("grimoire", CancellationToken.None);
+        var collectionsBefore = harness.Db.CreateCollectionCount;
+
+        var outcome = await harness.RunAsync(WiderModel, batchSize: 64, progress: null);
+
+        outcome.ShouldBe(new ReindexOutcome(0, 0, 0));
+        harness.Db.DroppedCount.ShouldBe(1);
+        harness.Db.CreateCollectionCount.ShouldBe(collectionsBefore + 1);
+        harness.Db.CollectionDimensions.ShouldBe(8);
+
+        var store = new QdrantMemoryStore(
+            harness.Db, "grimoire", new EmbeddingOptions { Model = WiderModel.Model, Dimensions = WiderModel.Dimensions });
+        var record = TestMemories.Create("delta", id: Guid.Parse("00000000-0000-0000-0000-000000000009"));
+        await store.UpsertAsync(record, new float[8], CancellationToken.None);
+
+        harness.Db.PayloadOf(record.Id)[MemoryPayloadFields.VectorModel].StringValue.ShouldBe(WiderModel.Model);
+        (await store.ListAsync(new MemoryFilter(), CancellationToken.None)).ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_ModelChangedWithSameDimensions_KeepsResumableSweepWithoutRecreating()
+    {
+        var harness = await Harness.SeededAsync("alpha", "beta");
+        var collectionsBefore = harness.Db.CreateCollectionCount;
+
+        var outcome = await harness.RunAsync(NewModel, batchSize: 64, progress: null);
+
+        outcome.ShouldBe(new ReindexOutcome(2, 2, 0));
+        harness.Db.DroppedCount.ShouldBe(0);
+        harness.Db.CreateCollectionCount.ShouldBe(collectionsBefore);
+    }
+
     private sealed class Harness(FakeQdrantVectorDb db, FakeEmbeddingProvider provider)
     {
         public FakeQdrantVectorDb Db { get; } = db;
@@ -152,6 +226,7 @@ public sealed class EmbeddingReindexerTests
         public static async Task<Harness> SeededAsync(params string[] contents)
         {
             var harness = new Harness(new FakeQdrantVectorDb(), new FakeEmbeddingProvider(Vectors()));
+            await harness.Bootstrapper.EnsureAsync(OldModel, CancellationToken.None);
             var ids = new List<Guid>();
 
             foreach (var (index, content) in contents.Index())

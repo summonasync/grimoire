@@ -484,22 +484,32 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
-    public async Task Store_WhenCollectionMissing_BootstrapsCollectionAndIndexesOnFirstUse()
+    public async Task Store_WhenCollectionMissing_RefusesOperationsWithoutRecreatingIt()
     {
         var db = new FakeQdrantVectorDb();
         var store = NewStore(db);
+        db.CollectionExists = false;
 
-        var records = await store.ListAsync(new MemoryFilter(), CancellationToken.None);
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => store.ListAsync(new MemoryFilter(), CancellationToken.None));
 
-        records.ShouldBeEmpty();
-        db.CreateCollectionCount.ShouldBe(1);
-        db.CreatedDimensions.ShouldBe(4);
-        db.CreatedIndexes.Select(index => index.Field).ShouldBe(
-            ["scope", "kind", "status", "tome", "tags", "projectId", "sessionId", "expiresAt", "createdAt", "idempotencyKey"],
-            ignoreOrder: true);
-        db.CreatedIndexes.ShouldContain(index => index.Type == PayloadSchemaType.Datetime);
-        db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
-        db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
+        db.CreateCollectionCount.ShouldBe(0);
+        exception.Message.ShouldContain("missing");
+        exception.Message.ShouldContain("`grimoire init`");
+    }
+
+    [Fact]
+    public async Task Store_WhenCollectionDisappearsMidSession_RefusesWithReindexRequired()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await store.CountAsync(new MemoryFilter(), CancellationToken.None);
+        db.Failure = new RpcException(new Status(StatusCode.NotFound, "collection not found"));
+
+        var exception = await Should.ThrowAsync<ReindexRequiredException>(
+            () => store.CountAsync(new MemoryFilter(), CancellationToken.None));
+
+        exception.Message.ShouldContain("dropped");
     }
 
     [Fact]
@@ -719,8 +729,11 @@ public sealed class QdrantMemoryStoreTests
 
     private static Guid BatchId(int index) => new(index, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
-    private static QdrantMemoryStore NewStore(FakeQdrantVectorDb db) =>
-        new(db, "grimoire", new EmbeddingOptions { Model = "nomic-embed-text", Dimensions = 4 });
+    private static QdrantMemoryStore NewStore(FakeQdrantVectorDb db)
+    {
+        db.CollectionExists = true;
+        return new(db, "grimoire", new EmbeddingOptions { Model = "nomic-embed-text", Dimensions = 4 });
+    }
 
     private static async Task<MemoryRecord> SeedAsync(QdrantMemoryStore store, MemoryRecord record, params float[] vector)
     {

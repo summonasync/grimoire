@@ -139,6 +139,9 @@ Standing rules, enforced from day one:
 - **No LLM in the core.** The core stores, scores and clusters; agents do the
   thinking. Journal → knowledge compaction: the core finds candidate clusters,
   an agent distills them into facts and tombstones the consumed entries.
+- **Language canon.** Durable facts are written in English; the human's
+  verbatim quotes stay as spoken — a convention the tool descriptions teach,
+  not a store-enforced rule.
 
 ## MCP tools
 
@@ -164,7 +167,7 @@ contract tests.
 | Section | Keys (defaults) |
 |---|---|
 | `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
-| `embedding` | `provider` (`ollama`), `model` (`nomic-embed-text`), `endpoint` (`http://localhost:11434`), `dimensions` (768) |
+| `embedding` | `provider` (`ollama`), `model` (`qwen3-embedding`), `endpoint` (`http://localhost:11434`), `dimensions` (1024) |
 | `memory` | `defaultTome` (`default`), `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 

@@ -10,7 +10,7 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class ReindexCommandTests : IDisposable
 {
-    private const string TargetModel = "nomic-embed-text";
+    private const string TargetModel = "qwen3-embedding";
 
     private readonly RecordingVectorDb _db = new() { CollectionExists = true };
 
@@ -86,6 +86,27 @@ public sealed class ReindexCommandTests : IDisposable
         _host.Output.ToString().ShouldContain("1 re-embedded, 1 already current, 2 scanned");
         (await PayloadOfAsync(EmbeddingFingerprint.MarkerPointId))
             .ShouldNotContainKey(EmbeddingFingerprint.ReindexStateField);
+    }
+
+    [Fact]
+    public async Task RunAsync_Reindex_AfterDimensionsChange_RecreatesCollectionAndReportsDiscards()
+    {
+        await SeedAsync("alpha");
+        await SeedAsync("beta");
+        await SeedMarkerAsync(reindexInProgress: false);
+        _db.CollectionDimensions = 4;
+
+        var code = await _host.RunAsync("reindex");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _db.DroppedCount.ShouldBe(1);
+        _db.CreateCollectionCount.ShouldBe(1);
+        _db.CollectionDimensions.ShouldBe(1024);
+        _host.Embeddings.Requests.ShouldBeEmpty();
+        var output = _host.Output.ToString();
+        output.ShouldContain("was recreated under 1024 dimensions");
+        output.ShouldContain("2 active records of the previous embedding were discarded");
+        output.ShouldContain("Reindex complete: 0 re-embedded, 0 already current, 0 scanned");
     }
 
     private List<Guid> SeededIds { get; } = [];

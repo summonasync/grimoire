@@ -109,6 +109,7 @@ internal static class CliApplication
             "forget" => new Commands.ForgetCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "gc" => new Commands.GcCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "reindex" => new Commands.ReindexCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "drop-collection" => new Commands.DropCollectionCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "export" => new Commands.ExportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "import" => new Commands.ImportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "persona" => new Commands.PersonaCommand(env).RunAsync(invocation, config, services, cancellationToken),

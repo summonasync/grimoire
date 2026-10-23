@@ -25,4 +25,16 @@ public sealed class QdrantVectorDbTests
         request.VectorsConfig.Params.Size.ShouldBe(768ul);
         request.VectorsConfig.Params.Distance.ShouldBe(Distance.Cosine);
     }
+
+    [Fact]
+    public async Task DropCollection_ForwardsTheCollectionName()
+    {
+        var invoker = new RecordingCallInvoker();
+        var db = new QdrantVectorDb(new QdrantClient(new QdrantGrpcClient(invoker)));
+
+        await db.DropCollectionAsync("grimoire", CancellationToken.None);
+
+        var request = invoker.UnaryRequests.OfType<DeleteCollection>().Single();
+        request.CollectionName.ShouldBe("grimoire");
+    }
 }

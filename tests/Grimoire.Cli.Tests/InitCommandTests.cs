@@ -49,11 +49,11 @@ public sealed class InitCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok);
         _db.CreateCollectionCount.ShouldBe(1);
-        _db.CreatedDimensions.ShouldBe(768);
+        _db.CreatedDimensions.ShouldBe(1024);
         _db.CreatedIndexes.Count.ShouldBe(10);
         _db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Keyword).ShouldBe(8);
         _db.CreatedIndexes.Count(index => index.Type == PayloadSchemaType.Datetime).ShouldBe(2);
-        _db.Upserted.ShouldHaveSingleItem()[0].Payload[EmbeddingFingerprint.ModelField].StringValue.ShouldBe("nomic-embed-text");
+        _db.Upserted.ShouldHaveSingleItem()[0].Payload[EmbeddingFingerprint.ModelField].StringValue.ShouldBe("qwen3-embedding");
     }
 
     [Fact]

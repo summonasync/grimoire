@@ -29,6 +29,23 @@ public sealed class QdrantCollectionBootstrapper(IQdrantVectorDb db, string coll
             return;
         }
 
+        await VerifyFingerprintAsync(expected, cancellationToken);
+    }
+
+    public async Task EnsurePresentAsync(EmbeddingFingerprint expected, CancellationToken cancellationToken)
+    {
+        if (!await db.CollectionExistsAsync(collection, cancellationToken))
+        {
+            throw new ReindexRequiredException(
+                $"Collection '{collection}' is missing — it was dropped or never initialized. " +
+                "Run `grimoire init` to create it or `grimoire reindex` to rebuild it; operations stay refused until then.");
+        }
+
+        await VerifyFingerprintAsync(expected, cancellationToken);
+    }
+
+    private async Task VerifyFingerprintAsync(EmbeddingFingerprint expected, CancellationToken cancellationToken)
+    {
         var info = await db.GetCollectionInfoAsync(collection, cancellationToken);
         await CreateIndexesAsync(info.PayloadSchema.Keys, cancellationToken);
 

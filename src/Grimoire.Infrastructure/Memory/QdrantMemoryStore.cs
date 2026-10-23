@@ -20,10 +20,10 @@ namespace Grimoire.Infrastructure.Memory;
 /// pairs as recorded (import path) in bounded chunks, stamping the configured vector-model
 /// marker exactly like UpsertAsync. gRPC failures in the
 /// availability grades (unavailable, deadline exceeded, unauthenticated) surface as
-/// UpstreamUnavailableException; every other RpcException propagates unchanged. A store
-/// whose embedding state disagrees with the configuration (model changed, or a reindex
-/// sweep is in progress) refuses every operation with ReindexRequiredException until
-/// `grimoire reindex` completes.
+/// UpstreamUnavailableException; a NotFound RpcException (collection dropped mid-session)
+/// surfaces as ReindexRequiredException. The store never creates the collection: a missing
+/// or embedding-mismatched store refuses every operation with ReindexRequiredException
+/// until `grimoire init` or `grimoire reindex` rebuilds it.
 /// </summary>
 public sealed class QdrantMemoryStore : IMemoryStore
 {
@@ -218,7 +218,7 @@ public sealed class QdrantMemoryStore : IMemoryStore
                 return;
             }
 
-            await GuardAsync(() => _bootstrapper.EnsureAsync(_fingerprint, cancellationToken));
+            await GuardAsync(() => _bootstrapper.EnsurePresentAsync(_fingerprint, cancellationToken));
             _ready = true;
         }
         finally
@@ -237,6 +237,10 @@ public sealed class QdrantMemoryStore : IMemoryStore
         {
             throw new UpstreamUnavailableException(UpstreamName, ex);
         }
+        catch (RpcException ex) when (ex.Status.StatusCode == StatusCode.NotFound)
+        {
+            throw DroppedMidSession();
+        }
     }
 
     private async Task<T> GuardAsync<T>(Func<Task<T>> call)
@@ -249,7 +253,15 @@ public sealed class QdrantMemoryStore : IMemoryStore
         {
             throw new UpstreamUnavailableException(UpstreamName, ex);
         }
+        catch (RpcException ex) when (ex.Status.StatusCode == StatusCode.NotFound)
+        {
+            throw DroppedMidSession();
+        }
     }
+
+    private ReindexRequiredException DroppedMidSession() =>
+        new($"Collection '{_collection}' disappeared while this process was running — it was dropped externally. " +
+            "Run `grimoire init` or `grimoire reindex`; operations stay refused until then.");
 
     private static bool IsAvailabilityFailure(RpcException ex) =>
         ex.Status.StatusCode is StatusCode.Unavailable
