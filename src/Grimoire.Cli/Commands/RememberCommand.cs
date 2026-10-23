@@ -28,6 +28,15 @@ internal sealed class RememberCommand(CliEnvironment environment)
                 ExitCodes.Usage);
         }
 
+        if (scope != MemoryScope.Session && invocation.Value("session") is { } sessionId)
+        {
+            throw new CommandException(
+                "param_conflict",
+                $"--session only applies to scope 'session'; omit it or change the scope " +
+                $"(got --session '{sessionId}' with scope '{scope.ToString().ToLowerInvariant()}').",
+                ExitCodes.Usage);
+        }
+
         var projectTag = ResolveProjectTag(projectId, scope, services);
         var request = new RememberRequest
         {

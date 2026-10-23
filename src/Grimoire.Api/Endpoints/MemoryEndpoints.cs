@@ -67,6 +67,15 @@ internal static class MemoryEndpoints
                     $"(got projectId '{request.ProjectId}' with scope 'session').");
             }
 
+            if (request.Scope != MemoryScope.Session && request.SessionId is not null)
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "param_conflict",
+                    $"sessionId only applies to scope 'session'; omit it or change the scope " +
+                    $"(got sessionId '{request.SessionId}' with scope '{request.Scope.ToString().ToLowerInvariant()}').");
+            }
+
             var projectTag = projectTags.Resolve(request.Scope, request.ProjectId, callerPaths.Path);
             if (projectTag.Rejection is { } rejection)
             {

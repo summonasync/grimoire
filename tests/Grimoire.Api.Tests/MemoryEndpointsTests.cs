@@ -530,6 +530,30 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var record = factory.Store.Records.ShouldHaveSingleItem();
         record.Scope.ShouldBe(MemoryScope.Session);
         record.ProjectId.ShouldBeNull();
+        record.SessionId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("project")]
+    [InlineData("global")]
+    [InlineData("personal")]
+    public async Task Post_NonSessionScopeWithSessionId_Returns400ParamConflict(string scope)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "long term note",
+            scope,
+            sessionId = "s1",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("param_conflict");
+        message.ShouldContain("sessionId only applies to scope 'session'");
+        message.ShouldContain($"(got sessionId 's1' with scope '{scope}')");
+        factory.Store.Records.ShouldBeEmpty();
     }
 
     [Fact]

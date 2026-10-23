@@ -283,6 +283,33 @@ public sealed class RememberCommandTests : IDisposable
         record.ProjectId.ShouldBeNull();
     }
 
+    [Theory]
+    [InlineData(MemoryScope.Project)]
+    [InlineData(MemoryScope.Global)]
+    [InlineData(MemoryScope.Personal)]
+    public async Task Remember_NonSessionScopeWithSession_ExitsUsageWithoutWriting(MemoryScope scope)
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--scope", ToFlag(scope), "--session", "s1");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [param_conflict]");
+        output.ShouldContain("--session only applies to scope 'session'");
+        output.ShouldContain($"(got --session 's1' with scope '{ToFlag(scope)}')");
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SessionScopeWithoutSessionId_WritesAnonymousSessionRecord()
+    {
+        var code = await _host.RunAsync("remember", "wip idea", "--scope", "session");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var record = _host.Store.Upserted.ShouldHaveSingleItem();
+        record.Scope.ShouldBe(MemoryScope.Session);
+        record.SessionId.ShouldBeNull();
+    }
+
     private static TestHost NoMatchHost(IReadOnlyList<ProjectAliasRecord> projects) => new(
         new StubEmbeddings(new Dictionary<string, float[]> { ["long term note"] = [1f, 0f] }),
         callerPaths: new FixedCallerPath("/opt/nowhere"),
