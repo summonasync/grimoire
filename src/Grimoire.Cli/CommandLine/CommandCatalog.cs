@@ -81,6 +81,12 @@ internal static class CommandCatalog
     private static readonly FlagSpec DisableAtLogin = FlagSpec.Switch(
         "disable-at-login", "Remove the console from the desktop login session and exit.");
 
+    private static readonly FlagSpec ProjectDisplayName = new(
+        "display-name", "text", "Human-readable project name. Pass an empty value to clear it.");
+
+    private static readonly FlagSpec ProjectBoardId = new(
+        "board-project-id", "id", "Overmind board project id linked to the alias. Pass an empty value to clear it.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -202,6 +208,13 @@ internal static class CommandCatalog
             Name = "config",
             Summary = "Show or change configuration.",
             Syntax = "config [get | set <section.property> <value> | path]",
+        },
+        new CommandSpec
+        {
+            Name = "projects",
+            Summary = "Manage the project registry: aliases, local paths, board ids and display names.",
+            Syntax = "projects [list | add <alias> <path>... | update <alias> [path]... | remove <alias>]",
+            Flags = [ProjectDisplayName, ProjectBoardId],
         },
     ];
 

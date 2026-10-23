@@ -17,7 +17,7 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
   stats; also runs the background GC sweep.
 - **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
   a directory), `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
-  `stats`, `config`.
+  `stats`, `config`, `projects` (the project registry behind project tags).
 
 The MCP tool surface is frozen by contract snapshots: `tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json`
 pins each tool's title, description, annotations, input schema and the output shape observed

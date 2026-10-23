@@ -7,7 +7,7 @@ namespace Grimoire.Cli.Configuration;
 
 internal static class ConfigFile
 {
-    private static readonly JsonSerializerOptions WriteOptions = new()
+    internal static readonly JsonSerializerOptions WriteOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
@@ -41,6 +41,16 @@ internal static class ConfigFile
 
     public static JsonObject DefaultsRoot() =>
         JsonSerializer.SerializeToNode(new GrimoireOptions(), WriteOptions)!.AsObject();
+
+    public static JsonObject ParseRoot(string text, string path)
+    {
+        if (JsonNode.Parse(text) is not JsonObject root)
+        {
+            throw new CommandException("config", $"Config file '{path}' must contain a JSON object at the root.", ExitCodes.Config);
+        }
+
+        return root;
+    }
 
     public static void ApplyValue(JsonObject root, JsonObject schema, string key, string value)
     {
