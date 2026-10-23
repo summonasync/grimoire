@@ -6,7 +6,11 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class RememberTool(MemoryService memories, MemoryActorProvider actors)
+internal sealed class RememberTool(
+    MemoryService memories,
+    MemoryActorProvider actors,
+    ProjectTagResolver projectTags,
+    ICallerPathProvider callerPaths)
 {
     public const string Name = "memory_remember";
 
@@ -16,18 +20,22 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
         "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - " +
         "with your actor provenance on it. Call it when the human states a preference, decision or correction " +
         "and record it verbatim; a near-duplicate supersedes the older record, an identical write replays it, " +
-        "and never store secrets.";
+        "and never store secrets. Scope 'Project' demands a registered projectId: pass one of the registered " +
+        "aliases, or omit it and the caller's working directory picks the registered project automatically " +
+        "(auto-tag) - the MCP server inherits the cwd of the client that launched it, so start it from the " +
+        "project root; an unknown projectId is rejected with the registered set, and on Global/Personal " +
+        "projectId stays optional provenance.";
 
     public Task<CallToolResult> Remember(
         [Description("The memory text. Make it self-contained - understandable months later without this conversation.")]
         string content,
-        [Description("Session expires after ~24h; Project needs projectId; Global and Personal live across projects.")]
+        [Description("Session expires after ~24h; Project needs a registered projectId (or auto-tag from the working directory); Global and Personal live across projects.")]
         [AllowedValues("Session", "Project", "Global", "Personal")]
         string scope,
         [Description("Journal for append-style observations; Fact for curated standing statements.")]
         [AllowedValues("Journal", "Fact")]
         string kind = "Journal",
-        [Description("Required for scope=Project: the project key this memory belongs to. Omit for any other scope.")]
+        [Description("Registered project alias. Required for scope=Project unless the working directory matches a registered project path (auto-tag); unknown values are rejected with the registered set. Optional provenance on Global/Personal.")]
         string? projectId = null,
         [Description("Only for scope=Session: identifies the current session.")]
         string? sessionId = null,
@@ -69,23 +77,19 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 nameof(importance)).NothingApplied()));
         }
 
-        if (scopeValue == MemoryScope.Project && string.IsNullOrWhiteSpace(projectId))
-        {
-            return Task.FromResult(ToolResults.Failure(new ToolError(
-                ToolErrorCodes.ProjectIdRequired,
-                "scope 'Project' requires projectId (got scope 'Project', no projectId): a project memory without " +
-                "one would be matched against every project and could supersede another project's record. Pass " +
-                "projectId, or use scope 'Global' when the memory is not project-specific.",
-                nameof(projectId)).NothingApplied()));
-        }
-
-        if (scopeValue != MemoryScope.Project && projectId is not null)
+        if (scopeValue == MemoryScope.Session && projectId is not null)
         {
             return Task.FromResult(ToolResults.Failure(new ToolError(
                 ToolErrorCodes.ParamConflict,
-                $"projectId only applies to scope 'Project'; omit it or change the scope " +
+                "projectId only applies to scopes 'Project', 'Global' and 'Personal'; omit it or change the scope " +
                 $"(got projectId '{projectId}' with scope '{scope}').",
                 nameof(projectId)).NothingApplied()));
+        }
+
+        var projectTag = projectTags.Resolve(scopeValue, projectId, callerPaths.Path);
+        if (projectTag.Rejection is { } rejection)
+        {
+            return Task.FromResult(ToolResults.Failure(ProjectTagError(rejection, projectTag, projectId).NothingApplied()));
         }
 
         if (scopeValue != MemoryScope.Session && sessionId is not null)
@@ -122,7 +126,7 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 Kind = kindEffective,
                 Actor = actors.GetActor(),
                 Tome = resolvedTome,
-                ProjectId = projectId,
+                ProjectId = projectTag.ProjectId,
                 SessionId = sessionId,
                 Tags = tags ?? [],
                 Importance = importance,
@@ -146,5 +150,30 @@ internal sealed class RememberTool(MemoryService memories, MemoryActorProvider a
                 CreatedAt = result.Record.CreatedAt,
             });
         }, cancellationToken);
+    }
+
+    private ToolError ProjectTagError(ProjectTagRejection rejection, ProjectTagResolution resolution, string? projectId)
+    {
+        var allowed = string.Join(", ", resolution.AllowedAliases);
+        return rejection switch
+        {
+            ProjectTagRejection.Unknown => new ToolError(
+                ToolErrorCodes.ProjectIdUnknown,
+                resolution.AllowedAliases.Count == 0
+                    ? $"projectId '{projectId}' is not a registered project and the project registry is empty - " +
+                      "register the project in the Grimoire config first."
+                    : $"projectId: '{projectId}' is not a registered project alias. Allowed projectId values " +
+                      $"(case-sensitive, pass one exactly as advertised): {allowed}.",
+                nameof(projectId)),
+            _ => new ToolError(
+                ToolErrorCodes.ProjectIdRequired,
+                "scope 'Project' requires projectId (got scope 'Project', no projectId): the working directory " +
+                $"'{callerPaths.Path}' matches no registered project path. " +
+                (resolution.AllowedAliases.Count == 0
+                    ? "The project registry is empty; register the project in the Grimoire config first. "
+                    : $"Pass one of the registered projectId values (case-sensitive, pass one exactly as advertised): {allowed}. ") +
+                "Or use scope 'Global' when the memory is not project-specific.",
+                nameof(projectId)),
+        };
     }
 }

@@ -21,6 +21,8 @@ internal static class ToolCatalog
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
+        var projectTags = new ProjectTagResolver(new ProjectRegistry(options.Projects));
+        var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
         var actors = new MemoryActorProvider(
             options.Actor,
@@ -32,7 +34,7 @@ internal static class ToolCatalog
 
         return
         [
-            Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors).Remember, readOnly: false, destructive: false, idempotent: false),
+            Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors, projectTags, callerPaths).Remember, readOnly: false, destructive: false, idempotent: false),
             Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories, actors).Recall, readOnly: true, destructive: false, idempotent: true),
             Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories, actors).Forget, readOnly: false, destructive: true, idempotent: true),
             Build(RestoreTool.Name, RestoreTool.Title, RestoreTool.Description, new RestoreTool(corrections, store, actors).Restore, readOnly: false, destructive: false, idempotent: true),

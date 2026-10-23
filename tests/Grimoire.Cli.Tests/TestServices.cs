@@ -31,6 +31,7 @@ internal static class TestServices
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());
+        services.AddSingleton<ICallerPathProvider>(new FixedCallerPath("/agents/sandbox"));
         services.AddSingleton(options ?? TunedOptions());
         services.AddSingleton(gcOptions ?? new GcOptions());
         services.AddSingleton(gcState ?? new FakeGcStateStore());
@@ -63,5 +64,10 @@ internal static class TestServices
     private sealed class NullClaimProvider : IActorClaimProvider
     {
         public Task<ActorClaim?> ReadAsync(CancellationToken cancellationToken) => Task.FromResult<ActorClaim?>(null);
+    }
+
+    private sealed class FixedCallerPath(string path) : ICallerPathProvider
+    {
+        public string Path { get; } = path;
     }
 }

@@ -185,14 +185,14 @@ public sealed class EnumRejectionContractTests
             {
                 ["content"] = "guard echo probe",
                 ["scope"] = "Global",
-                ["projectId"] = "grimoire",
+                ["sessionId"] = "s1",
             });
 
         var (code, message, param) = conflict.Error();
         code.ShouldBe(ToolErrorCodes.ParamConflict);
-        param.ShouldBe("projectId");
-        message.ShouldContain("Project");
-        message.ShouldContain("'grimoire'");
+        param.ShouldBe("sessionId");
+        message.ShouldContain("Session");
+        message.ShouldContain("'s1'");
         message.ShouldContain("'Global'");
         message.ShouldContain("Nothing was applied by this call.");
     }

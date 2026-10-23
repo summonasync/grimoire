@@ -51,19 +51,30 @@ internal sealed class McpTestSession : IAsyncDisposable
 
     public McpClient Client { get; }
 
+    public static IReadOnlyList<ProjectAliasRecord> DefaultProjects { get; } =
+    [
+        new ProjectAliasRecord { Alias = "grimoire", Paths = ["/src/grimoire"] },
+        new ProjectAliasRecord { Alias = "alpha", Paths = ["/src/alpha"] },
+        new ProjectAliasRecord { Alias = "beta", Paths = ["/src/beta"] },
+    ];
+
     public static async Task<McpTestSession> StartAsync(
         McpHostOptions? hostOptions = null,
         MemoryEngineOptions? engineOptions = null,
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
-        FakeGcStateStore? gcState = null)
+        FakeGcStateStore? gcState = null,
+        string? callerPath = null,
+        IReadOnlyList<ProjectAliasRecord>? projects = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
         var gc = gcState ?? new FakeGcStateStore();
-        var services = new FakeServiceProvider(store, embeddings, clock, engineOptions, claims, gcOptions, gc);
-        var options = hostOptions ?? new McpHostOptions();
+        var services = new FakeServiceProvider(
+            store, embeddings, clock, engineOptions, claims, gcOptions, gc,
+            callerPath is null ? null : new FakeCallerPathProvider(callerPath));
+        var options = (hostOptions ?? new McpHostOptions()) with { Projects = projects ?? DefaultProjects };
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
         var serverToClient = Channel.CreateUnbounded<JsonRpcMessage>();

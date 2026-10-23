@@ -38,6 +38,7 @@ internal static class CliServices
         services.AddSingleton<IGcStateStore>(new GcStateFileStore());
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
         services.AddSingleton<IExternalProcess, SystemProcess>();
+        services.AddSingleton<ICallerPathProvider, ProcessCallerPathProvider>();
         services.AddSingleton<IConsoleProbe>(sp => new LoopbackConsoleProbe(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<IHostNameResolver, SystemHostNameResolver>();
         services.AddSingleton<IAutostartEntryWriter, AutostartEntryWriter>();

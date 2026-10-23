@@ -4,6 +4,8 @@ namespace Grimoire.Mcp.Tests;
 
 internal sealed class FakeServiceProvider : IServiceProvider
 {
+    public const string DefaultCallerPath = "/agents/sandbox";
+
     private readonly Dictionary<Type, object> _services;
 
     public FakeServiceProvider(
@@ -13,7 +15,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
         MemoryEngineOptions? engineOptions = null,
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
-        IGcStateStore? gcState = null)
+        IGcStateStore? gcState = null,
+        ICallerPathProvider? callerPaths = null)
     {
         _services = new Dictionary<Type, object>
         {
@@ -23,6 +26,7 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(IActorClaimProvider)] = claims ?? new FakeActorClaimProvider(),
             [typeof(GcOptions)] = gcOptions ?? new GcOptions(),
             [typeof(IGcStateStore)] = gcState ?? new FakeGcStateStore(),
+            [typeof(ICallerPathProvider)] = callerPaths ?? new FakeCallerPathProvider(DefaultCallerPath),
         };
 
         if (engineOptions is not null)

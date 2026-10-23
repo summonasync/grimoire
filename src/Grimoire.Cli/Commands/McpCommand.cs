@@ -16,18 +16,24 @@ internal sealed class McpCommand(CliEnvironment environment)
         var options = BuildHostOptions(
             ActorResolver.TryResolve(environment, invocation.Value("actor")),
             environment.Variable(McpHostOptions.TomeEnvironmentVariable),
-            environment.Variable(ActorResolver.EnvironmentVariable));
+            environment.Variable(ActorResolver.EnvironmentVariable),
+            config.Projects);
         environment.Error.WriteLine($"Grimoire MCP server '{options.ServerName}' v{options.ServerVersion} listening on stdio");
         return await McpHost.RunAsync(options, services, cancellationToken);
     }
 
-    internal static McpHostOptions BuildHostOptions(MemoryActor? actor, string? envTome = null, string? envActor = null) => new()
-    {
-        ServerVersion = VersionText(),
-        Actor = actor,
-        EnvTome = envTome,
-        EnvActor = envActor,
-    };
+    internal static McpHostOptions BuildHostOptions(
+        MemoryActor? actor,
+        string? envTome = null,
+        string? envActor = null,
+        IReadOnlyList<ProjectAliasRecord>? projects = null) => new()
+        {
+            ServerVersion = VersionText(),
+            Actor = actor,
+            EnvTome = envTome,
+            EnvActor = envActor,
+            Projects = projects ?? [],
+        };
 
     private static string VersionText() =>
         typeof(McpCommand).Assembly.GetName().Version is { } version ? version.ToString(3) : "0.1.0";

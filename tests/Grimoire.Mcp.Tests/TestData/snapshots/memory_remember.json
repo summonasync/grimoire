@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - with your actor provenance on it. Call it when the human states a preference, decision or correction and record it verbatim; a near-duplicate supersedes the older record, an identical write replays it, and never store secrets.",
+    "description": "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - with your actor provenance on it. Call it when the human states a preference, decision or correction and record it verbatim; a near-duplicate supersedes the older record, an identical write replays it, and never store secrets. Scope 'Project' demands a registered projectId: pass one of the registered aliases, or omit it and the caller's working directory picks the registered project automatically (auto-tag) - the MCP server inherits the cwd of the client that launched it, so start it from the project root; an unknown projectId is rejected with the registered set, and on Global/Personal projectId stays optional provenance.",
     "destructive": false,
     "idempotent": false,
     "input": {
