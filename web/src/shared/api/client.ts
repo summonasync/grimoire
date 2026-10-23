@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 export function jsonRequest(method: "POST" | "PUT" | "PATCH", body: unknown): RequestInit {
-  return { method, body: JSON.stringify(body) };
+  return { method, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } };
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
