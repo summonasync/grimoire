@@ -36,6 +36,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Embedding.Dimensions.ShouldBe(1024);
         options.Memory.SessionTtlHours.ShouldBe(24);
         options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
+        options.Memory.RecallForeignProjectFactor.ShouldBe(0.6);
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(0.5);
         options.Memory.RecencyHalfLifeDays.Project.ShouldBe(30);
         options.Memory.RecencyHalfLifeDays.Global.ShouldBe(90);
@@ -44,6 +45,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
         options.Serve.Port.ShouldBe(4770);
         options.Serve.GcIntervalMinutes.ShouldBe(30);
+        options.Projects.ShouldBeEmpty();
     }
 
     [Fact]
@@ -200,6 +202,101 @@ public sealed class ConfigLoaderTests : IDisposable
         var options = new ConfigLoader(path, EmptyEnvironment).Load();
 
         options.Qdrant.ApiKey.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithProjectsSection_ParsesRecords()
+    {
+        var path = WriteConfig("""
+            {
+              "projects": [
+                {
+                  "alias": "grimoire",
+                  "paths": ["/home/user/grimoire", "/home/user/grimoire-fork"],
+                  "boardProjectId": "7450aeab-137e-446d-88ed-5ffc9b624a1b",
+                  "displayName": "Grimoire"
+                },
+                { "alias": "squeezr", "paths": [] }
+              ]
+            }
+            """);
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Projects.Count.ShouldBe(2);
+        options.Projects[0].Alias.ShouldBe("grimoire");
+        options.Projects[0].Paths.ShouldBe(["/home/user/grimoire", "/home/user/grimoire-fork"]);
+        options.Projects[0].BoardProjectId.ShouldBe("7450aeab-137e-446d-88ed-5ffc9b624a1b");
+        options.Projects[0].DisplayName.ShouldBe("Grimoire");
+        options.Projects[1].Alias.ShouldBe("squeezr");
+        options.Projects[1].Paths.ShouldBeEmpty();
+        options.Projects[1].BoardProjectId.ShouldBeNull();
+        options.Projects[1].DisplayName.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithInvalidProjectAlias_Throws()
+    {
+        var path = WriteConfig("""{ "projects": [ { "alias": "Grimoire", "paths": ["/home/user/grimoire"] } ] }""");
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldContain("Grimoire");
+        exception.Message.ShouldContain("kebab-case");
+    }
+
+    [Fact]
+    public void Load_WithProjectMissingAlias_Throws()
+    {
+        var path = WriteConfig("""{ "projects": [ { "paths": ["/home/user/grimoire"] } ] }""");
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldContain("alias");
+    }
+
+    [Fact]
+    public void Load_WithDuplicateProjectAliases_Throws()
+    {
+        var path = WriteConfig("""
+            {
+              "projects": [
+                { "alias": "grimoire", "paths": ["/home/user/grimoire"] },
+                { "alias": "grimoire", "paths": ["/home/user/grimoire-fork"] }
+              ]
+            }
+            """);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldContain("alias 'grimoire' is already registered");
+    }
+
+    [Fact]
+    public void Load_WithDuplicateProjectPaths_Throws()
+    {
+        var path = WriteConfig("""
+            {
+              "projects": [
+                { "alias": "grimoire", "paths": ["/home/user/grimoire"] },
+                { "alias": "grimoire-clone", "paths": ["/home/user/grimoire/"] }
+              ]
+            }
+            """);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldContain("already registered");
+    }
+
+    [Fact]
+    public void Load_WithUnknownProjectProperty_Throws()
+    {
+        var path = WriteConfig("""{ "projects": [ { "alias": "grimoire", "pathz": ["/x"] } ] }""");
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldContain("pathz");
     }
 
     private static ConfigLoader Loader(

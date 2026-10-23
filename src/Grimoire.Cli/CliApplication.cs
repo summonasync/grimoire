@@ -30,7 +30,7 @@ internal static class CliApplication
             var invocation = CommandLineParser.Parse(args);
             var config = env.Config.Load();
             var ownsServices = env.Services is null;
-            var services = env.Services ?? CliServices.Build(config);
+            var services = env.Services ?? CliServices.Build(config, env.ConfigPath);
             using var cancellation = LinkCancellation(cancellationToken, out var detach);
             try
             {
@@ -115,6 +115,7 @@ internal static class CliApplication
             "persona" => new Commands.PersonaCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "stats" => new Commands.StatsCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "config" => new Commands.ConfigCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "projects" => new Commands.ProjectsCommand(env).RunAsync(invocation, config, services, cancellationToken),
             _ => throw new UsageException($"Unknown command '{invocation.Spec.Name}'."),
         };
 

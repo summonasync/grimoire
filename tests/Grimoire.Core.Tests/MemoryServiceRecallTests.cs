@@ -204,6 +204,35 @@ public sealed class MemoryServiceRecallTests
     }
 
     [Fact]
+    public async Task Recall_FromHomeProject_DemotesForeignProjectFactsBelowHomeAndGlobal()
+    {
+        var home = Seed("home fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "grim");
+        Seed("foreign fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "other");
+        var global = Seed("global fact", [0.9f, 0.4359f, 0f], scope: MemoryScope.Global, importance: 1, projectId: null);
+
+        var matches = await _service.RecallAsync(Query() with { CallerProjectId = "grim" }, CancellationToken.None);
+
+        matches.Count.ShouldBe(3);
+        matches.Take(2).ShouldContain(match => match.Record.Id == home.Id);
+        matches.Take(2).ShouldContain(match => match.Record.Id == global.Id);
+        matches[2].Record.ProjectId.ShouldBe("other");
+        matches[0].Score.ShouldBe(0.9, 1e-3);
+        matches[2].Score.ShouldBe(matches[0].Score * 0.6, 1e-3);
+    }
+
+    [Fact]
+    public async Task Recall_WithoutCallerProject_ForeignFactsKeepFullScore()
+    {
+        Seed("home fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "grim");
+        Seed("foreign fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "other");
+
+        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+
+        matches.Count.ShouldBe(2);
+        matches.ShouldAllBe(match => match.Score > 0.89);
+    }
+
+    [Fact]
     public async Task Recall_EmptyText_Throws()
     {
         await Should.ThrowAsync<ArgumentException>(() => _service.RecallAsync(Query() with { Text = "" }, CancellationToken.None));

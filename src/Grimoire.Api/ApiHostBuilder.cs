@@ -63,7 +63,9 @@ public static class ApiHostBuilder
             new CorrectionService(store, clock, engineOptions),
             new MemoryQueryRunner(store, embeddings),
             store,
-            tomeResolver);
+            tomeResolver,
+            new ProjectTagResolver(services.GetService<IProjectRegistry>() ?? new ProjectRegistry([])),
+            services.GetService<ICallerPathProvider>() ?? new ApiCallerPath());
         app.MapScryEndpoints(new ScryQueryRunner(memories, store, tomeResolver));
         app.MapPersonaEndpoints(persona, tomeResolver);
         app.MapSettingsEndpoints(engineOptions, options);

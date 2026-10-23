@@ -84,6 +84,12 @@ internal static class CommandCatalog
     private static readonly FlagSpec Yes = FlagSpec.Switch(
         "yes", "Confirm the drop. Without it the command refuses and changes nothing.");
 
+    private static readonly FlagSpec ProjectDisplayName = new(
+        "display-name", "text", "Human-readable project name. Pass an empty value to clear it.");
+
+    private static readonly FlagSpec ProjectBoardId = new(
+        "board-project-id", "id", "Overmind board project id linked to the alias. Pass an empty value to clear it.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -212,6 +218,15 @@ internal static class CommandCatalog
             Name = "config",
             Summary = "Show or change configuration.",
             Syntax = "config [get | set <section.property> <value> | path]",
+        },
+        new CommandSpec
+        {
+            Name = "projects",
+            Summary = "Manage the project registry: aliases, local paths, board ids and display names. " +
+                      "Sync pulls the project list from the local Overmind host, matching by board id; " +
+                      "it adds new projects with a generated alias and marks vanished ones, never deleting.",
+            Syntax = "projects [list | add <alias> <path>... | update <alias> [path]... | remove <alias> | sync]",
+            Flags = [ProjectDisplayName, ProjectBoardId],
         },
     ];
 

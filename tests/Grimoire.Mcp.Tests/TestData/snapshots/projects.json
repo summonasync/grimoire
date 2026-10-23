@@ -1,0 +1,59 @@
+{
+  "contract": {
+    "description": "Read and update the project registry: owner config that maps kebab-case aliases to absolute workspace paths (optional boardProjectId, displayName and description ride along) - the lookup behind project tags on memory writes. One strict-case action enum: List, Add, Update, Remove, Sync; a wrong or misspelled action is rejected with the allowed set spelled out. Add needs an alias plus at least one absolute path; Update replaces the whole path list and sets or clears the optional fields; Remove is explicit only; Sync pulls the project list from the local Overmind host, matches records by board id, adds new projects with a locally generated alias and marks projects that vanished from the board as gone - it never deletes. Rare door: the registry is owner config - confirm with the human before changing it. Registry edits resolve live: the remember and recall doors re-read the registry, no restart needed.",
+    "destructive": true,
+    "idempotent": false,
+    "input": {
+      "parameters": {
+        "action": {
+          "type": "string"
+        },
+        "alias": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "boardProjectId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paths": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "name": "projects",
+    "readOnly": false,
+    "title": "Project registry"
+  },
+  "output": {
+    "count": "number",
+    "projects": {
+      "arrayOf": {
+        "alias": "string",
+        "paths": {
+          "arrayOf": "string"
+        }
+      }
+    }
+  }
+}

@@ -13,4 +13,6 @@ public sealed record GrimoireOptions
     public MemoryOptions Memory { get; init; } = new();
 
     public ServeOptions Serve { get; init; } = new();
+
+    public IReadOnlyList<ProjectAliasRecord> Projects { get; init; } = [];
 }

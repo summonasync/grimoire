@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Cli.Configuration;
 using Grimoire.Infrastructure.Configuration;
@@ -53,10 +52,9 @@ internal sealed class ConfigCommand(CliEnvironment environment)
         var value = string.Join(" ", invocation.Positional.Skip(2));
         var path = environment.ConfigPath;
         var (previous, existed) = ConfigFile.Read(path);
-        var schema = ConfigFile.DefaultsRoot();
-        var root = existed ? ParseRoot(previous!, path) : schema;
+        var root = existed ? ConfigFile.ParseRoot(previous!, path) : ConfigFile.DefaultsRoot();
 
-        ConfigFile.ApplyValue(root, schema, key, value);
+        ConfigFile.ApplyValue(root, ConfigFile.DefaultsRoot(), key, value);
         ConfigFile.Write(path, root.ToJsonString(JsonOutput));
         try
         {
@@ -78,15 +76,5 @@ internal sealed class ConfigCommand(CliEnvironment environment)
 
         environment.Output.WriteLine($"Set {key} = {value}");
         return ExitCodes.Ok;
-    }
-
-    private static JsonObject ParseRoot(string text, string path)
-    {
-        if (JsonNode.Parse(text) is not JsonObject root)
-        {
-            throw new CommandException("config", $"Config file '{path}' must contain a JSON object at the root.", ExitCodes.Config);
-        }
-
-        return root;
     }
 }

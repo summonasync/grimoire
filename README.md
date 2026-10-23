@@ -134,6 +134,14 @@ Standing rules, enforced from day one:
   timestamp); only the GC hard-deletes — expired session records and aged
   tombstones.
 - **Every write carries provenance** — agent alias+vendor, or `human`.
+- **Project writes carry a registered projectId.** scope=`project` is rejected at
+  the write door unless the projectId names an entry of the `projects` registry in
+  `~/.grimoire/config.json`; an unknown one is rejected with the registered set.
+  Omit it and the caller's working directory picks the project automatically
+  (longest-prefix match over registered paths, so worktrees resolve too) — the
+  MCP server inherits the cwd of the client that launched it, so start
+  `grimoire mcp` from the project root. On `global`/`personal` the projectId is
+  optional provenance.
 - **Loopback only.** The web face binds `127.0.0.1`, period — the bind guard
   is tested against hostile environments.
 - **No LLM in the core.** The core stores, scores and clusters; agents do the
@@ -153,7 +161,7 @@ Standing rules, enforced from day one:
 | `memory_list` | browse recent active memories |
 | `memory_persona_get` | read the tome's persona document |
 | `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
-| `memory_remember` | write a memory (journal vs fact routing, scope choice) |
+| `memory_remember` | write a memory (journal vs fact routing, scope choice); Project scope demands a registered projectId or auto-tags one from the working directory |
 | `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
 | `memory_stats` | counts, `pendingCompaction`, provider health |
 

@@ -12,3 +12,5 @@ dist/
 TestResults/
 .qwen/*
 
+
+.claude/worktrees/

@@ -7,15 +7,17 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class RememberCommandTests : IDisposable
 {
-    private readonly TestHost _host = new(new StubEmbeddings(new Dictionary<string, float[]>
-    {
-        ["prefers dark mode"] = [1f, 0f],
-        ["chose qdrant"] = [1f, 0f],
-        ["retry loop"] = [1f, 0f],
-        ["wip idea"] = [1f, 0f],
-        ["long term note"] = [1f, 0f],
-        ["note"] = [1f, 0f],
-    }));
+    private readonly TestHost _host = new(
+        new StubEmbeddings(new Dictionary<string, float[]>
+        {
+            ["prefers dark mode"] = [1f, 0f],
+            ["chose qdrant"] = [1f, 0f],
+            ["retry loop"] = [1f, 0f],
+            ["wip idea"] = [1f, 0f],
+            ["long term note"] = [1f, 0f],
+            ["note"] = [1f, 0f],
+        }),
+        projects: TestServices.DefaultProjects);
 
     [Fact]
     public async Task Remember_DefaultsToProjectScopeJournalAndHumanActor()
@@ -180,13 +182,149 @@ public sealed class RememberCommandTests : IDisposable
         _host.Store.Upserted.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Remember_ProjectScopeWithCallerPathMatch_AutotagsTheRegisteredProject()
+    {
+        var code = await _host.RunAsync("remember", "prefers dark mode");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Store.Upserted.ShouldHaveSingleItem().ProjectId.ShouldBe("sandbox");
+        _host.Output.ToString().ShouldContain("project 'sandbox' auto-tagged from the working directory");
+    }
+
+    [Fact]
+    public async Task Remember_ProjectScopeWithoutProjectIdAndNoPathMatch_ExitsUsageWithoutWriting()
+    {
+        using var host = NoMatchHost(TestServices.DefaultProjects);
+
+        var code = await host.RunAsync("remember", "long term note");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = host.Output.ToString();
+        output.ShouldContain("error [project_id_required]");
+        output.ShouldContain("'/opt/nowhere' matches no registered project path");
+        output.ShouldContain("grimoire, sandbox");
+        output.ShouldContain("--scope global");
+        host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_UnknownProject_ExitsUsageWithTheRegisteredSet()
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--project", "Slurpy.AI");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [project_id_unknown]");
+        output.ShouldContain("'Slurpy.AI' is not a registered project alias");
+        output.ShouldContain("Allowed --project values (case-sensitive, pass one exactly as advertised): grimoire, sandbox");
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_EmptyProjectRegistry_RejectsWithoutNamingAliases()
+    {
+        using var host = NoMatchHost([]);
+
+        var code = await host.RunAsync("remember", "long term note");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = host.Output.ToString();
+        output.ShouldContain("error [project_id_required]");
+        output.ShouldContain("The project registry is empty");
+        output.ShouldNotContain("Allowed --project values");
+        host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(MemoryScope.Global)]
+    [InlineData(MemoryScope.Personal)]
+    public async Task Remember_LongTermScopeWithoutProject_WritesWithoutTag(MemoryScope scope)
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--scope", ToFlag(scope));
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Store.Upserted.ShouldHaveSingleItem().ProjectId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(MemoryScope.Global)]
+    [InlineData(MemoryScope.Personal)]
+    public async Task Remember_LongTermScopeWithUnknownProject_ExitsUsage(MemoryScope scope)
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--scope", ToFlag(scope), "--project", "Slurpy.AI");
+
+        code.ShouldBe(ExitCodes.Usage);
+        _host.Output.ToString().ShouldContain("error [project_id_unknown]");
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SessionScopeWithProject_ExitsUsageWithoutWriting()
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--scope", "session", "--project", "grimoire");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [param_conflict]");
+        output.ShouldContain("--project only applies to scopes 'project', 'global' and 'personal'");
+        output.ShouldContain("(got --project 'grimoire' with scope 'session')");
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SessionScopeWithoutProject_WritesWithoutTag()
+    {
+        var code = await _host.RunAsync("remember", "wip idea", "--scope", "session", "--session", "s1");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var record = _host.Store.Upserted.ShouldHaveSingleItem();
+        record.Scope.ShouldBe(MemoryScope.Session);
+        record.ProjectId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(MemoryScope.Project)]
+    [InlineData(MemoryScope.Global)]
+    [InlineData(MemoryScope.Personal)]
+    public async Task Remember_NonSessionScopeWithSession_ExitsUsageWithoutWriting(MemoryScope scope)
+    {
+        var code = await _host.RunAsync("remember", "long term note", "--scope", ToFlag(scope), "--session", "s1");
+
+        code.ShouldBe(ExitCodes.Usage);
+        var output = _host.Output.ToString();
+        output.ShouldContain("error [param_conflict]");
+        output.ShouldContain("--session only applies to scope 'session'");
+        output.ShouldContain($"(got --session 's1' with scope '{ToFlag(scope)}')");
+        _host.Store.Upserted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SessionScopeWithoutSessionId_WritesAnonymousSessionRecord()
+    {
+        var code = await _host.RunAsync("remember", "wip idea", "--scope", "session");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var record = _host.Store.Upserted.ShouldHaveSingleItem();
+        record.Scope.ShouldBe(MemoryScope.Session);
+        record.SessionId.ShouldBeNull();
+    }
+
+    private static TestHost NoMatchHost(IReadOnlyList<ProjectAliasRecord> projects) => new(
+        new StubEmbeddings(new Dictionary<string, float[]> { ["long term note"] = [1f, 0f] }),
+        callerPaths: new FixedCallerPath("/opt/nowhere"),
+        projects: projects);
+
+    private static string ToFlag(MemoryScope scope) => scope.ToString().ToLowerInvariant();
+
     private static TestHost TomedHost(
         IReadOnlyDictionary<string, string>? variables,
         IActorClaimProvider? claims = null) =>
         new(
             new StubEmbeddings(new Dictionary<string, float[]> { ["prefers dark mode"] = [1f, 0f], ["chose qdrant"] = [1f, 0f] }),
             claims: claims,
-            variables: variables);
+            variables: variables,
+            projects: TestServices.DefaultProjects);
 
     public void Dispose() => _host.Dispose();
 }

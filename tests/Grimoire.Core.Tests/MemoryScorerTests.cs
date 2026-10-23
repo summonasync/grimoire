@@ -75,4 +75,44 @@ public sealed class MemoryScorerTests
 
         score.ShouldBe(0.7, 1e-9);
     }
+
+    [Fact]
+    public void Score_ForeignProjectRecord_IsDemotedByConfiguredFactor()
+    {
+        var record = TestMemories.Create("foreign", [1f, 0f], accessed: FakeClock.DefaultStart, importance: 1, projectId: "beta");
+
+        var score = MemoryScorer.Score(0.8, record, FakeClock.DefaultStart, HalfLives, callerProjectId: "alpha", foreignProjectFactor: 0.6);
+
+        score.ShouldBe(0.48, 1e-9);
+    }
+
+    [Fact]
+    public void Score_HomeProjectRecord_KeepsFullScore()
+    {
+        var record = TestMemories.Create("home", [1f, 0f], accessed: FakeClock.DefaultStart, importance: 1, projectId: "alpha");
+
+        var score = MemoryScorer.Score(0.8, record, FakeClock.DefaultStart, HalfLives, callerProjectId: "alpha", foreignProjectFactor: 0.6);
+
+        score.ShouldBe(0.8, 1e-9);
+    }
+
+    [Fact]
+    public void Score_CrossProjectRecord_KeepsFullScore()
+    {
+        var record = TestMemories.Create("cross-project", [1f, 0f], scope: MemoryScope.Global, accessed: FakeClock.DefaultStart, importance: 1);
+
+        var score = MemoryScorer.Score(0.8, record, FakeClock.DefaultStart, HalfLives, callerProjectId: "alpha", foreignProjectFactor: 0.6);
+
+        score.ShouldBe(0.8, 1e-9);
+    }
+
+    [Fact]
+    public void Score_UnresolvableCallerProject_NoDemotion()
+    {
+        var record = TestMemories.Create("foreign", [1f, 0f], accessed: FakeClock.DefaultStart, importance: 1, projectId: "beta");
+
+        var score = MemoryScorer.Score(0.8, record, FakeClock.DefaultStart, HalfLives, callerProjectId: null, foreignProjectFactor: 0.6);
+
+        score.ShouldBe(0.8, 1e-9);
+    }
 }

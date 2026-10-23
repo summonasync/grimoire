@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using Grimoire.Core;
 
 namespace Grimoire.Infrastructure.Configuration;
 
@@ -14,6 +16,7 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
         AllowTrailingCommas = true,
         // An explicit JSON null for a non-nullable option must fail here, not as a later null reference.
         RespectNullableAnnotations = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     private const string EnvironmentPrefix = "GRIMOIRE_";
@@ -35,7 +38,18 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
         var root = JsonSerializer.SerializeToNode(new GrimoireOptions(), NodeOptions)!.AsObject();
         MergeFile(root);
         ConfigMerger.ApplyOverrides(root, NonReserved(_environment), EnvironmentPrefix);
-        return Deserialize(root);
+        var options = Deserialize(root);
+        EnsureProjectRegistryValid(options.Projects);
+        return options;
+    }
+
+    private static void EnsureProjectRegistryValid(IReadOnlyList<ProjectAliasRecord> projects)
+    {
+        var errors = ProjectRegistryValidator.Validate(projects);
+        if (errors.Count > 0)
+        {
+            throw new ConfigException($"Project registry is invalid: {string.Join(" ", errors)}");
+        }
     }
 
     private void MergeFile(JsonObject root)

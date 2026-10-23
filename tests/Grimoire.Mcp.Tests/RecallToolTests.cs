@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Grimoire.Core;
 using ModelContextProtocol.Protocol;
 
@@ -234,6 +235,66 @@ public sealed class RecallToolTests
         payload.GetProperty("count").GetInt32().ShouldBe(1);
         payload.GetProperty("matches")[0].GetProperty("tags").EnumerateArray()
             .Select(tag => tag.GetString()).ShouldBe([boardLinkTag]);
+    }
+
+    [Fact]
+    public async Task Recall_FromRegisteredCallerProject_DemotesForeignProjectHitsBelowHomeAndGlobal()
+    {
+        await using var session = await McpTestSession.StartAsync(callerPath: "/src/alpha");
+        session.Embeddings.Register("alpha deployment fact", VectorA);
+        session.Embeddings.Register("beta deployment fact", VectorA);
+        session.Embeddings.Register("cross deployment fact", VectorA);
+        session.Embeddings.Register("deployment question", VectorA);
+        await Remember(session, "alpha deployment fact", "alpha");
+        await Remember(session, "beta deployment fact", "beta");
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "cross deployment fact",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "deployment question",
+        });
+
+        result.ShouldSucceed();
+        var matches = result.Payload().GetProperty("matches").EnumerateArray().ToArray();
+        matches.Length.ShouldBe(3);
+        matches.Take(2).ShouldContain(match => ProjectIdOf(match) == "alpha");
+        matches.Take(2).ShouldContain(match => ProjectIdOf(match) == null);
+        matches[2].GetProperty("content").GetString().ShouldBe("beta deployment fact");
+        matches[2].GetProperty("score").GetDouble().ShouldBeLessThan(matches[0].GetProperty("score").GetDouble());
+    }
+
+    [Fact]
+    public async Task Recall_WithoutRegisteredCallerPath_NoDemotion()
+    {
+        await using var session = await McpTestSession.StartAsync(callerPath: "/agents/sandbox");
+        session.Embeddings.Register("alpha deployment fact", VectorA);
+        session.Embeddings.Register("beta deployment fact", VectorA);
+        session.Embeddings.Register("deployment question", VectorA);
+        await Remember(session, "alpha deployment fact", "alpha");
+        await Remember(session, "beta deployment fact", "beta");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "deployment question",
+        });
+
+        result.ShouldSucceed();
+        var matches = result.Payload().GetProperty("matches").EnumerateArray().ToArray();
+        matches.Length.ShouldBe(2);
+        var scores = matches.Select(match => match.GetProperty("score").GetDouble()).ToArray();
+        scores[0].ShouldBe(scores[1], 1e-9);
+    }
+
+    private static string? ProjectIdOf(JsonElement hit)
+    {
+        return hit.TryGetProperty("projectId", out var project) && project.ValueKind == JsonValueKind.String
+            ? project.GetString()
+            : null;
+
     }
 
     private static async Task<CallToolResult> Remember(McpTestSession session, string content, string projectId)

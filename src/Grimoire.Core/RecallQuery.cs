@@ -16,6 +16,8 @@ public sealed record RecallQuery
 
     public string? ProjectId { get; init; }
 
+    public string? CallerProjectId { get; init; }
+
     public string? SessionId { get; init; }
 
     public int Limit { get; init; } = 5;

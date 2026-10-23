@@ -55,6 +55,10 @@ public sealed class CliServicesTests
         provider.GetRequiredService<IExternalProcess>().ShouldBeOfType<SystemProcess>();
         provider.GetRequiredService<IConsoleProbe>().ShouldBeOfType<LoopbackConsoleProbe>();
         provider.GetRequiredService<IHostNameResolver>().ShouldBeOfType<SystemHostNameResolver>();
+        provider.GetRequiredService<IProjectRegistry>().ShouldBeOfType<LiveProjectRegistry>();
+        provider.GetRequiredService<ProjectTagResolver>()
+            .Resolve(MemoryScope.Project, null, "/opt/elsewhere")
+            .Rejection.ShouldBe(ProjectTagRejection.Missing);
     }
 
     private static GrimoireOptions Options() => new()

@@ -392,6 +392,171 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_ProjectWithoutProjectIdAndNoPathMatch_Returns400ProjectIdRequired()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "project fact",
+            scope = "project",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("project_id_required");
+        message.ShouldContain(GrimoireApiFactory.DefaultCallerPath);
+        message.ShouldContain("matches no registered project path");
+        message.ShouldContain("project registry is empty");
+        message.ShouldNotContain("Allowed projectId values");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_UnknownProjectId_Returns400WithTheRegisteredSet()
+    {
+        using var tagged = GrimoireApiFactory.Create(
+            projects:
+            [
+                new ProjectAliasRecord { Alias = "grimoire", Paths = ["/src/grimoire"] },
+                new ProjectAliasRecord { Alias = "alpha", Paths = ["/src/alpha"] },
+            ]);
+        tagged.Reset();
+
+        var response = await tagged.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "project fact",
+            scope = "project",
+            projectId = "Slurpy.AI",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("project_id_unknown");
+        message.ShouldContain("'Slurpy.AI' is not a registered project alias");
+        message.ShouldContain("Allowed projectId values (case-sensitive, pass one exactly as advertised): alpha, grimoire");
+        tagged.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_ProjectWithoutProjectId_AutotagsFromTheServerWorkingDirectory()
+    {
+        using var tagged = GrimoireApiFactory.Create(
+            projects: [new ProjectAliasRecord { Alias = "grimoire", Paths = ["/src/grimoire"] }],
+            callerPath: "/src/grimoire/sub");
+        tagged.Reset();
+        tagged.Embeddings.Vectors["project fact"] = [1f, 0f];
+
+        var response = await tagged.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "project fact",
+            scope = "project",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        tagged.Store.Records.ShouldHaveSingleItem().ProjectId.ShouldBe("grimoire");
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("personal")]
+    public async Task Post_LongTermScopeWithoutProjectId_WritesWithoutTag(string scope)
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["cross project fact"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "cross project fact",
+            scope,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        factory.Store.Records.ShouldHaveSingleItem().ProjectId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("personal")]
+    public async Task Post_LongTermScopeWithUnknownProjectId_Returns400(string scope)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "cross project fact",
+            scope,
+            projectId = "Slurpy.AI",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("project_id_unknown");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_SessionScopeWithProjectId_Returns400ParamConflict()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "session note",
+            scope = "session",
+            projectId = "grimoire",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("param_conflict");
+        message.ShouldContain("projectId only applies to scopes 'project', 'global' and 'personal'");
+        message.ShouldContain("(got projectId 'grimoire' with scope 'session')");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_SessionScopeWithoutProjectId_WritesSessionRecordWithoutTag()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["session note"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "session note",
+            scope = "session",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var record = factory.Store.Records.ShouldHaveSingleItem();
+        record.Scope.ShouldBe(MemoryScope.Session);
+        record.ProjectId.ShouldBeNull();
+        record.SessionId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("project")]
+    [InlineData("global")]
+    [InlineData("personal")]
+    public async Task Post_NonSessionScopeWithSessionId_Returns400ParamConflict(string scope)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "long term note",
+            scope,
+            sessionId = "s1",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("param_conflict");
+        message.ShouldContain("sessionId only applies to scope 'session'");
+        message.ShouldContain($"(got sessionId 's1' with scope '{scope}')");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Patch_ContentChange_ReEmbedsAndUpsertsSameId()
     {
         factory.Reset();

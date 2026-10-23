@@ -22,6 +22,7 @@ public sealed class McpToolContractTests
         "memory_restore",
         "memory_scry",
         "memory_stats",
+        "projects",
     ];
 
     public static TheoryData<string, string[]> TeachingKeywords()
@@ -38,6 +39,7 @@ public sealed class McpToolContractTests
         data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
         data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
         data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);
+        data.Add("projects", ["strict-case", "owner config", "kebab-case", "absolute", "whole path list", "never deletes"]);
         return data;
     }
 
@@ -55,6 +57,7 @@ public sealed class McpToolContractTests
         data.Add("memory_stats", [], ["tome"]);
         data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
         data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
+        data.Add("projects", ["action"], ["alias", "boardProjectId", "displayName", "paths"]);
         return data;
     }
 
@@ -70,6 +73,7 @@ public sealed class McpToolContractTests
         data.Add("memory_recall", "kind", ["Journal", "Fact"]);
         data.Add("memory_scry", "attribution", ["None", "Light", "Full"]);
         data.Add("memory_brief", "scopes", ["Session", "Project", "Global", "Personal"]);
+        data.Add("projects", "action", ["List", "Add", "Update", "Remove", "Sync"]);
         return data;
     }
 
@@ -93,11 +97,14 @@ public sealed class McpToolContractTests
         data.Add("memory_scry", "tomes", "array");
         data.Add("memory_scry", "includeJournal", "boolean");
         data.Add("memory_scry", "limit", "integer");
+        data.Add("projects", "action", "string");
+        data.Add("projects", "alias", "string");
+        data.Add("projects", "paths", "array");
         return data;
     }
 
     [Fact]
-    public async Task ExposesExactlyTheElevenContractedTools()
+    public async Task ExposesExactlyTheTwelveContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 

@@ -14,6 +14,7 @@ public sealed class EngineOptionsMapperTests
         {
             SessionTtlHours = 6,
             DedupSimilarityThreshold = 0.8,
+            RecallForeignProjectFactor = 0.75,
             TombstoneRetentionDays = 14,
             ReindexBatchSize = 128,
             RecencyHalfLifeDays = new RecencyHalfLifeOptions { Session = 1, Project = 7, Global = 60, Personal = 120 },
@@ -22,6 +23,7 @@ public sealed class EngineOptionsMapperTests
         options.DefaultTome.ShouldBe("ainora-luna");
         options.SessionTtlHours.ShouldBe(6);
         options.DedupSimilarityThreshold.ShouldBe(0.8);
+        options.RecallForeignProjectFactor.ShouldBe(0.75);
         options.TombstoneRetentionDays.ShouldBe(14);
         options.ReindexBatchSize.ShouldBe(128);
         options.RecencyHalfLives.SessionDays.ShouldBe(1);

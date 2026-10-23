@@ -12,7 +12,7 @@ public sealed class RememberToolTests
     private static readonly float[] VectorNearA = [1, 0.1f, 0];
 
     [Fact]
-    public async Task Remember_ProjectScopeWithoutProjectId_ReturnsStructuredError()
+    public async Task Remember_ProjectScopeWithoutProjectIdAndNoPathMatch_RejectsMissing()
     {
         await using var session = await McpTestSession.StartAsync(new McpHostOptions { Actor = new MemoryActor("bob", "qwen") });
 
@@ -27,17 +27,99 @@ public sealed class RememberToolTests
         param.ShouldBe("projectId");
         message.ShouldContain("Nothing was applied by this call.");
         message.ShouldContain("got scope 'Project', no projectId");
+        message.ShouldContain(FakeServiceProvider.DefaultCallerPath);
+        message.ShouldContain("alpha, beta, grimoire");
         session.Store.Points.ShouldBeEmpty();
         session.Embeddings.Requests.ShouldBeEmpty();
     }
 
-    [Theory]
-    [InlineData("Global")]
-    [InlineData("Session")]
-    [InlineData("Personal")]
-    public async Task Remember_ProjectIdOutsideProjectScope_ReturnsParamConflict(string scope)
+    [Fact]
+    public async Task Remember_UnknownProjectId_RejectsWithTheRegisteredSet()
     {
         await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "We ship on Fridays",
+            ["scope"] = "Project",
+            ["projectId"] = "Slurpy.AI",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.ProjectIdUnknown);
+        param.ShouldBe("projectId");
+        message.ShouldContain("'Slurpy.AI' is not a registered project alias");
+        message.ShouldContain("Allowed projectId values (case-sensitive, pass one exactly as advertised): alpha, beta, grimoire");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_ProjectWithoutProjectId_AutotagsFromTheCallerPath()
+    {
+        await using var session = await McpTestSession.StartAsync(callerPath: "/src/grimoire");
+        session.Embeddings.Register("We ship on Fridays", VectorA);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "We ship on Fridays",
+            ["scope"] = "Project",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("projectId").GetString().ShouldBe("grimoire");
+        session.Store.Points.ShouldHaveSingleItem().Record.ProjectId.ShouldBe("grimoire");
+    }
+
+    [Fact]
+    public async Task Remember_EmptyProjectRegistry_RejectsWithoutNamingAliases()
+    {
+        await using var session = await McpTestSession.StartAsync(projects: []);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "We ship on Fridays",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+        });
+
+        var (code, message, _) = result.Error();
+        code.ShouldBe(ToolErrorCodes.ProjectIdUnknown);
+        message.ShouldContain("project registry is empty");
+        message.ShouldNotContain("Allowed projectId values");
+        session.Store.Points.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SessionWithProjectId_ReturnsParamConflict()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "Prefers dark mode",
+            ["scope"] = "Session",
+            ["sessionId"] = "s1",
+            ["projectId"] = "grimoire",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.ParamConflict);
+        param.ShouldBe("projectId");
+        message.ShouldContain("'Session'");
+        message.ShouldContain("'grimoire'");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Global")]
+    [InlineData("Personal")]
+    public async Task Remember_LongTermScopeWithRegisteredProjectId_KeepsItAsProvenance(string scope)
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("Prefers dark mode", VectorA);
 
         var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
         {
@@ -46,12 +128,51 @@ public sealed class RememberToolTests
             ["projectId"] = "grimoire",
         });
 
+        result.ShouldSucceed();
+        result.Payload().GetProperty("projectId").GetString().ShouldBe("grimoire");
+        session.Store.Points.ShouldHaveSingleItem().Record.ProjectId.ShouldBe("grimoire");
+    }
+
+    [Theory]
+    [InlineData("Global")]
+    [InlineData("Personal")]
+    public async Task Remember_LongTermScopeWithUnknownProjectId_RejectsUnknown(string scope)
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "Prefers dark mode",
+            ["scope"] = scope,
+            ["projectId"] = "Squeezr",
+        });
+
         var (code, message, param) = result.Error();
-        code.ShouldBe(ToolErrorCodes.ParamConflict);
+        code.ShouldBe(ToolErrorCodes.ProjectIdUnknown);
         param.ShouldBe("projectId");
-        message.ShouldContain($"'{scope}'");
-        message.ShouldContain("'grimoire'");
+        message.ShouldContain("'Squeezr' is not a registered project alias");
         message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Global")]
+    [InlineData("Personal")]
+    public async Task Remember_LongTermScopeWithoutProjectId_WritesNullProject(string scope)
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("Prefers dark mode", VectorA);
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "Prefers dark mode",
+            ["scope"] = scope,
+        });
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("projectId", out _).ShouldBeFalse("null projectId is omitted, not serialized");
+        session.Store.Points.ShouldHaveSingleItem().Record.ProjectId.ShouldBeNull();
     }
 
     [Fact]

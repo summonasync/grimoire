@@ -18,7 +18,9 @@ internal static class MemoryEndpoints
         CorrectionService corrections,
         MemoryQueryRunner queryRunner,
         IMemoryStore store,
-        ApiTomeResolver tomes)
+        ApiTomeResolver tomes,
+        ProjectTagResolver projectTags,
+        ICallerPathProvider callerPaths)
     {
         app.MapGet("/api/memories", async ([AsParameters] MemoryListQuery query, CancellationToken cancellationToken) =>
         {
@@ -51,6 +53,38 @@ internal static class MemoryEndpoints
 
         app.MapPost("/api/memories", async (CreateMemoryRequest request, CancellationToken cancellationToken) =>
         {
+            if (string.IsNullOrWhiteSpace(request.Content))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_memory", "Memory content must not be empty.");
+            }
+
+            if (request.Scope == MemoryScope.Session && request.ProjectId is not null)
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "param_conflict",
+                    $"projectId only applies to scopes 'project', 'global' and 'personal'; omit it or change the scope " +
+                    $"(got projectId '{request.ProjectId}' with scope 'session').");
+            }
+
+            if (request.Scope != MemoryScope.Session && request.SessionId is not null)
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "param_conflict",
+                    $"sessionId only applies to scope 'session'; omit it or change the scope " +
+                    $"(got sessionId '{request.SessionId}' with scope '{request.Scope.ToString().ToLowerInvariant()}').");
+            }
+
+            var projectTag = projectTags.Resolve(request.Scope, request.ProjectId, callerPaths.Path);
+            if (projectTag.Rejection is { } rejection)
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    ProjectTagErrors.Code(rejection),
+                    ProjectTagErrors.Message(rejection, projectTag, request.ProjectId, callerPaths.Path));
+            }
+
             if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
             {
                 return ApiResponses.Error(
@@ -69,7 +103,7 @@ internal static class MemoryEndpoints
                     Kind = request.Kind,
                     Actor = MemoryActor.Human,
                     Tome = tome,
-                    ProjectId = request.ProjectId,
+                    ProjectId = projectTag.ProjectId,
                     SessionId = request.SessionId,
                     Tags = request.Tags,
                     Importance = request.Importance,

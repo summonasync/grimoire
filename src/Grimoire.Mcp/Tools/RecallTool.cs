@@ -5,7 +5,11 @@ using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class RecallTool(MemoryService memories, MemoryActorProvider actors)
+internal sealed class RecallTool(
+    MemoryService memories,
+    MemoryActorProvider actors,
+    IProjectRegistry projects,
+    ICallerPathProvider callerPaths)
 {
     public const string Name = "memory_recall";
 
@@ -82,6 +86,7 @@ internal sealed class RecallTool(MemoryService memories, MemoryActorProvider act
                 Tags = tags ?? [],
                 Tome = resolvedTome,
                 ProjectId = projectId,
+                CallerProjectId = projects.ResolveByPath(callerPaths.Path)?.Alias,
                 SessionId = sessionId,
                 Limit = limit,
             }, ct);

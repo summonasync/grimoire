@@ -104,7 +104,13 @@ public sealed class MemoryService(
         var matches = await store.SearchAsync(vector, filter, fetchLimit, cancellationToken);
 
         var top = matches
-            .Select(match => (Match: match, Score: MemoryScorer.Score(match.Similarity, match.Record, now, _options.RecencyHalfLives)))
+            .Select(match => (Match: match, Score: MemoryScorer.Score(
+                match.Similarity,
+                match.Record,
+                now,
+                _options.RecencyHalfLives,
+                query.CallerProjectId,
+                _options.RecallForeignProjectFactor)))
             .OrderByDescending(pair => pair.Score)
             .ThenByDescending(pair => pair.Match.Record.CreatedAt)
             .ThenBy(pair => pair.Match.Record.Id)

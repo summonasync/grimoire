@@ -21,13 +21,16 @@ internal sealed class McpCommand(CliEnvironment environment)
         return await McpHost.RunAsync(options, services, cancellationToken);
     }
 
-    internal static McpHostOptions BuildHostOptions(MemoryActor? actor, string? envTome = null, string? envActor = null) => new()
-    {
-        ServerVersion = VersionText(),
-        Actor = actor,
-        EnvTome = envTome,
-        EnvActor = envActor,
-    };
+    internal static McpHostOptions BuildHostOptions(
+        MemoryActor? actor,
+        string? envTome = null,
+        string? envActor = null) => new()
+        {
+            ServerVersion = VersionText(),
+            Actor = actor,
+            EnvTome = envTome,
+            EnvActor = envActor,
+        };
 
     private static string VersionText() =>
         typeof(McpCommand).Assembly.GetName().Version is { } version ? version.ToString(3) : "0.1.0";

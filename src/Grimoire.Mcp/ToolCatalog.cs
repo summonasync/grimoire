@@ -21,7 +21,12 @@ internal static class ToolCatalog
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
+        var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
+        var registryStore = Require<IProjectRegistryStore>(services);
+        var projects = new LiveProjectRegistry(registryStore);
+        var projectTags = new ProjectTagResolver(projects);
+        var projectSync = new ProjectSyncService(Require<IBoardProjectSource>(services), registryStore);
         var actors = new MemoryActorProvider(
             options.Actor,
             options.EnvTome,
@@ -32,8 +37,8 @@ internal static class ToolCatalog
 
         return
         [
-            Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors).Remember, readOnly: false, destructive: false, idempotent: false),
-            Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories, actors).Recall, readOnly: true, destructive: false, idempotent: true),
+            Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors, projectTags, callerPaths).Remember, readOnly: false, destructive: false, idempotent: false),
+            Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories, actors, projects, callerPaths).Recall, readOnly: true, destructive: false, idempotent: true),
             Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories, actors).Forget, readOnly: false, destructive: true, idempotent: true),
             Build(RestoreTool.Name, RestoreTool.Title, RestoreTool.Description, new RestoreTool(corrections, store, actors).Restore, readOnly: false, destructive: false, idempotent: true),
             Build(HistoryTool.Name, HistoryTool.Title, HistoryTool.Description, new HistoryTool(corrections, actors).History, readOnly: true, destructive: false, idempotent: true),
@@ -43,6 +48,7 @@ internal static class ToolCatalog
             Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store, actors).GetCandidates, readOnly: true, destructive: false, idempotent: true),
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
+            Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
         ];
     }
 

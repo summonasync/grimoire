@@ -10,10 +10,12 @@ namespace Grimoire.Cli.Tests;
 
 public sealed class CliApplicationTests : IDisposable
 {
-    private readonly TestHost _host = new(new StubEmbeddings(new Dictionary<string, float[]>
-    {
-        ["deploy"] = [1f, 0f],
-    }));
+    private readonly TestHost _host = new(
+        new StubEmbeddings(new Dictionary<string, float[]>
+        {
+            ["deploy"] = [1f, 0f],
+        }),
+        projects: TestServices.DefaultProjects);
 
     [Fact]
     public async Task RunAsync_RoutesRememberAgainstFakes()
