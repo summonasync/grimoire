@@ -74,7 +74,7 @@ public static class ApiHostBuilder
         app.MapTomesEndpoints(memories, tomeResolver);
         app.MapHealthEndpoints(store, embeddings, clock);
         app.MapVersionEndpoints();
-        app.MapAgentEndpoints(new AgentActivityProjection(memories, clock));
+        app.MapAgentEndpoints(new AgentActivityProjection(store, clock));
         app.UseSpaFrontend(options);
 
         return app;

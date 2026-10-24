@@ -3,7 +3,7 @@ using Grimoire.Core;
 
 namespace Grimoire.Api.Agents;
 
-public sealed class AgentActivityProjection(MemoryService memories, IClock clock)
+public sealed class AgentActivityProjection(IMemoryStore store, IClock clock)
 {
     public const int DefaultWindowDays = 30;
 
@@ -36,21 +36,17 @@ public sealed class AgentActivityProjection(MemoryService memories, IClock clock
         return response;
     }
 
-    // MemoryFilter carries no created-after facet, so the window cut and actor grouping
-    // happen here at the Api edge; tombstoned writes still count as past activity.
+    // IMemoryStore directly, not MemoryService.ListAsync: that call resolves a null tome
+    // to the default, while this panel is cross-tome by spec. Tombstoned writes still
+    // count as past activity.
     private async Task<AgentActivityResponse> BuildAsync(int windowDays, CancellationToken cancellationToken)
     {
         var cutoff = clock.UtcNow.AddDays(-windowDays);
-        var records = await memories.ListAsync(new MemoryFilter(), cancellationToken);
+        var records = await store.ListAsync(new MemoryFilter { CreatedAfter = cutoff }, cancellationToken);
         var activity = new Dictionary<MemoryActor, (int Count, DateTimeOffset Last)>();
 
         foreach (var record in records)
         {
-            if (record.CreatedAt < cutoff)
-            {
-                continue;
-            }
-
             var (count, last) = activity.TryGetValue(record.Actor, out var entry)
                 ? entry
                 : (0, DateTimeOffset.MinValue);
