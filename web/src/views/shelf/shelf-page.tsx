@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { confirmLeaveUnsaved } from "@/features/persona/lib/use-unsaved-guard";
 import { tomesQueryOptions } from "@/features/shelf";
 import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { PageHeader } from "@/shared/ui/page-header";
@@ -34,7 +35,9 @@ export function ShelfPage() {
           action={{
             label: "Open memories",
             onClick: () => {
-              window.location.hash = "memories";
+              if (confirmLeaveUnsaved()) {
+                window.location.hash = "memories";
+              }
             },
           }}
         />

@@ -4,11 +4,19 @@ import { useEffect } from "react";
 
 const confirmMessage = "You have unsaved persona changes. Leave anyway?";
 
+let guardConfirm: (() => boolean) | null = null;
+
+export function confirmLeaveUnsaved(): boolean {
+  return guardConfirm === null || guardConfirm();
+}
+
 export function useUnsavedGuard(active: boolean): void {
   useEffect(() => {
     if (!active) {
       return;
     }
+
+    guardConfirm = () => window.confirm(confirmMessage);
 
     const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
       event.preventDefault();
@@ -40,6 +48,7 @@ export function useUnsavedGuard(active: boolean): void {
     document.addEventListener("click", handleCaptureClick, true);
 
     return () => {
+      guardConfirm = null;
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("click", handleCaptureClick, true);
     };
