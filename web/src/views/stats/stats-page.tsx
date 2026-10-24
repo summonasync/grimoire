@@ -5,6 +5,8 @@ import { healthQueryOptions } from "@/shared/api/health";
 import { PageHeader } from "@/shared/ui/page-header";
 import { ProviderHealthCard } from "@/features/stats/components/provider-health-card";
 import { statsQueryOptions } from "@/features/stats/queries";
+import { tomesQueryOptions } from "@/features/shelf";
+import { useTomeFilter } from "@/widgets/app-shell/tome-context";
 import { Donut, resolveSliceColor } from "@/shared/ui/charts";
 import { Panel } from "@/shared/ui/panel";
 import { StatTile } from "@/shared/ui/stat-tile";
@@ -14,7 +16,9 @@ import { Icon } from "@/shared/ui/icons";
 import { Sigil } from "@/shared/ui/sigil";
 
 export function StatsPage() {
+  const { tome: railTome } = useTomeFilter();
   const stats = useQuery(statsQueryOptions());
+  const census = useQuery(tomesQueryOptions());
   const health = useQuery(healthQueryOptions());
 
   if (stats.error) {
@@ -35,6 +39,10 @@ export function StatsPage() {
   }
 
   const data = stats.data;
+  const scoped = railTome
+    ? (census.data?.tomes.find((entry) => entry.key === railTome) ?? null)
+    : null;
+  const storeWideTag = railTome ? " · store-wide" : "";
   const tomeRows = Object.entries(data.byTome);
   const tomeSlices = tomeRows.map(([tome, counts], index) => ({
     label: tome,
@@ -52,40 +60,60 @@ export function StatsPage() {
         actions={
           <span className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs">
             <Icon name="book" className="size-3.5 text-muted" />
-            <span className="text-muted">Resolved tome</span>
-            <span className="font-medium">{data.tome}</span>
+            <span className="text-muted">{railTome ? "Viewing tome" : "Resolved tome"}</span>
+            <span className="font-medium">{railTome ?? data.tome}</span>
           </span>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <StatTile
-          icon="memories"
-          tone="jade"
-          label="Active entries"
-          value={compactNumber(data.active)}
-          hint="Usable, non-tombstoned records"
-        />
+        {scoped ? (
+          <StatTile
+            icon="memories"
+            tone="jade"
+            label="Tome entries"
+            value={compactNumber(scoped.active + scoped.tombstoned)}
+            hint={`${compactNumber(scoped.active)} active · last write ${relativeTime(scoped.lastWriteAt)}`}
+          />
+        ) : (
+          <StatTile
+            icon="memories"
+            tone="jade"
+            label="Active entries"
+            value={compactNumber(data.active)}
+            hint={"Usable, non-tombstoned records" + storeWideTag}
+          />
+        )}
         <StatTile
           icon="clock"
           tone="gilt"
           label="Superseded"
           value={compactNumber(data.superseded)}
-          hint="Replaced by a newer truth"
+          hint={"Replaced by a newer truth" + storeWideTag}
         />
-        <StatTile
-          icon="tombstone"
-          tone="neutral"
-          label="Tombstoned"
-          value={compactNumber(data.tombstoned)}
-          hint="Soft-deleted, awaiting GC"
-        />
+        {scoped ? (
+          <StatTile
+            icon="tombstone"
+            tone="neutral"
+            label="Tome tombstoned"
+            value={compactNumber(scoped.tombstoned)}
+            hint={`Soft-deleted, awaiting GC in '${railTome}'`}
+          />
+        ) : (
+          <StatTile
+            icon="tombstone"
+            tone="neutral"
+            label="Tombstoned"
+            value={compactNumber(data.tombstoned)}
+            hint={"Soft-deleted, awaiting GC" + storeWideTag}
+          />
+        )}
         <StatTile
           icon="alert"
           tone={data.idempotencyConflicts > 0 ? "ember" : "jade"}
           label="Idempotency conflicts"
           value={compactNumber(data.idempotencyConflicts)}
-          hint={data.idempotencyConflicts > 0 ? "Duplicate merges recorded" : "Zero is healthy"}
+          hint={(data.idempotencyConflicts > 0 ? "Duplicate merges recorded" : "Zero is healthy") + storeWideTag}
         />
         <StatTile
           icon="database"
@@ -93,9 +121,9 @@ export function StatsPage() {
           label="Pending compaction"
           value={compactNumber(data.pendingCompaction)}
           hint={
-            data.pendingCompaction > 0
+            (data.pendingCompaction > 0
               ? "Journal clusters ready to merge"
-              : "Store is fully compacted"
+              : "Store is fully compacted") + storeWideTag
           }
         />
         <StatTile
@@ -104,10 +132,10 @@ export function StatsPage() {
           label="GC heartbeat"
           value={gc.lastSuccessAt ? relativeTime(gc.lastSuccessAt) : "never"}
           hint={
-            gc.unknownReason
+            (gc.unknownReason
               ?? (gc.stale
                 ? "Stale — no successful sweep recently"
-                : `Last run removed ${compactNumber((gc.removedExpired ?? 0) + (gc.removedTombstones ?? 0))} records`)
+                : `Last run removed ${compactNumber((gc.removedExpired ?? 0) + (gc.removedTombstones ?? 0))} records`)) + storeWideTag
           }
         />
       </div>
@@ -115,7 +143,7 @@ export function StatsPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel
           title="Entries by tome"
-          description="Distribution of active memory entries."
+          description={railTome ? "Distribution of active memory entries · store-wide" : "Distribution of active memory entries."}
           icon="stats"
           className="xl:col-span-2"
         >
@@ -144,7 +172,7 @@ export function StatsPage() {
 
       <Panel
         title="Per-tome statistics"
-        description="Record counts by tome."
+        description={railTome ? "Record counts by tome · store-wide" : "Record counts by tome."}
         icon="book"
         bodyClassName="p-0"
       >
@@ -170,7 +198,14 @@ export function StatsPage() {
               </thead>
               <tbody>
                 {tomeRows.map(([tome, counts]) => (
-                  <tr key={tome} className="border-b border-border/60 last:border-0">
+                  <tr
+                    key={tome}
+                    className={
+                      tome === railTome
+                        ? "border-b border-border/60 bg-accent-soft/60 last:border-0"
+                        : "border-b border-border/60 last:border-0"
+                    }
+                  >
                     <td className="px-4 py-2">
                       <span className="flex items-center gap-2">
                         <Sigil seed={tome} className="size-4 shrink-0" />
