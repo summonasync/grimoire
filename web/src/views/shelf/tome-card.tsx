@@ -56,12 +56,12 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
             <Icon name="tombstone" className="size-3.5" />
             {compactNumber(summary.tombstoned)} tombstoned
           </span>
-          <span className="ml-auto flex shrink-0 items-center gap-3 text-accent">
+          <span className="ml-auto flex shrink-0 items-center gap-3 text-jade">
             <a
               href="#persona"
               onClick={() => onPick(summary.key)}
               aria-label={`Open persona of ${summary.key}`}
-              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60"
             >
               Persona
               <Icon name="arrowRight" className="size-3.5" />
@@ -70,7 +70,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               href="#memories"
               onClick={() => onPick(summary.key)}
               aria-label={`Open memories of ${summary.key}`}
-              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60"
             >
               Memories
               <Icon name="arrowRight" className="size-3.5" />
@@ -79,7 +79,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               href="#stats"
               onClick={() => onPick(summary.key)}
               aria-label={`Open stats of ${summary.key}`}
-              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60"
             >
               Stats
               <Icon name="arrowRight" className="size-3.5" />
@@ -88,7 +88,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               href="#graph"
               onClick={() => onPick(summary.key)}
               aria-label={`Open graph of ${summary.key}`}
-              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60"
             >
               Graph
               <Icon name="arrowRight" className="size-3.5" />
