@@ -89,3 +89,26 @@ export interface HistoryResult {
   tome: string;
   chain: HistoryEntry[];
 }
+
+export type RelatedEdgeClass = "supersede" | "link" | "similarity" | "coMembership";
+
+export type GraphDirection = "inbound" | "outbound";
+
+export interface RelatedTarget {
+  id: string;
+  snippet: string;
+  status: MemoryStatus;
+  tome: string;
+}
+
+export interface RelatedEdge {
+  class: RelatedEdgeClass;
+  direction: GraphDirection;
+  target: RelatedTarget;
+}
+
+export interface RelatedMemoryResult {
+  id: string;
+  tome: string;
+  edges: RelatedEdge[];
+}

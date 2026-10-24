@@ -18,7 +18,7 @@ import {
   toMemoryListParams,
   type MemoryFilters,
 } from "@/features/memories/lib/memory-filters";
-import { memoriesQueryOptions } from "@/features/memories/queries";
+import { memoriesQueryOptions, memoryQueryOptions } from "@/features/memories/queries";
 
 export function MemoriesPage() {
   const [filters, setFilters] = useState<MemoryFilters>(defaultMemoryFilters);
@@ -48,7 +48,12 @@ export function MemoriesPage() {
     memoriesQueryOptions(toMemoryListParams({ ...effectiveFilters, tome: effectiveTome })),
   );
   const records = list.data?.items ?? [];
-  const selected = selectedId ? (records.find((record) => record.id === selectedId) ?? null) : null;
+  const listed = selectedId ? (records.find((record) => record.id === selectedId) ?? null) : null;
+  const offList = useQuery({
+    ...memoryQueryOptions(selectedId ?? ""),
+    enabled: selectedId !== null && listed === null,
+  });
+  const selected = listed ?? (selectedId ? (offList.data ?? null) : null);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -148,7 +153,21 @@ export function MemoriesPage() {
         </section>
 
         {selected ? (
-          <MemoryDetailPanel record={selected} onClose={() => setSelectedId(null)} />
+          <MemoryDetailPanel
+            record={selected}
+            onClose={() => setSelectedId(null)}
+            onOpenRecord={(id) => setSelectedId(id)}
+          />
+        ) : selectedId && offList.error ? (
+          <aside aria-label="Memory details" className="panel p-4">
+            <QueryFailure message={offList.error.message} onRetry={() => void offList.refetch()} />
+          </aside>
+        ) : selectedId ? (
+          <aside aria-label="Memory details" className="panel space-y-2 p-4">
+            <Skeleton className="h-14" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-36" />
+          </aside>
         ) : (
           <div className="hidden xl:block">
             <EmptyState
