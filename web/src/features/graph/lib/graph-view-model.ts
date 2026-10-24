@@ -101,7 +101,7 @@ export function resolveVisibility(model: GraphModel, spec: VisibilitySpec): Visi
     return project === spec.project;
   };
 
-  const byFilter = model.vertices.map((vertex) => !vertex.ghost && projectMatches(vertex.node));
+  const byFilter = model.vertices.map((vertex) => projectMatches(vertex.node));
 
   const link = model.links.map(
     (entry) => spec.classes[entry.class] && byFilter[entry.source]! && byFilter[entry.target]!,
