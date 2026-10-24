@@ -14,6 +14,7 @@ internal static class SettingsEndpoints
             new EngineSettings(
                 engineOptions.SessionTtlHours,
                 engineOptions.DedupSimilarityThreshold,
+                engineOptions.RelatedSimilarityThreshold,
                 engineOptions.TombstoneRetentionDays,
                 engineOptions.RecallOversampling,
                 engineOptions.RecencyHalfLives,

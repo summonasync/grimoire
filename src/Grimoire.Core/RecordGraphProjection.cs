@@ -4,6 +4,24 @@ public static class RecordGraphProjection
 {
     public static RecordGraph Project(IReadOnlyList<MemoryRecord> records, RecordGraphOptions? options = null)
     {
+        var edges = CollectEdges(records, options);
+        return AsGraph(edges);
+    }
+
+    public static RecordGraph ProjectPoints(IReadOnlyList<MemoryPoint> points, RecordGraphOptions? options = null)
+    {
+        var edges = CollectEdges(points.Select(point => point.Record).ToArray(), options);
+
+        if (options?.RelatedSimilarityThreshold is { } threshold)
+        {
+            edges.UnionWith(SimilarityEdges.Edges(points, threshold));
+        }
+
+        return AsGraph(edges);
+    }
+
+    private static HashSet<RecordEdge> CollectEdges(IReadOnlyList<MemoryRecord> records, RecordGraphOptions? options)
+    {
         var byId = records.ToDictionary(record => record.Id);
         var edges = new HashSet<RecordEdge>();
 
@@ -44,11 +62,14 @@ public static class RecordGraphProjection
             edges.UnionWith(CoMembership.Edges(records));
         }
 
-        return new RecordGraph
+        return edges;
+    }
+
+    private static RecordGraph AsGraph(HashSet<RecordEdge> edges) =>
+        new()
         {
             Edges = [.. edges.OrderBy(edge => edge.Class).ThenBy(edge => edge.FromId).ThenBy(edge => edge.ToId)],
         };
-    }
 
     private static IEnumerable<Guid> RecordLinks(MemoryRecord record)
     {

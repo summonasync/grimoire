@@ -228,4 +228,69 @@ public sealed class RecordGraphProjectionTests
 
         graph.Edges.ShouldAllBe(edge => edge.FromId == local.Id && edge.ToId == foreign.Id);
     }
+
+    [Fact]
+    public void Project_PointsWithCosineAboveThreshold_IncludesSimilarityEdge()
+    {
+        var first = TestMemories.Point("first", [1f, 0f]);
+        var second = TestMemories.Point("second", [0.83f, 0.56f]);
+
+        var graph = RecordGraphProjection.ProjectPoints(
+            [first, second],
+            new RecordGraphOptions { RelatedSimilarityThreshold = 0.82 });
+
+        var edge = graph.Edges.ShouldHaveSingleItem();
+
+        edge.Class.ShouldBe(RecordEdgeClass.Similarity);
+        edge.TargetStatus.ShouldBe(MemoryStatus.Active);
+        new[] { edge.FromId, edge.ToId }.ShouldBe(new[] { first.Record.Id, second.Record.Id }, ignoreOrder: true);
+    }
+
+    [Fact]
+    public void Project_PointsWithCosineBelowThreshold_YieldsNoSimilarityEdge()
+    {
+        var first = TestMemories.Point("first", [1f, 0f]);
+        var second = TestMemories.Point("second", [0.81f, 0.59f]);
+
+        RecordGraphProjection.ProjectPoints(
+            [first, second],
+            new RecordGraphOptions { RelatedSimilarityThreshold = 0.82 }).Edges.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Project_PointsWithoutThreshold_LeaveSimilarityOut()
+    {
+        var first = TestMemories.Point("first", [1f, 0f]);
+        var second = TestMemories.Point("second", [1f, 0f]);
+
+        RecordGraphProjection.ProjectPoints([first, second]).Edges.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Project_Points_CombineCoMembershipAndSimilarity()
+    {
+        var actor = MemoryActor.Agent("coder-a", "claude");
+        var first = TestMemories.Point("first", [1f, 0f], tags: ["deploy"], actor: actor);
+        var second = TestMemories.Point("second", [1f, 0f], tags: ["ops"], actor: actor);
+
+        var graph = RecordGraphProjection.ProjectPoints(
+            [first, second],
+            new RecordGraphOptions { IncludeCoMembership = true, RelatedSimilarityThreshold = 0.82 });
+
+        graph.Edges.Select(edge => edge.Class).ShouldBe([
+            RecordEdgeClass.CoMembership,
+            RecordEdgeClass.Similarity,
+        ]);
+    }
+
+    [Fact]
+    public void Project_PointsSimilarityAcrossTomes_YieldsNoEdge()
+    {
+        var first = TestMemories.Point("first", [1f, 0f], tome: "alpha");
+        var second = TestMemories.Point("second", [1f, 0f], tome: "beta");
+
+        RecordGraphProjection.ProjectPoints(
+            [first, second],
+            new RecordGraphOptions { RelatedSimilarityThreshold = 0.82 }).Edges.ShouldBeEmpty();
+    }
 }

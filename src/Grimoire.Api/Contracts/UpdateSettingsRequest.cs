@@ -8,6 +8,7 @@ public sealed record UpdateSettingsRequest
     [
         "memory.sessionTtlHours",
         "memory.dedupSimilarityThreshold",
+        "memory.relatedSimilarityThreshold",
         "memory.tombstoneRetentionDays",
         "memory.recallOversampling",
         "memory.recencyHalfLives",
@@ -17,6 +18,8 @@ public sealed record UpdateSettingsRequest
     public double? SessionTtlHours { get; init; }
 
     public double? DedupSimilarityThreshold { get; init; }
+
+    public double? RelatedSimilarityThreshold { get; init; }
 
     public double? TombstoneRetentionDays { get; init; }
 
