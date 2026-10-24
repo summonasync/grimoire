@@ -13,7 +13,7 @@ internal static class StatsEndpoints
 
     public static void MapStatsEndpoints(this WebApplication app, MemoryService memories, ApiTomeResolver tomes)
     {
-        app.MapGet("/api/stats", async (string? tome, CancellationToken cancellationToken) =>
+        app.MapGet("/api/stats", async (string? tome, bool includeTomeCompaction = false, CancellationToken cancellationToken = default) =>
         {
             if (tome is { } candidate && !TomeKey.TryNormalize(candidate, out _))
             {
@@ -49,7 +49,12 @@ internal static class StatsEndpoints
                 stats.IdempotencyConflicts,
                 byTome,
                 await ProjectCountsAsync(memories, resolvedTome, cancellationToken),
-                stats.Gc));
+                stats.Gc)
+            {
+                PendingCompactionByTome = includeTomeCompaction
+                    ? await memories.PendingCompactionByTomeAsync(cancellationToken)
+                    : null,
+            });
         });
     }
 

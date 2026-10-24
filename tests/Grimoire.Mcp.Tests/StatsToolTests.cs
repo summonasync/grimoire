@@ -165,6 +165,55 @@ public sealed class StatsToolTests
         payload.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(0);
     }
 
+    [Fact]
+    public async Task Stats_ByDefault_OmitsThePerTomeBacklog()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedStaleJournals(session, ("alpha", [1f, 0.05f, 0f]), ("alpha", [1f, 0f, 0.05f]));
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("pendingCompaction").GetInt64().ShouldBe(2L);
+        payload.TryGetProperty("pendingCompactionByTome", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Stats_WithIncludeTomeCompaction_SplitsTheBacklogPerTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedStaleJournals(
+            session,
+            ("alpha", [1f, 0.05f, 0f]),
+            ("alpha", [1f, 0f, 0.05f]),
+            (McpTestSession.ClientActor, [0f, 1f, 0.05f]),
+            (McpTestSession.ClientActor, [0f, 0.95f, 0.05f]));
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>
+        {
+            ["includeTomeCompaction"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        var pending = payload.GetProperty("pendingCompactionByTome");
+        pending.GetProperty("alpha").GetInt64().ShouldBe(2);
+        pending.GetProperty(McpTestSession.ClientActor).GetInt64().ShouldBe(2);
+    }
+
+    private static async Task SeedStaleJournals(McpTestSession session, params (string Tome, float[] Vector)[] journals)
+    {
+        var stale = session.Clock.UtcNow.AddDays(-30);
+        foreach (var (tome, vector) in journals)
+        {
+            await session.Store.UpsertAsync(
+                Journal(Guid.NewGuid(), $"stale journal {tome} {vector[0]}{vector[1]}{vector[2]}", stale) with { Tome = tome },
+                vector,
+                CancellationToken.None);
+        }
+    }
+
     private static MemoryRecord Journal(Guid id, string content, DateTimeOffset accessed)
     {
         return new MemoryRecord

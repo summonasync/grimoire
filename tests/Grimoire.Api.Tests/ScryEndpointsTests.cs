@@ -256,14 +256,46 @@ public class ScryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         body.GetProperty("count").GetInt32().ShouldBe(1);
     }
 
+    [Fact]
+    public async Task Scry_ItemsCarryMatchedTerms_FromContentAndTags()
+    {
+        factory.Reset();
+        Seed("alpha squad decision", tome: "alpha", tags: ["ops-crew"]);
+        factory.Embeddings.Vectors["alpha ops"] = [1f, 0f];
+
+        var body = await ScryAsync("alpha ops");
+
+        var matched = body.GetProperty("items")[0].GetProperty("matchedTerms");
+        matched.EnumerateArray().Select(span => (
+            span.GetProperty("term").GetString(),
+            span.GetProperty("field").GetString(),
+            span.GetProperty("start").GetInt32()))
+            .ShouldBe([("alpha", "content", 0), ("ops", "tag", 0)]);
+    }
+
+    [Fact]
+    public async Task Scry_MatchedTerms_MatchAgainstTheOriginalQueryText()
+    {
+        factory.Reset();
+        Seed("Alpha Squad Decision", tome: "alpha");
+        factory.Embeddings.Vectors["ALPHA squad"] = [1f, 0f];
+
+        var body = await ScryAsync("ALPHA squad");
+
+        var matched = body.GetProperty("items")[0].GetProperty("matchedTerms");
+        matched.EnumerateArray().Select(span => span.GetProperty("term").GetString())
+            .ShouldBe(["alpha", "squad"]);
+    }
+
     private void Seed(
         string content,
         string tome = TomeKey.DefaultTome,
         MemoryKind kind = MemoryKind.Fact,
-        MemoryActor? actor = null)
+        MemoryActor? actor = null,
+        IReadOnlyList<string>? tags = null)
     {
         factory.Embeddings.Vectors.TryAdd(content, [1f, 0f]);
-        factory.Store.Seed(content, [1f, 0f], scope: MemoryScope.Global, kind: kind, actor: actor, tome: tome);
+        factory.Store.Seed(content, [1f, 0f], scope: MemoryScope.Global, kind: kind, actor: actor, tome: tome, tags: tags);
     }
 
     private async Task<JsonElement> ScryAsync(string query, string extra = "")

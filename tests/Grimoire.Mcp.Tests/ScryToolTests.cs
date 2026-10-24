@@ -309,6 +309,27 @@ public sealed class ScryToolTests
     }
 
     [Fact]
+    public async Task Scry_HitsCarryMatchedTerms_FromTheOriginalQuery()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad",
+        });
+
+        result.ShouldSucceed();
+        var matched = result.Payload().GetProperty("hits")[0].GetProperty("matchedTerms");
+        matched.GetArrayLength().ShouldBe(2);
+        matched[0].GetProperty("term").GetString().ShouldBe("alpha");
+        matched[0].GetProperty("field").GetString().ShouldBe("content");
+        matched[0].GetProperty("start").GetInt32().ShouldBe(0);
+        matched[1].GetProperty("term").GetString().ShouldBe("squad");
+        matched[1].GetProperty("field").GetString().ShouldBe("content");
+    }
+
+    [Fact]
     public async Task Scry_IsRegisteredReadOnlyIdempotentAndNonDestructive()
     {
         await using var session = await McpTestSession.StartAsync();

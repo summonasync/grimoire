@@ -54,7 +54,7 @@ public sealed class McpToolContractTests
         data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit", "tome"]);
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
-        data.Add("memory_stats", [], ["tome"]);
+        data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
         data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
         data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
         data.Add("projects", ["action"], ["alias", "boardProjectId", "displayName", "paths"]);
@@ -94,6 +94,7 @@ public sealed class McpToolContractTests
         data.Add("memory_brief", "scopes", "array");
         data.Add("memory_brief", "factsPerScope", "integer");
         data.Add("memory_scry", "query", "string");
+        data.Add("memory_stats", "includeTomeCompaction", "boolean");
         data.Add("memory_scry", "tomes", "array");
         data.Add("memory_scry", "includeJournal", "boolean");
         data.Add("memory_scry", "limit", "integer");

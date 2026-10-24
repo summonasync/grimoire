@@ -18,6 +18,8 @@ internal sealed record ScryHit
 
     public IReadOnlyList<string> Tags { get; init; } = [];
 
+    public IReadOnlyList<TermSpan> MatchedTerms { get; init; } = [];
+
     public string? ProjectId { get; init; }
 
     public required double Similarity { get; init; }

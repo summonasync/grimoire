@@ -103,11 +103,13 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
                 Limit = limit,
             }, ct);
 
+            var terms = LexicalTermMatcher.Tokenize(query);
+
             return ToolResults.Success(new ScryView
             {
                 Tomes = targets,
                 Attribution = attributionFilter,
-                Hits = [.. matches.Select(match => ToHit(match, attributionFilter))],
+                Hits = [.. matches.Select(match => ToHit(match, attributionFilter, terms))],
                 Count = matches.Count,
             });
         }, cancellationToken);
@@ -137,7 +139,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
             paramName);
     }
 
-    private static ScryHit ToHit(RecallMatch match, ScryAttribution attribution)
+    private static ScryHit ToHit(RecallMatch match, ScryAttribution attribution, IReadOnlyList<string> terms)
     {
         return new ScryHit
         {
@@ -153,6 +155,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
                 _ => null,
             },
             Tags = match.Record.Tags,
+            MatchedTerms = LexicalTermMatcher.Match(terms, match.Record),
             ProjectId = match.Record.ProjectId,
             Similarity = match.Similarity,
             Score = match.Score,

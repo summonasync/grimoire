@@ -20,5 +20,7 @@ internal sealed record StatsView
 
     public required IReadOnlyDictionary<string, TomeStats> ByTome { get; init; }
 
+    public IReadOnlyDictionary<string, long>? PendingCompactionByTome { get; init; }
+
     public required GcState Gc { get; init; }
 }
