@@ -108,6 +108,7 @@ export function ConsoleScreen() {
           label="Tomes"
           value={tomes.length}
           hint="Knowledge vaults"
+          href="#shelf"
         />
         <StatTile
           icon="database"
@@ -115,6 +116,7 @@ export function ConsoleScreen() {
           label="Total memories"
           value={compactNumber(total)}
           hint={`${compactNumber(data.active)} active`}
+          href="#memories"
         />
         <StatTile
           icon="pulse"
