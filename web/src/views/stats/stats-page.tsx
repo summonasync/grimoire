@@ -14,6 +14,8 @@ import { Icon } from "@/shared/ui/icons";
 import { ProjectBadge } from "@/shared/ui/project-badge";
 import { Sigil } from "@/shared/ui/sigil";
 
+const CROSS_PROJECT_KEY = "cross-project";
+
 export function StatsPage() {
   const stats = useQuery(statsQueryOptions());
   const health = useQuery(healthQueryOptions());
@@ -44,8 +46,8 @@ export function StatsPage() {
   }));
   const totalActive = tomeRows.reduce((sum, [, counts]) => sum + counts.active, 0);
   const projectRows = Object.entries(data.byProject).sort(([keyA, countA], [keyB, countB]) => {
-    if (keyA === "cross-project") return 1;
-    if (keyB === "cross-project") return -1;
+    if (keyA === CROSS_PROJECT_KEY) return 1;
+    if (keyB === CROSS_PROJECT_KEY) return -1;
     return countB - countA;
   });
   const totalByProject = projectRows.reduce((sum, [, count]) => sum + count, 0);
@@ -237,7 +239,7 @@ export function StatsPage() {
                 {projectRows.map(([project, count]) => (
                   <tr key={project} className="border-b border-border/60 last:border-0">
                     <td className="px-4 py-2">
-                      <ProjectBadge projectId={project === "cross-project" ? null : project} />
+                      <ProjectBadge projectId={project === CROSS_PROJECT_KEY ? null : project} />
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">
                       {count.toLocaleString()}

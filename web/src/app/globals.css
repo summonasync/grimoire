@@ -74,6 +74,7 @@
   --color-border-strong: var(--border-strong);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
   --color-gilt: var(--gilt);
   --color-jade: var(--jade);
   --color-ember: var(--ember);
