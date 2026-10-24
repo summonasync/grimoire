@@ -105,14 +105,15 @@ public sealed class AutoMemoryImportCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         using var document = JsonDocument.Parse(_host.Output.ToString());
         var root = document.RootElement;
-        root.GetProperty("files").GetInt32().ShouldBe(2);
-        root.GetProperty("imported").GetInt32().ShouldBe(2);
-        root.GetProperty("skippedDuplicates").GetInt32().ShouldBe(0);
-        root.GetProperty("failed").GetInt32().ShouldBe(0);
-        root.GetProperty("unchanged").GetInt32().ShouldBe(0);
-        root.GetProperty("warnings").ValueKind.ShouldBe(JsonValueKind.Array);
+        root.GetProperty("tome").GetString().ShouldNotBeNull();
+        root.GetProperty("summary").GetProperty("files").GetInt32().ShouldBe(2);
+        root.GetProperty("summary").GetProperty("imported").GetInt32().ShouldBe(2);
+        root.GetProperty("summary").GetProperty("skippedDuplicates").GetInt32().ShouldBe(0);
+        root.GetProperty("summary").GetProperty("failed").GetInt32().ShouldBe(0);
+        root.GetProperty("summary").GetProperty("unchanged").GetInt32().ShouldBe(0);
+        root.GetProperty("summary").GetProperty("warnings").ValueKind.ShouldBe(JsonValueKind.Array);
 
-        var outcomes = root.GetProperty("outcomes");
+        var outcomes = root.GetProperty("summary").GetProperty("outcomes");
         outcomes.ValueKind.ShouldBe(JsonValueKind.Array);
         var byFile = outcomes.EnumerateArray()
             .ToDictionary(outcome => outcome.GetProperty("fileName").GetString()!);
@@ -123,8 +124,36 @@ public sealed class AutoMemoryImportCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task UnregisteredSource_WarnsAndImportsWithoutProjectTag()
+    public async Task Json_RegisteredProject_AppearsInPayload()
     {
+        WriteFile("a.md", "coffee brewing notes");
+        using var host = NewHost([new ProjectAliasRecord { Alias = "grim", Paths = [_source] }]);
+
+        var code = await host.RunAsync("auto-memory", "import", "--source", _source, "--json");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        using var document = JsonDocument.Parse(host.Output.ToString());
+        var root = document.RootElement;
+        root.GetProperty("project").GetString().ShouldBe("grim");
+        root.TryGetProperty("projectWarning", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Json_UnregisteredSource_CarriesRegistryWarning()
+    {
+        WriteFile("a.md", "coffee brewing notes");
+
+        var code = await _host.RunAsync("auto-memory", "import", "--source", _source, "--json");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        using var document = JsonDocument.Parse(_host.Output.ToString());
+        var root = document.RootElement;
+        root.TryGetProperty("project", out _).ShouldBeFalse();
+        root.GetProperty("projectWarning").GetString().ShouldContain("no registered project matches");
+    }
+
+    [Fact]
+    public async Task UnregisteredSource_WarnsAndImportsWithoutProjectTag()    {
         WriteFile("a.md", "coffee brewing notes");
 
         var code = await _host.RunAsync("auto-memory", "import", "--source", _source);

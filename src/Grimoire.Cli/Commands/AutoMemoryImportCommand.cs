@@ -51,7 +51,14 @@ internal sealed class AutoMemoryImportCommand(CliEnvironment environment)
 
         if (invocation.Value("json") is not null)
         {
-            environment.Output.WriteLine(JsonSerializer.Serialize(summary, JsonOutput));
+            var payload = new
+            {
+                tome = identity.Tome,
+                project = projectTag,
+                projectWarning,
+                summary,
+            };
+            environment.Output.WriteLine(JsonSerializer.Serialize(payload, JsonOutput));
         }
         else
         {
