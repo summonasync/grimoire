@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useState } from "react";
+import { useEffect, useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
@@ -8,6 +8,7 @@ import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { Icon } from "@/shared/ui/icons";
 import { Panel } from "@/shared/ui/panel";
 import { useTomeFilter } from "@/widgets/app-shell/tome-context";
+import { clearHandedOffRecord, readHandedOffRecord } from "@/widgets/app-shell/record-handoff";
 import { RecordMoveBar } from "@/features/shelf";
 import { MemoryCreateForm } from "@/features/memories/components/memory-create-form";
 import { MemoryDetailPanel } from "@/features/memories/components/memory-detail-panel";
@@ -18,11 +19,15 @@ import {
   toMemoryListParams,
   type MemoryFilters,
 } from "@/features/memories/lib/memory-filters";
-import { memoriesQueryOptions } from "@/features/memories/queries";
+import { memoriesQueryOptions, memoryQueryOptions } from "@/features/memories/queries";
 
 export function MemoriesPage() {
   const [filters, setFilters] = useState<MemoryFilters>(defaultMemoryFilters);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(readHandedOffRecord);
+
+  useEffect(() => {
+    clearHandedOffRecord();
+  }, []);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const { tome: railTome } = useTomeFilter();
@@ -48,7 +53,12 @@ export function MemoriesPage() {
     memoriesQueryOptions(toMemoryListParams({ ...effectiveFilters, tome: effectiveTome })),
   );
   const records = list.data?.items ?? [];
-  const selected = selectedId ? (records.find((record) => record.id === selectedId) ?? null) : null;
+  const listed = selectedId ? (records.find((record) => record.id === selectedId) ?? null) : null;
+  const offList = useQuery({
+    ...memoryQueryOptions(selectedId ?? ""),
+    enabled: selectedId !== null && listed === null,
+  });
+  const selected = listed ?? (selectedId ? (offList.data ?? null) : null);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -148,7 +158,21 @@ export function MemoriesPage() {
         </section>
 
         {selected ? (
-          <MemoryDetailPanel record={selected} onClose={() => setSelectedId(null)} />
+          <MemoryDetailPanel
+            record={selected}
+            onClose={() => setSelectedId(null)}
+            onOpenRecord={(id) => setSelectedId(id)}
+          />
+        ) : selectedId && offList.error ? (
+          <aside aria-label="Memory details" className="panel p-4">
+            <QueryFailure message={offList.error.message} onRetry={() => void offList.refetch()} />
+          </aside>
+        ) : selectedId ? (
+          <aside aria-label="Memory details" className="panel space-y-2 p-4">
+            <Skeleton className="h-14" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-36" />
+          </aside>
         ) : (
           <div className="hidden xl:block">
             <EmptyState

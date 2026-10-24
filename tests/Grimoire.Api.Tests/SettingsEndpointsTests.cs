@@ -22,6 +22,7 @@ public class SettingsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         settings.ShouldNotBeNull();
         settings.Memory.SessionTtlHours.ShouldBe(24);
         settings.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
+        settings.Memory.RelatedSimilarityThreshold.ShouldBe(0.82);
         settings.Memory.TombstoneRetentionDays.ShouldBe(30);
         settings.Memory.RecallOversampling.ShouldBe(3);
         settings.Memory.RecencyHalfLives.SessionDays.ShouldBe(0.5);

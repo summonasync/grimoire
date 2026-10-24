@@ -8,9 +8,16 @@ internal static class MemoryFilterTranslator
     internal static Filter Translate(MemoryFilter filter)
     {
         var translated = new Filter();
-        translated.Must.Add(Conditions.MatchKeyword(
-            MemoryPayloadFields.Status,
-            (filter.Status ?? MemoryStatus.Active).ToString()));
+        if (filter.Statuses.Count > 0)
+        {
+            translated.Must.Add(StatusAnyCondition(filter.Statuses));
+        }
+        else
+        {
+            translated.Must.Add(Conditions.MatchKeyword(
+                MemoryPayloadFields.Status,
+                (filter.Status ?? MemoryStatus.Active).ToString()));
+        }
 
         if (filter.Scopes.Count > 0)
         {
@@ -107,6 +114,17 @@ internal static class MemoryFilterTranslator
             {
                 anyOf.Should.Add(new Condition { IsEmpty = new IsEmptyCondition { Key = MemoryPayloadFields.Tome } });
             }
+        }
+
+        return new Condition { Filter = anyOf };
+    }
+
+    private static Condition StatusAnyCondition(IReadOnlyList<MemoryStatus> statuses)
+    {
+        var anyOf = new Filter();
+        foreach (var status in statuses)
+        {
+            anyOf.Should.Add(Conditions.MatchKeyword(MemoryPayloadFields.Status, status.ToString()));
         }
 
         return new Condition { Filter = anyOf };

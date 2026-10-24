@@ -57,6 +57,20 @@ internal static class TestMemories
         };
     }
 
+    public static MemoryPoint Point(
+        string content,
+        float[] vector,
+        string? tome = null,
+        MemoryStatus status = MemoryStatus.Active,
+        string? projectId = null,
+        IReadOnlyList<string>? tags = null,
+        MemoryActor? actor = null)
+        => new()
+        {
+            Record = Create(content, vector, tome: tome, status: status, projectId: projectId, tags: tags, actor: actor),
+            Vector = vector,
+        };
+
     public static CorrectionEntry Patch(DateTimeOffset at, string reason = "corrected") => new()
     {
         At = at,

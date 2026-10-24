@@ -8,6 +8,7 @@ import { KindBadge, ScopeBadge, StatusBadge } from "@/shared/ui/badge";
 import { ProjectBadge } from "@/shared/ui/project-badge";
 import { absoluteTime, actorLabel, importanceScore, relativeTime, shortId } from "@/shared/ui/format";
 import { MemoryEditForm } from "./memory-edit-form";
+import { MemoryRelatedSection } from "./memory-related-section";
 import { MemoryRestoreControl } from "./memory-restore-control";
 import { MemoryTombstoneControl } from "./memory-tombstone-control";
 import { MemoryCorrectionsTrail } from "./memory-corrections-trail";
@@ -16,6 +17,7 @@ import { MemoryHistorySection } from "./memory-history-section";
 interface MemoryDetailPanelProps {
   record: MemoryRecord;
   onClose: () => void;
+  onOpenRecord: (id: string) => void;
 }
 
 function MetaItem({
@@ -38,7 +40,7 @@ function MetaItem({
   );
 }
 
-export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
+export function MemoryDetailPanel({ record, onClose, onOpenRecord }: MemoryDetailPanelProps) {
   const [editing, setEditing] = useState(false);
   const dash = "—";
 
@@ -166,6 +168,7 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
           )}
         </div>
 
+        <MemoryRelatedSection record={record} onOpen={onOpenRecord} />
         <MemoryCorrectionsTrail corrections={record.corrections} />
         <MemoryHistorySection record={record} />
       </div>

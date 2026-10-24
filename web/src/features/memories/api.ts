@@ -7,9 +7,18 @@ import type {
   MemoryListParams,
   MemoryListResult,
   PatchMemoryInput,
+  RelatedEdgeClass,
+  RelatedMemoryResult,
   RestoreMemoryInput,
   RestoreMemoryResult,
 } from "./types";
+
+const edgeClassCodes: Record<RelatedEdgeClass, string> = {
+  supersede: "a",
+  link: "b",
+  similarity: "c",
+  coMembership: "d",
+};
 
 export function buildMemoryListQuery(params: MemoryListParams): string {
   const search = new URLSearchParams();
@@ -83,4 +92,18 @@ export function fetchMemoryHistory(id: string, tome?: string): Promise<HistoryRe
   }
   const query = search.toString();
   return apiFetch<HistoryResult>(query ? `/api/memories/${id}/history?${query}` : `/api/memories/${id}/history`);
+}
+
+export function fetchRelatedMemories(
+  id: string,
+  includeCoMembership = false,
+): Promise<RelatedMemoryResult> {
+  const classes: RelatedEdgeClass[] = ["supersede", "link", "similarity"];
+  if (includeCoMembership) {
+    classes.push("coMembership");
+  }
+
+  const search = new URLSearchParams();
+  search.set("classes", classes.map((entry) => edgeClassCodes[entry]).join(","));
+  return apiFetch<RelatedMemoryResult>(`/api/memories/${id}/related?${search.toString()}`);
 }

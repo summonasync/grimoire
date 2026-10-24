@@ -36,6 +36,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Embedding.Dimensions.ShouldBe(1024);
         options.Memory.SessionTtlHours.ShouldBe(24);
         options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
+        options.Memory.RelatedSimilarityThreshold.ShouldBe(0.82);
         options.Memory.RecallForeignProjectFactor.ShouldBe(0.6);
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(0.5);
         options.Memory.RecencyHalfLifeDays.Project.ShouldBe(30);
@@ -136,6 +137,17 @@ public sealed class ConfigLoaderTests : IDisposable
 
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(2);
         options.Memory.RecencyHalfLifeDays.Global.ShouldBe(90);
+    }
+
+    [Fact]
+    public void Load_WithEnvironmentOverride_AppliesRelatedSimilarityThreshold()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__RELATEDSIMILARITYTHRESHOLD", "0.75")]);
+
+        var options = loader.Load();
+
+        options.Memory.RelatedSimilarityThreshold.ShouldBe(0.75);
+        options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
     }
 
     [Fact]

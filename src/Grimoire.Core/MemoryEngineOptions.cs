@@ -8,6 +8,8 @@ public sealed record MemoryEngineOptions
 
     public double DedupSimilarityThreshold { get; init; } = 0.92;
 
+    public double RelatedSimilarityThreshold { get; init; } = 0.82;
+
     public RecencyHalfLives RecencyHalfLives { get; init; } = new();
 
     public double TombstoneRetentionDays { get; init; } = 30;

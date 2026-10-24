@@ -32,7 +32,8 @@ export type IconName =
   | "spark"
   | "database"
   | "menu"
-  | "external";
+  | "external"
+  | "graph";
 
 const paths: Record<IconName, ReactNode> = {
   console: (
@@ -212,6 +213,16 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M14 4h6v6" />
       <path d="M20 4l-9 9" />
       <path d="M18 13v7H4V6h7" />
+    </>
+  ),
+  graph: (
+    <>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="18" cy="8" r="2.5" />
+      <circle cx="12" cy="18" r="2.5" />
+      <path d="M8.5 6.4l7-0.4" />
+      <path d="M7.1 8.2l3.8 7.6" />
+      <path d="M16.7 10.1l-3.4 5.8" />
     </>
   ),
 };

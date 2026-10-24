@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { TabId } from "@/shared/navigation/tabs";
 import { AppShell } from "@/widgets/app-shell/app-shell";
 import { ConsoleScreen } from "./console-screen";
+import { GraphPage } from "@/views/graph/graph-page";
 import { MemoriesPage } from "@/views/memories/memories-page";
 import { PersonaPage } from "@/views/persona/persona-page";
 import { ScryPage } from "@/views/scry/scry-page";
@@ -14,6 +15,7 @@ function buildTabs(): Record<TabId, ReactNode> {
     console: <ConsoleScreen />,
     shelf: <ShelfPage />,
     memories: <MemoriesPage />,
+    graph: <GraphPage />,
     persona: <PersonaPage />,
     stats: <StatsPage />,
     settings: <SettingsPage />,
