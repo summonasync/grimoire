@@ -38,6 +38,11 @@ export function TomeDeleteConfirm({
       <textarea
         value={reason}
         onChange={(event) => setReason(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onCancel();
+          }
+        }}
         rows={2}
         autoFocus
         placeholder="Why is this tome being retired?"

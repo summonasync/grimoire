@@ -47,7 +47,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
             </span>
           )}
         </a>
-        <div className="mt-auto flex items-center gap-3 border-t border-border pt-2.5 text-xs">
+        <div className="mt-auto flex flex-wrap items-center gap-3 border-t border-border pt-2.5 text-xs">
           <span className="flex items-center gap-1.5 tabular-nums">
             <Icon name="memories" className="size-3.5 text-jade" />
             {compactNumber(summary.active)} active
@@ -73,6 +73,15 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
             >
               Memories
+              <Icon name="arrowRight" className="size-3.5" />
+            </a>
+            <a
+              href="#stats"
+              onClick={() => onPick(summary.key)}
+              aria-label={`Open stats of ${summary.key}`}
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              Stats
               <Icon name="arrowRight" className="size-3.5" />
             </a>
           </span>

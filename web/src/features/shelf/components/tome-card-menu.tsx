@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icons";
 import { useShelfToasts } from "../lib/shelf-toasts";
@@ -25,6 +25,21 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
   const merge = useMergeTome();
   const forget = useForgetTome();
   const { push } = useShelfToasts();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   const pick = (next: VerbMode) => {
     rename.reset();
@@ -34,7 +49,15 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
     setMode(next);
   };
 
-  const close = () => setMode("closed");
+  const collapse = () => {
+    setMenuOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const close = () => {
+    setMode("closed");
+    triggerRef.current?.focus();
+  };
 
   const undoRename = (result: TomeRetomeResult) => {
     rename.mutate(
@@ -56,6 +79,7 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
     <div className="pointer-events-none absolute inset-0 z-20">
       <div className="pointer-events-auto absolute top-3 right-3">
         <button
+          ref={triggerRef}
           type="button"
           aria-label={`Tome ${summary.key} actions`}
           aria-expanded={menuOpen}
@@ -70,7 +94,7 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
         </button>
         {menuOpen && (
           <>
-            <div aria-hidden className="fixed inset-0" onClick={() => setMenuOpen(false)} />
+            <div aria-hidden className="fixed inset-0" onClick={collapse} />
             <div className="absolute top-8 right-0 z-30 w-40 rounded-lg border border-border-strong bg-surface-raised py-1 text-sm shadow-lg">
               <button
                 type="button"
@@ -166,7 +190,9 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
                       close();
                       push({
                         kind: "success",
-                        text: `Tombstoned tome '${result.tome}' — ${result.forgotten} records hidden from recall until GC.`,
+                        text: `Tombstoned tome '${result.tome}' — ${result.forgotten} records hidden from recall until GC${
+                          result.skipped > 0 ? `, ${result.skipped} already tombstoned` : ""
+                        }.`,
                       });
                       onGone();
                     },
