@@ -47,22 +47,22 @@ public sealed class MatchedTermsLatencyTests(ITestOutputHelper output)
 
             hits.Count.ShouldBe(RecallLimit);
 
-            var terms = LexicalMatcher.Tokenize(query);
+            var terms = LexicalTermMatcher.Tokenize(query);
             terms.Count.ShouldBe(3);
 
             var matcher = Probe.Measure(MatcherWarmup, MatcherRepetitions, () =>
             {
-                var tokens = LexicalMatcher.Tokenize(query);
+                var tokens = LexicalTermMatcher.Tokenize(query);
                 foreach (var hit in hits)
                 {
-                    LexicalMatcher.Match(tokens, hit.Record);
+                    LexicalTermMatcher.Match(tokens, hit.Record);
                 }
             });
 
             var recall = await Probe.MeasureAsync(RecallWarmup, RecallRepetitions, () =>
                 service.RecallAsync(new RecallQuery { Text = query, Limit = RecallLimit }, CancellationToken.None));
 
-            var matchedTerms = hits.Sum(hit => LexicalMatcher.Match(terms, hit.Record).Count);
+            var matchedTerms = hits.Sum(hit => LexicalTermMatcher.Match(terms, hit.Record).Count);
 
             matchedTerms.ShouldBeGreaterThan(0);
 

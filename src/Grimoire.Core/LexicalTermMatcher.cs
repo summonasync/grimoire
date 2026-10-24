@@ -1,6 +1,6 @@
-namespace Grimoire.Core.Tests.Measurement;
+namespace Grimoire.Core;
 
-public static class LexicalMatcher
+public static class LexicalTermMatcher
 {
     public static IReadOnlyList<string> Tokenize(string query)
     {
@@ -58,6 +58,4 @@ public static class LexicalMatcher
 
         return spans;
     }
-
-    public sealed record TermSpan(string Term, string Field, int Start);
 }

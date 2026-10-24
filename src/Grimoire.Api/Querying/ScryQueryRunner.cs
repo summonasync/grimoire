@@ -26,11 +26,13 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
                 Limit = query.Limit,
             }, cancellationToken);
 
+        var terms = LexicalTermMatcher.Tokenize(query.Query);
+
         return new ScryResponse(
             targets,
             query.Attribution,
             matches.Count,
-            [.. matches.Select(match => ToItem(match, query.Attribution))],
+            [.. matches.Select(match => ToItem(match, query.Attribution, terms))],
             (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     }
 
@@ -40,7 +42,7 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
         return [.. records.Select(record => record.Tome).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)];
     }
 
-    private static ScryItem ToItem(RecallMatch match, ScryAttribution attribution) => new()
+    private static ScryItem ToItem(RecallMatch match, ScryAttribution attribution, IReadOnlyList<string> terms) => new()
     {
         MemoryId = match.Record.Id,
         Content = match.Record.Content,
@@ -54,6 +56,7 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
             _ => null,
         },
         Tags = match.Record.Tags,
+        MatchedTerms = LexicalTermMatcher.Match(terms, match.Record),
         ProjectId = match.Record.ProjectId,
         Similarity = match.Similarity,
         Score = match.Score,
