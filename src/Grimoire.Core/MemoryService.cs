@@ -179,6 +179,7 @@ public sealed class MemoryService(
         {
             Tome = ResolveTome(filter.Tome),
             Status = MemoryStatus.Active,
+            Limit = null,
         }, cancellationToken);
 
         return await RewriteTomeAsync(records, target, actor, cancellationToken);

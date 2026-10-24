@@ -41,6 +41,23 @@ public sealed class MemoryServiceRetomeTests
     }
 
     [Fact]
+    public async Task Retome_ByFilter_IgnoresCallerSuppliedLimit()
+    {
+        var first = Seed(tome: "alpha");
+        var second = Seed(tome: "alpha");
+
+        var result = await _service.RetomeAsync(
+            new MemoryFilter { Tome = "alpha", Limit = 1 },
+            "gamma",
+            CancellationToken.None,
+            TestMemories.Agent);
+
+        result.Retomed.ShouldBe(2);
+        _store.Records.Single(record => record.Id == first.Id).Tome.ShouldBe("gamma");
+        _store.Records.Single(record => record.Id == second.Id).Tome.ShouldBe("gamma");
+    }
+
+    [Fact]
     public async Task Retome_ByIdList_MovesOnlyListedRecords()
     {
         var moved = Seed(tome: "alpha");
