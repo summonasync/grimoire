@@ -168,6 +168,42 @@ public sealed class MemoryService(
         return store.ListAsync(filter with { Tome = ResolveTome(filter.Tome) }, cancellationToken);
     }
 
+    public async Task<RetomeResult> RetomeAsync(
+        MemoryFilter filter,
+        string targetTome,
+        CancellationToken cancellationToken,
+        MemoryActor? actor = null)
+    {
+        var target = TomeKey.Normalize(targetTome);
+        var records = await store.ListAsync(filter with
+        {
+            Tome = ResolveTome(filter.Tome),
+            Status = MemoryStatus.Active,
+        }, cancellationToken);
+
+        return await RewriteTomeAsync(records, target, actor, cancellationToken);
+    }
+
+    public async Task<RetomeResult> RetomeAsync(
+        IReadOnlyList<Guid> ids,
+        string targetTome,
+        CancellationToken cancellationToken,
+        MemoryActor? actor = null)
+    {
+        var target = TomeKey.Normalize(targetTome);
+        var records = new List<MemoryRecord>(ids.Count);
+        foreach (var id in ids.Distinct())
+        {
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is not null)
+            {
+                records.Add(record);
+            }
+        }
+
+        return await RewriteTomeAsync(records, target, actor, cancellationToken);
+    }
+
     public async Task<GcResult> GcAsync(CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
@@ -251,6 +287,31 @@ public sealed class MemoryService(
     }
 
     private string ResolveTome(string? tome) => TomeKey.Normalize(tome ?? _options.DefaultTome);
+
+    private async Task<RetomeResult> RewriteTomeAsync(
+        IReadOnlyList<MemoryRecord> records,
+        string target,
+        MemoryActor? actor,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
+        var resolvedActor = actor ?? MemoryActor.Human;
+        var retomed = 0;
+
+        foreach (var record in records)
+        {
+            if (record.Status != MemoryStatus.Active || record.Tome == target)
+            {
+                continue;
+            }
+
+            await store.UpdateAsync(CorrectionTrail.Append(record with { Tome = target },
+                now, resolvedActor, CorrectionAction.Retome, $"tome: {record.Tome} → {target}"), cancellationToken);
+            retomed++;
+        }
+
+        return new RetomeResult { Retomed = retomed };
+    }
 
     private static IReadOnlyList<string> NormalizeTomes(IReadOnlyList<string> tomes) => tomes.Count == 0
         ? []

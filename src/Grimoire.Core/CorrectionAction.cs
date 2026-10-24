@@ -6,4 +6,5 @@ public enum CorrectionAction
     Patch,
     Supersede,
     Forget,
+    Retome,
 }
