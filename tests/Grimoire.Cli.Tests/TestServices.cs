@@ -70,6 +70,7 @@ internal static class TestServices
             sp.GetRequiredService<PersonaService>(),
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>()));
+        services.AddSingleton<AutoMemoryImporter>();
         return services.BuildServiceProvider();
     }
 

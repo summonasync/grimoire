@@ -112,6 +112,7 @@ internal static class CliApplication
             "drop-collection" => new Commands.DropCollectionCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "export" => new Commands.ExportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "import" => new Commands.ImportCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "auto-memory" => new Commands.AutoMemoryImportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "persona" => new Commands.PersonaCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "stats" => new Commands.StatsCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "config" => new Commands.ConfigCommand(env).RunAsync(invocation, config, services, cancellationToken),
