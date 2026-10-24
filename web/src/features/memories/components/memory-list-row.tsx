@@ -12,9 +12,11 @@ interface MemoryListRowProps {
   record: MemoryRecord;
   selected: boolean;
   onOpen: (id: string) => void;
+  checked?: boolean;
+  onToggle?: (id: string) => void;
 }
 
-export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) {
+export function MemoryListRow({ record, selected, onOpen, checked, onToggle }: MemoryListRowProps) {
   return (
     <tr
       onClick={() => onOpen(record.id)}
@@ -24,6 +26,18 @@ export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) 
         selected ? "bg-accent-soft" : "hover:bg-foreground/[0.03]",
       )}
     >
+      {onToggle && (
+        <td className="px-3 py-2.5 align-top">
+          <input
+            type="checkbox"
+            checked={checked ?? false}
+            onChange={() => onToggle(record.id)}
+            onClick={(event) => event.stopPropagation()}
+            aria-label={`Select record ${record.id}`}
+            className="mt-0.5 size-3.5 cursor-pointer accent-accent"
+          />
+        </td>
+      )}
       <td className="max-w-md px-3 py-2.5 align-top">
         <p className="line-clamp-2 text-sm leading-snug">{record.content}</p>
         {(record.tags.length > 0 || record.projectId) && (

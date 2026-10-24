@@ -47,8 +47,10 @@ export function ShelfPage() {
             <TomeCard
               key={summary.key}
               summary={summary}
+              tomes={shelf.data.tomes}
               picked={summary.key === picked}
               onPick={setTome}
+              onGone={() => setTome(summary.key === picked ? null : picked)}
             />
           ))}
         </div>

@@ -188,6 +188,13 @@ public sealed class MemoryPayloadMapperTests
                     Action = CorrectionAction.Supersede,
                     Reason = "restored predecessor",
                 },
+                new CorrectionEntry
+                {
+                    At = TestMemories.Moment.AddMinutes(2),
+                    Actor = MemoryActor.Human,
+                    Action = CorrectionAction.Retome,
+                    Reason = "tome: alpha → beta",
+                },
             ],
         };
 
