@@ -26,8 +26,9 @@ export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) 
     >
       <td className="max-w-md px-3 py-2.5 align-top">
         <p className="line-clamp-2 text-sm leading-snug">{record.content}</p>
-        {record.tags.length > 0 && (
-          <p className="mt-1 flex flex-wrap gap-1">
+        {(record.tags.length > 0 || record.projectId) && (
+          <p className="mt-1 flex flex-wrap items-center gap-1">
+            <ProjectBadge projectId={record.projectId} />
             {record.tags.slice(0, 4).map((tag) => (
               <span
                 key={tag}
@@ -47,9 +48,6 @@ export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) 
       </td>
       <td className="px-3 py-2.5 align-top whitespace-nowrap">
         <StatusBadge status={record.status} />
-      </td>
-      <td className="px-3 py-2.5 align-top whitespace-nowrap">
-        <ProjectBadge projectId={record.projectId} />
       </td>
       <td className="px-3 py-2.5 align-top">
         <span className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted">

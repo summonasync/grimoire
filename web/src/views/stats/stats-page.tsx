@@ -11,10 +11,7 @@ import { StatTile } from "@/shared/ui/stat-tile";
 import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { absoluteTime, compactNumber, relativeTime } from "@/shared/ui/format";
 import { Icon } from "@/shared/ui/icons";
-import { ProjectBadge } from "@/shared/ui/project-badge";
 import { Sigil } from "@/shared/ui/sigil";
-
-const CROSS_PROJECT_KEY = "cross-project";
 
 const tomeSourceLabels: Record<string, string> = {
   explicitParam: "explicit parameter",
@@ -58,12 +55,14 @@ export function StatsPage() {
     color: resolveSliceColor(index),
   }));
   const totalActive = tomeRows.reduce((sum, [, counts]) => sum + counts.active, 0);
-  const projectRows = Object.entries(data.byProject).sort(([keyA, countA], [keyB, countB]) => {
-    if (keyA === CROSS_PROJECT_KEY) return 1;
-    if (keyB === CROSS_PROJECT_KEY) return -1;
-    return countB - countA;
-  });
-  const totalByProject = projectRows.reduce((sum, [, count]) => sum + count, 0);
+  const totalByProject = Object.values(data.byProject).reduce((sum, count) => sum + count, 0);
+  const projectSlices = Object.entries(data.byProject)
+    .map(([project, count], index) => ({
+      label: project,
+      value: count,
+      color: resolveSliceColor(index),
+    }))
+    .filter((slice) => slice.value > 0);
   const compactionRows = tomeRows
     .map(([tome, counts]) => ({ tome, pending: counts.pendingCompaction }))
     .filter((row): row is { tome: string; pending: number } => typeof row.pending === "number");
@@ -154,7 +153,6 @@ export function StatsPage() {
           title="Entries by tome"
           description="Distribution of active memory entries."
           icon="stats"
-          className="xl:col-span-2"
         >
           {tomeSlices.length === 0 ? (
             <EmptyState
@@ -166,6 +164,26 @@ export function StatsPage() {
             <Donut
               slices={tomeSlices}
               centerValue={compactNumber(totalActive)}
+              centerLabel="active"
+            />
+          )}
+        </Panel>
+
+        <Panel
+          title="Entries by project"
+          description={`Active entries in the resolved tome (${data.tome}).`}
+          icon="stats"
+        >
+          {projectSlices.length === 0 ? (
+            <EmptyState
+              icon="book"
+              title="No project breakdown yet"
+              reason="Active entries appear here once the resolved tome holds records with project ids."
+            />
+          ) : (
+            <Donut
+              slices={projectSlices}
+              centerValue={compactNumber(totalByProject)}
               centerLabel="active"
             />
           )}
@@ -230,50 +248,6 @@ export function StatsPage() {
                       title={absoluteTime(counts.lastWriteAt)}
                     >
                       {relativeTime(counts.lastWriteAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-
-      <Panel
-        title="Entries by project"
-        description={`Active entries in the resolved tome (${data.tome}).`}
-        icon="stats"
-        bodyClassName="p-0"
-      >
-        {projectRows.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              icon="book"
-              title="No project breakdown yet"
-              reason="Active entries appear here once the resolved tome holds records with project ids."
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border-strong/70">
-                  <th className="label px-4 py-2">Project</th>
-                  <th className="label px-4 py-2 text-right">Entries</th>
-                  <th className="label px-4 py-2 text-right">Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projectRows.map(([project, count]) => (
-                  <tr key={project} className="border-b border-border/60 last:border-0">
-                    <td className="px-4 py-2">
-                      <ProjectBadge projectId={project === CROSS_PROJECT_KEY ? null : project} />
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums">
-                      {count.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-muted">
-                      {totalByProject > 0 ? `${Math.round((count / totalByProject) * 100)}%` : "—"}
                     </td>
                   </tr>
                 ))}
