@@ -148,7 +148,7 @@ internal static class TomeEndpoints
             }
 
             var result = await memories.ForgetTomeAsync(source, request.Reason, cancellationToken, MemoryActor.Human);
-            return Results.Ok(new TomeForgetResponse(source, result.Forgotten));
+            return Results.Ok(new TomeForgetResponse(source, result.Forgotten, result.Skipped));
         });
     }
 }

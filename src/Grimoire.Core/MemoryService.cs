@@ -175,12 +175,14 @@ public sealed class MemoryService(
         }
 
         var resolved = TomeKey.Normalize(tome);
-        var records = await store.ListAsync(new MemoryFilter
+        var filter = new MemoryFilter
         {
             Tome = resolved,
             Status = MemoryStatus.Active,
             Limit = null,
-        }, cancellationToken);
+        };
+        var total = await store.CountAsync(filter with { Status = null }, cancellationToken);
+        var records = await store.ListAsync(filter, cancellationToken);
 
         var now = clock.UtcNow;
         var by = actor ?? MemoryActor.Human;
@@ -194,7 +196,7 @@ public sealed class MemoryService(
             }, now, by, CorrectionAction.Forget, reason), cancellationToken);
         }
 
-        return new ForgetTomeResult { Forgotten = records.Count };
+        return new ForgetTomeResult { Forgotten = records.Count, Skipped = (int)(total - records.Count) };
     }
 
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)

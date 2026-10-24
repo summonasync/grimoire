@@ -170,6 +170,18 @@ public sealed class MemoryServiceForgetTomeTests
         stats.ByTome.ShouldNotContainKey("alpha");
     }
 
+    [Fact]
+    public async Task ForgetTome_ReportsAlreadyTombstonedTailAsSkipped()
+    {
+        Seed(tome: "alpha");
+        Seed(tome: "alpha", status: MemoryStatus.Tombstoned, tombstoneReason: "stale", tombstonedAt: _clock.UtcNow);
+
+        var result = await _service.ForgetTomeAsync("alpha", "tome retired", CancellationToken.None, TestMemories.Agent);
+
+        result.Forgotten.ShouldBe(1);
+        result.Skipped.ShouldBe(1);
+    }
+
     private MemoryRecord Seed(
         string? tome = null,
         MemoryStatus status = MemoryStatus.Active,
