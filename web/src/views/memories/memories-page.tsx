@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useState } from "react";
+import { useEffect, useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Button } from "@/shared/ui/button";
@@ -8,6 +8,7 @@ import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { Icon } from "@/shared/ui/icons";
 import { Panel } from "@/shared/ui/panel";
 import { useTomeFilter } from "@/widgets/app-shell/tome-context";
+import { clearHandedOffRecord, readHandedOffRecord } from "@/widgets/app-shell/record-handoff";
 import { RecordMoveBar } from "@/features/shelf";
 import { MemoryCreateForm } from "@/features/memories/components/memory-create-form";
 import { MemoryDetailPanel } from "@/features/memories/components/memory-detail-panel";
@@ -22,7 +23,11 @@ import { memoriesQueryOptions, memoryQueryOptions } from "@/features/memories/qu
 
 export function MemoriesPage() {
   const [filters, setFilters] = useState<MemoryFilters>(defaultMemoryFilters);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(readHandedOffRecord);
+
+  useEffect(() => {
+    clearHandedOffRecord();
+  }, []);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const { tome: railTome } = useTomeFilter();

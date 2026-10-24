@@ -84,6 +84,15 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               Stats
               <Icon name="arrowRight" className="size-3.5" />
             </a>
+            <a
+              href="#graph"
+              onClick={() => onPick(summary.key)}
+              aria-label={`Open graph of ${summary.key}`}
+              className="flex shrink-0 items-center gap-1 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              Graph
+              <Icon name="arrowRight" className="size-3.5" />
+            </a>
           </span>
         </div>
       </div>
