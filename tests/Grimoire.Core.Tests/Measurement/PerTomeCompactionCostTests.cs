@@ -7,6 +7,7 @@ namespace Grimoire.Core.Tests.Measurement;
 [CollectionDefinition("Measurement", DisableParallelization = true)]
 public sealed class MeasurementCollection;
 
+[Collection("Measurement")]
 public sealed class PerTomeCompactionCostTests(ITestOutputHelper output)
 {
     private const int Warmup = 3;
