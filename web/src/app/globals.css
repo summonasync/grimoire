@@ -17,6 +17,10 @@
   --gilt: #8a6a17;
   --jade: #1c7a51;
   --ember: #a8560d;
+  --arcane: #6b4d9e;
+  --tide: #1f6f8b;
+  --rose: #a63d5e;
+  --moss: #5f7a1f;
   --veil: rgba(34, 28, 23, 0.55);
   /* Backdrop art: a full-bleed picture that must stay recognizable. The blur is a
      hairline seam softener, not a bokeh wash — dimming is the scrim's job, not this one's. */
@@ -46,6 +50,10 @@
   --gilt: #c9a227;
   --jade: #2f9e6b;
   --ember: #d98032;
+  --arcane: #a98fd6;
+  --tide: #4fa8c9;
+  --rose: #d97996;
+  --moss: #9db84d;
   --veil: rgba(6, 5, 4, 0.72);
   --art-opacity: 0.5;
   --art-blur: 2px;
@@ -69,6 +77,10 @@
   --color-gilt: var(--gilt);
   --color-jade: var(--jade);
   --color-ember: var(--ember);
+  --color-arcane: var(--arcane);
+  --color-tide: var(--tide);
+  --color-rose: var(--rose);
+  --color-moss: var(--moss);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,

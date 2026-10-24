@@ -5,6 +5,7 @@ import type { MemoryRecord } from "@/shared/api/types";
 import { Icon, type IconName } from "@/shared/ui/icons";
 import { IconButton } from "@/shared/ui/button";
 import { KindBadge, ScopeBadge, StatusBadge } from "@/shared/ui/badge";
+import { ProjectBadge } from "@/shared/ui/project-badge";
 import { absoluteTime, actorLabel, importanceScore, relativeTime, shortId } from "@/shared/ui/format";
 import { MemoryEditForm } from "./memory-edit-form";
 import { MemoryRestoreControl } from "./memory-restore-control";
@@ -48,6 +49,7 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
     >
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <KindBadge kind={record.kind} />
+        <ProjectBadge projectId={record.projectId} />
         <span className="font-mono text-[0.7rem] text-muted" title={record.id}>
           {shortId(record.id)}
         </span>
@@ -106,9 +108,6 @@ export function MemoryDetailPanel({ record, onClose }: MemoryDetailPanelProps) {
             ) : (
               dash
             )}
-          </MetaItem>
-          <MetaItem icon="console" label="Project">
-            {record.projectId ?? dash}
           </MetaItem>
           <MetaItem icon="console" label="Session">
             {record.sessionId ?? dash}

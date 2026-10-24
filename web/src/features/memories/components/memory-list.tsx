@@ -9,7 +9,7 @@ interface MemoryListProps {
   onOpen: (id: string) => void;
 }
 
-const columns = ["Content", "Kind", "Scope", "Status", "Actor", "Created", "Imp."] as const;
+const columns = ["Content", "Kind", "Scope", "Status", "Project", "Actor", "Created", "Imp."] as const;
 
 export function MemoryList({ records, selectedId, onOpen }: MemoryListProps) {
   return (

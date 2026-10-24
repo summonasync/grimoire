@@ -4,6 +4,7 @@ import type { MemoryRecord } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { KindBadge, ScopeBadge, StatusBadge } from "@/shared/ui/badge";
 import { Icon } from "@/shared/ui/icons";
+import { ProjectBadge } from "@/shared/ui/project-badge";
 import { Sigil } from "@/shared/ui/sigil";
 import { importanceScore, relativeTime } from "@/shared/ui/format";
 
@@ -46,6 +47,9 @@ export function MemoryListRow({ record, selected, onOpen }: MemoryListRowProps) 
       </td>
       <td className="px-3 py-2.5 align-top whitespace-nowrap">
         <StatusBadge status={record.status} />
+      </td>
+      <td className="px-3 py-2.5 align-top whitespace-nowrap">
+        <ProjectBadge projectId={record.projectId} />
       </td>
       <td className="px-3 py-2.5 align-top">
         <span className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted">
