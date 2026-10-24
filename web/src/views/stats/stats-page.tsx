@@ -11,6 +11,7 @@ import { StatTile } from "@/shared/ui/stat-tile";
 import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { absoluteTime, compactNumber, relativeTime } from "@/shared/ui/format";
 import { Icon } from "@/shared/ui/icons";
+import { ProjectBadge } from "@/shared/ui/project-badge";
 import { Sigil } from "@/shared/ui/sigil";
 
 export function StatsPage() {
@@ -42,6 +43,12 @@ export function StatsPage() {
     color: resolveSliceColor(index),
   }));
   const totalActive = tomeRows.reduce((sum, [, counts]) => sum + counts.active, 0);
+  const projectRows = Object.entries(data.byProject).sort(([keyA, countA], [keyB, countB]) => {
+    if (keyA === "cross-project") return 1;
+    if (keyB === "cross-project") return -1;
+    return countB - countA;
+  });
+  const totalByProject = projectRows.reduce((sum, [, count]) => sum + count, 0);
   const gc = data.gc;
 
   return (
@@ -193,6 +200,50 @@ export function StatsPage() {
                       title={absoluteTime(counts.lastWriteAt)}
                     >
                       {relativeTime(counts.lastWriteAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Entries by project"
+        description={`Active entries in the resolved tome (${data.tome}).`}
+        icon="stats"
+        bodyClassName="p-0"
+      >
+        {projectRows.length === 0 ? (
+          <div className="p-4">
+            <EmptyState
+              icon="book"
+              title="No project breakdown yet"
+              reason="Active entries appear here once the resolved tome holds records with project ids."
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border-strong/70">
+                  <th className="label px-4 py-2">Project</th>
+                  <th className="label px-4 py-2 text-right">Entries</th>
+                  <th className="label px-4 py-2 text-right">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projectRows.map(([project, count]) => (
+                  <tr key={project} className="border-b border-border/60 last:border-0">
+                    <td className="px-4 py-2">
+                      <ProjectBadge projectId={project === "cross-project" ? null : project} />
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {count.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-muted">
+                      {totalByProject > 0 ? `${Math.round((count / totalByProject) * 100)}%` : "—"}
                     </td>
                   </tr>
                 ))}

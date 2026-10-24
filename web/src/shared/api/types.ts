@@ -123,5 +123,6 @@ export interface MemoryStats {
   pendingCompaction: number;
   idempotencyConflicts: number;
   byTome: Record<string, TomeStats>;
+  byProject: Record<string, number>;
   gc: GcState;
 }
