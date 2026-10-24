@@ -13,6 +13,7 @@ import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/hone
 import { KindBadge, ScopeBadge, StatusBadge } from "@/shared/ui/badge";
 import { Icon } from "@/shared/ui/icons";
 import { Sigil } from "@/shared/ui/sigil";
+import { RecentAgentsPanel } from "@/views/console/recent-agents-panel";
 
 const scopeOrder = ["session", "project", "global", "personal"] as const;
 
@@ -315,6 +316,10 @@ export function ConsoleScreen() {
             </ul>
           )}
         </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <RecentAgentsPanel />
       </div>
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[0.7rem] text-muted">
