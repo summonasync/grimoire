@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Grimoire.Api.Agents;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Endpoints;
 using Grimoire.Api.Querying;
@@ -73,6 +74,7 @@ public static class ApiHostBuilder
         app.MapTomesEndpoints(memories, tomeResolver);
         app.MapHealthEndpoints(store, embeddings, clock);
         app.MapVersionEndpoints();
+        app.MapAgentEndpoints(new AgentActivityProjection(memories, clock));
         app.UseSpaFrontend(options);
 
         return app;
