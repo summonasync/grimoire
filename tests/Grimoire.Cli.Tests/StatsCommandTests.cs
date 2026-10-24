@@ -109,7 +109,36 @@ public sealed class StatsCommandTests : IDisposable
         var code = await _host.RunAsync("stats");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
-        _host.Output.ToString().ShouldContain("Per tome: alpha (2 active, 0 tombstoned), beta (1 active, 1 tombstoned)");
+        _host.Output.ToString().ShouldContain(
+            "Per tome: alpha (2 active, 0 tombstoned, lastWrite " +
+            $"{FormatMoment(_host.Clock.UtcNow)}), beta (1 active, 1 tombstoned, lastWrite {FormatMoment(_host.Clock.UtcNow)})");
+    }
+
+    [Fact]
+    public async Task Stats_RendersPerTomeLastWriteFromTheNewestRecord()
+    {
+        var older = _host.Clock.UtcNow.AddDays(-9);
+        _host.Store.Seed(
+            new MemoryRecord
+            {
+                Id = Guid.NewGuid(),
+                Content = "old alpha note",
+                Scope = MemoryScope.Project,
+                Kind = MemoryKind.Journal,
+                Actor = MemoryActor.Human,
+                Tome = "alpha",
+                CreatedAt = older,
+                LastAccessedAt = older,
+            },
+            [1f, 0f]);
+        Seed("fresh beta note", "beta");
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain($"alpha (1 active, 0 tombstoned, lastWrite {FormatMoment(older)})");
+        output.ShouldContain($"beta (1 active, 0 tombstoned, lastWrite {FormatMoment(_host.Clock.UtcNow)})");
     }
 
     [Fact]

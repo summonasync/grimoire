@@ -35,8 +35,11 @@ internal static class StatsEndpoints
                 byTome[entry.Key] = new TomeStatsResponse(entry.Value.Active, entry.Value.Tombstoned, lastWrite);
             }
 
+            var identity = await tomes.ResolveIdentityAsync(tome, cancellationToken);
+
             return Results.Ok(new StatsResponse(
-                await tomes.ResolveAsync(tome, cancellationToken),
+                identity.ResolvedTome,
+                identity.Source,
                 stats.Active,
                 stats.Superseded,
                 stats.Tombstoned,

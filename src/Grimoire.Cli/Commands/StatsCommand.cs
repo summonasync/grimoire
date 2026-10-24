@@ -50,7 +50,11 @@ internal sealed class StatsCommand(CliEnvironment environment)
             ", ",
             stats.ByTome
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => $"{pair.Key} ({pair.Value.Active} active, {pair.Value.Tombstoned} tombstoned)"));
+                .Select(pair => $"{pair.Key} ({pair.Value.Active} active, {pair.Value.Tombstoned} tombstoned, lastWrite {LastWrite(stats, pair.Key)})"));
+
+    private static string LastWrite(MemoryStats stats, string tome) => stats.LastWriteByTome.TryGetValue(tome, out var moment)
+        ? Timestamp(moment)
+        : "unknown";
 
     private static string SourceText(TomeSource source) => source switch
     {
