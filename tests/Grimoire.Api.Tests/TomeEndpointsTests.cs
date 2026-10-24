@@ -121,4 +121,221 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         beta.GetProperty("active").GetInt64().ShouldBe(0);
         beta.GetProperty("tombstoned").GetInt64().ShouldBe(1);
     }
+
+    [Fact]
+    public async Task Post_Rename_MovesActiveRecordsWithCountsAndHumanActor()
+    {
+        factory.Reset();
+        var first = factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        var second = factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha", createdAt: FakeClock.DefaultStart.AddHours(1));
+        factory.Store.Seed(
+            "alpha buried",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("from").GetString().ShouldBe("alpha");
+        body.GetProperty("to").GetString().ShouldBe("gamma");
+        body.GetProperty("retomed").GetInt32().ShouldBe(2);
+
+        var moved = factory.Store.Records.Single(record => record.Id == first.Id);
+        factory.Store.Records.Single(record => record.Id == second.Id).Tome.ShouldBe("gamma");
+        moved.Tome.ShouldBe("gamma");
+        moved.Corrections.Single().Action.ShouldBe(CorrectionAction.Retome);
+        moved.Corrections.Single().Actor.ShouldBe(MemoryActor.Human);
+        factory.Store.Records.Single(record => record.Content == "alpha buried").Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Post_Rename_OntoAnOccupiedTome_Returns409TomeExists()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("beta note", [1f, 0f], tome: "beta");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await ReadError(response)).code.ShouldBe("tome_exists");
+        factory.Store.Records.Single(record => record.Content == "alpha note").Tome.ShouldBe("alpha");
+        factory.Store.Records.Single(record => record.Content == "beta note").Tome.ShouldBe("beta");
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not Valid!!")]
+    public async Task Post_Rename_WithAnInvalidTarget_Returns400InvalidTome(string to)
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Post_Rename_WithAMissingTarget_Returns400InvalidRequest()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_request");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Post_Rename_WithAnInvalidSourceKey_Returns400InvalidTome()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync($"/api/tomes/{Uri.EscapeDataString("Not Valid!!")}/rename", new { to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
+    [Fact]
+    public async Task Post_Merge_MovesActiveRecordsIntoTheTargetTome()
+    {
+        factory.Reset();
+        var first = factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha", createdAt: FakeClock.DefaultStart.AddHours(1));
+        factory.Store.Seed("beta note", [1f, 0f], tome: "beta");
+        factory.Store.Seed(
+            "beta buried",
+            [1f, 0f],
+            tome: "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into = "Beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("from").GetString().ShouldBe("alpha");
+        body.GetProperty("to").GetString().ShouldBe("beta");
+        body.GetProperty("retomed").GetInt32().ShouldBe(2);
+
+        factory.Store.Records.Single(record => record.Id == first.Id).Tome.ShouldBe("beta");
+        factory.Store.Records.Count(record => record.Tome == "beta" && record.Status == MemoryStatus.Active).ShouldBe(3);
+        factory.Store.Records.ShouldNotContain(record => record.Tome == "alpha" && record.Status == MemoryStatus.Active);
+        factory.Store.Records.Single(record => record.Content == "beta buried").Tome.ShouldBe("beta");
+    }
+
+    [Fact]
+    public async Task Post_Merge_IntoAMissingTome_Returns404WithoutMoving()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha");
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not Valid!!")]
+    public async Task Post_Merge_WithAnInvalidTarget_Returns400InvalidTome(string into)
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Post_Retome_MovesListedRecordsAndReturnsCounts()
+    {
+        factory.Reset();
+        var first = factory.Store.Seed("one", [1f, 0f]);
+        factory.Store.Seed("two", [1f, 0f], createdAt: FakeClock.DefaultStart.AddHours(1));
+        var third = factory.Store.Seed("three", [1f, 0f], createdAt: FakeClock.DefaultStart.AddHours(2));
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes/records/retome", new { ids = new[] { first.Id, third.Id }, to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("retomed").GetInt32().ShouldBe(2);
+        body.GetProperty("to").GetString().ShouldBe("gamma");
+
+        factory.Store.Records.Single(record => record.Id == first.Id).Tome.ShouldBe("gamma");
+        factory.Store.Records.Single(record => record.Id == third.Id).Tome.ShouldBe("gamma");
+        factory.Store.Records.Single(record => record.Content == "two").Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public async Task Post_Retome_WithAnUnknownId_Returns404WithoutMovingAnything()
+    {
+        factory.Reset();
+        var known = factory.Store.Seed("one", [1f, 0f]);
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes/records/retome", new { ids = new[] { known.Id, Guid.NewGuid() }, to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+        factory.Store.Records.Single().Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public async Task Post_Retome_WithNoIds_Returns400()
+    {
+        factory.Reset();
+
+        var empty = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes/records/retome", new { ids = Array.Empty<Guid>(), to = "gamma" });
+        var missing = await factory.NewClient().PostAsJsonAsync("/api/tomes/records/retome", new { to = "gamma" });
+
+        empty.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(empty)).code.ShouldBe("invalid_retome");
+        missing.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(missing)).code.ShouldBe("invalid_request");
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not Valid!!")]
+    public async Task Post_Retome_WithAnInvalidTarget_Returns400InvalidTome(string to)
+    {
+        factory.Reset();
+        var known = factory.Store.Seed("one", [1f, 0f]);
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes/records/retome", new { ids = new[] { known.Id }, to });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+        factory.Store.Records.Single().Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    private static async Task<(string code, string message)> ReadError(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var error = body.GetProperty("error");
+        return (error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
+    }
 }
