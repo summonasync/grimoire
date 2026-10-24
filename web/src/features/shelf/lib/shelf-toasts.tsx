@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -31,8 +32,19 @@ const maxVisible = 4;
 export function ShelfToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ShelfToast[]>([]);
   const nextId = useRef(1);
+  const timers = useRef(new Map<number, number>());
+
+  useEffect(
+    () => () => {
+      for (const timer of timers.current.values()) {
+        window.clearTimeout(timer);
+      }
+    },
+    [],
+  );
 
   const dismiss = useCallback((id: number) => {
+    timers.current.delete(id);
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
@@ -40,7 +52,7 @@ export function ShelfToastProvider({ children }: { children: ReactNode }) {
     (toast: Omit<ShelfToast, "id">) => {
       const id = nextId.current++;
       setToasts((current) => [...current.slice(-(maxVisible - 1)), { ...toast, id }]);
-      window.setTimeout(() => dismiss(id), dismissAfterMs);
+      timers.current.set(id, window.setTimeout(() => dismiss(id), dismissAfterMs));
     },
     [dismiss],
   );
