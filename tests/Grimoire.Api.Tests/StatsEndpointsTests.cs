@@ -96,6 +96,41 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
     }
 
     [Fact]
+    public async Task Get_ReportsTheExplicitParamSourceWhenTheParamIsPresent()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/stats?tome=eng");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tome").GetString().ShouldBe("eng");
+        body.GetProperty("tomeSource").GetString().ShouldBe("explicitParam");
+    }
+
+    [Fact]
+    public async Task Get_ReportsTheEnvSourceWhenOnlyTheEnvironmentResolves()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+
+        var response = await tomeFactory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tomeSource").GetString().ShouldBe("envTome");
+    }
+
+    [Fact]
+    public async Task Get_ReportsTheDefaultSourceWhenNoHintIsPresent()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tomeSource").GetString().ShouldBe("default");
+    }
+
+    [Fact]
     public async Task Get_SplitsCountsByTome()
     {
         factory.Reset();
@@ -290,7 +325,7 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("pendingCompaction").GetInt64().ShouldBe(2);
         body.TryGetProperty("pendingCompactionByTome", out _).ShouldBeFalse();
         body.EnumerateObject().Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal)
-            .ShouldBe(["active", "activeByScope", "byProject", "byTome", "gc", "idempotencyConflicts", "pendingCompaction", "superseded", "tombstoned", "tome"]);
+            .ShouldBe(["active", "activeByScope", "byProject", "byTome", "gc", "idempotencyConflicts", "pendingCompaction", "superseded", "tombstoned", "tome", "tomeSource"]);
     }
 
     [Fact]

@@ -5,6 +5,7 @@ namespace Grimoire.Api.Contracts;
 
 public sealed record StatsResponse(
     string Tome,
+    TomeSource TomeSource,
     long Active,
     long Superseded,
     long Tombstoned,

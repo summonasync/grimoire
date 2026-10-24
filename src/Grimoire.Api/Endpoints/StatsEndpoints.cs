@@ -37,10 +37,11 @@ internal static class StatsEndpoints
                 byTome[entry.Key] = new TomeStatsResponse(entry.Value.Active, entry.Value.Tombstoned, lastWrite);
             }
 
-            var resolvedTome = await tomes.ResolveAsync(tome, cancellationToken);
+            var identity = await tomes.ResolveIdentityAsync(tome, cancellationToken);
 
             return Results.Ok(new StatsResponse(
-                resolvedTome,
+                identity.ResolvedTome,
+                identity.Source,
                 stats.Active,
                 stats.Superseded,
                 stats.Tombstoned,
@@ -48,7 +49,7 @@ internal static class StatsEndpoints
                 stats.PendingCompaction,
                 stats.IdempotencyConflicts,
                 byTome,
-                await ProjectCountsAsync(memories, resolvedTome, cancellationToken),
+                await ProjectCountsAsync(memories, identity.ResolvedTome, cancellationToken),
                 stats.Gc)
             {
                 PendingCompactionByTome = includeTomeCompaction
