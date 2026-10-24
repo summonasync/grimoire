@@ -8,6 +8,7 @@ import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { Icon } from "@/shared/ui/icons";
 import { Panel } from "@/shared/ui/panel";
 import { useTomeFilter } from "@/widgets/app-shell/tome-context";
+import { RecordMoveBar } from "@/features/shelf";
 import { MemoryCreateForm } from "@/features/memories/components/memory-create-form";
 import { MemoryDetailPanel } from "@/features/memories/components/memory-detail-panel";
 import { MemoryFilterBar } from "@/features/memories/components/memory-filter-bar";
@@ -22,8 +23,21 @@ import { memoriesQueryOptions } from "@/features/memories/queries";
 export function MemoriesPage() {
   const [filters, setFilters] = useState<MemoryFilters>(defaultMemoryFilters);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const { tome: railTome } = useTomeFilter();
+
+  const toggleChecked = (id: string) => {
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const deferredQuery = useDeferredValue(filters.query);
   const effectiveFilters =
@@ -116,11 +130,17 @@ export function MemoriesPage() {
                   {list.data?.count === 1 ? "" : "s"} · tome {list.data?.tome}
                 </p>
               </div>
+              <RecordMoveBar
+                ids={[...checkedIds]}
+                sourceTome={effectiveTome}
+                onDone={() => setCheckedIds(new Set())}
+              />
               <div className="max-h-[calc(100dvh-19rem)] overflow-y-auto">
                 <MemoryList
                   records={records}
                   selectedId={selectedId}
                   onOpen={(id) => setSelectedId(id)}
+                  selection={{ ids: checkedIds, onToggle: toggleChecked }}
                 />
               </div>
             </>
