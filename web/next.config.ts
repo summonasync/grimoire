@@ -1,8 +1,22 @@
+import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+
+function webSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "dev";
+  }
+}
 
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
+  env: {
+    NEXT_PUBLIC_WEB_SHA: webSha(),
+  },
   async rewrites() {
     if (process.env.NODE_ENV !== "development") {
       return [];

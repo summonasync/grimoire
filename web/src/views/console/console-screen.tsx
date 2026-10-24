@@ -13,6 +13,7 @@ import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/hone
 import { KindBadge, ScopeBadge, StatusBadge } from "@/shared/ui/badge";
 import { Icon } from "@/shared/ui/icons";
 import { Sigil } from "@/shared/ui/sigil";
+import { webBuildSha } from "@/shared/lib/web-build";
 import { RecentAgentsPanel } from "@/views/console/recent-agents-panel";
 
 const scopeOrder = ["session", "project", "global", "personal"] as const;
@@ -324,10 +325,12 @@ export function ConsoleScreen() {
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[0.7rem] text-muted">
         <span>
-          Grimoire{" "}
+          api{" "}
           <span className="font-mono text-foreground/80">
             {version.isPending ? "probing…" : (version.data?.version ?? "not reported")}
           </span>
+          <span className="text-muted"> · </span>
+          web <span className="font-mono text-foreground/80">{webBuildSha}</span>
         </span>
         <span>
           {data.tome} · {compactNumber(total)} records
