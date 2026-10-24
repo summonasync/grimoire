@@ -31,12 +31,7 @@ export function ShelfPage() {
           icon="book"
           title="The shelf is bare"
           reason="No tome holds a single record yet — the census appears once the first memory is written to the store."
-          action={{
-            label: "Open memories",
-            onClick: () => {
-              window.location.hash = "memories";
-            },
-          }}
+          action={{ label: "Open memories", href: "#memories" }}
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

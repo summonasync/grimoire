@@ -26,13 +26,18 @@ export function NotTracked({ label, reason, className }: NotTrackedProps) {
   );
 }
 
+type EmptyStateAction = { label: string; href: string } | { label: string; onClick: () => void };
+
 interface EmptyStateProps {
   icon?: "search" | "book" | "memories" | "scry" | "filter" | "spark";
   title: string;
   reason: string;
-  action?: { label: string; onClick: () => void };
+  action?: EmptyStateAction;
   className?: string;
 }
+
+const emptyStateActionClasses =
+  "mt-4 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent";
 
 export function EmptyState({
   icon = "spark",
@@ -53,15 +58,16 @@ export function EmptyState({
       </span>
       <p className="font-display text-base font-semibold">{title}</p>
       <p className="mt-1 max-w-sm text-sm text-muted">{reason}</p>
-      {action && (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="mt-4 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          {action.label}
-        </button>
-      )}
+      {action &&
+        ("href" in action ? (
+          <a href={action.href} className={emptyStateActionClasses}>
+            {action.label}
+          </a>
+        ) : (
+          <button type="button" onClick={action.onClick} className={emptyStateActionClasses}>
+            {action.label}
+          </button>
+        ))}
     </div>
   );
 }
