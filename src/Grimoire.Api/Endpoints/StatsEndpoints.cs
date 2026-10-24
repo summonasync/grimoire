@@ -9,6 +9,8 @@ namespace Grimoire.Api.Endpoints;
 
 internal static class StatsEndpoints
 {
+    public const string CrossProjectKey = "cross-project";
+
     public static void MapStatsEndpoints(this WebApplication app, MemoryService memories, ApiTomeResolver tomes)
     {
         app.MapGet("/api/stats", async (string? tome, CancellationToken cancellationToken) =>
@@ -35,8 +37,10 @@ internal static class StatsEndpoints
                 byTome[entry.Key] = new TomeStatsResponse(entry.Value.Active, entry.Value.Tombstoned, lastWrite);
             }
 
+            var resolvedTome = await tomes.ResolveAsync(tome, cancellationToken);
+
             return Results.Ok(new StatsResponse(
-                await tomes.ResolveAsync(tome, cancellationToken),
+                resolvedTome,
                 stats.Active,
                 stats.Superseded,
                 stats.Tombstoned,
@@ -44,7 +48,27 @@ internal static class StatsEndpoints
                 stats.PendingCompaction,
                 stats.IdempotencyConflicts,
                 byTome,
+                await ProjectCountsAsync(memories, resolvedTome, cancellationToken),
                 stats.Gc));
         });
+    }
+
+    private static async Task<IReadOnlyDictionary<string, int>> ProjectCountsAsync(
+        MemoryService memories,
+        string resolvedTome,
+        CancellationToken cancellationToken)
+    {
+        var records = await memories.ListAsync(
+            new MemoryFilter { Tome = resolvedTome, Status = MemoryStatus.Active },
+            cancellationToken);
+        var counts = new Dictionary<string, int>();
+
+        foreach (var record in records)
+        {
+            var key = record.ProjectId ?? CrossProjectKey;
+            counts[key] = counts.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+
+        return counts;
     }
 }

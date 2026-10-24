@@ -220,6 +220,35 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("byTome").GetProperty("alpha").GetProperty("tombstoned").GetInt64().ShouldBe(1);
     }
 
+    [Fact]
+    public async Task Get_BreaksDownActiveEntriesByProject()
+    {
+        factory.Reset();
+        factory.Store.Seed(TestMemories.Create("overmind fact", tome: "alpha") with { ProjectId = "overmind" }, [1f, 0f]);
+        factory.Store.Seed(TestMemories.Create("squeezr fact", tome: "alpha") with { ProjectId = "squeezr" }, [1f, 0f]);
+        factory.Store.Seed(TestMemories.Create("second overmind fact", tome: "alpha") with { ProjectId = "overmind" }, [1f, 0f]);
+        factory.Store.Seed(TestMemories.Create("cross fact", tome: "alpha"), [1f, 0f]);
+        factory.Store.Seed(
+            TestMemories.Create(
+                "buried overmind fact",
+                tome: "alpha",
+                status: MemoryStatus.Tombstoned,
+                tombstoneReason: "gone",
+                tombstonedAt: FakeClock.DefaultStart) with { ProjectId = "overmind" },
+            [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/stats?tome=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var byProject = body.GetProperty("byProject");
+        byProject.GetProperty("overmind").GetInt32().ShouldBe(2);
+        byProject.GetProperty("squeezr").GetInt32().ShouldBe(1);
+        byProject.GetProperty("cross-project").GetInt32().ShouldBe(1);
+        byProject.EnumerateObject().Select(entry => entry.Value.GetInt32()).Sum().ShouldBe(4);
+        body.GetProperty("byTome").GetProperty("alpha").GetProperty("active").GetInt64().ShouldBe(4);
+    }
+
     private static CorrectionEntry Patch(DateTimeOffset at, string reason) => new()
     {
         At = at,

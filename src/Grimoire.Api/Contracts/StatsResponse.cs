@@ -11,4 +11,5 @@ public sealed record StatsResponse(
     long PendingCompaction,
     long IdempotencyConflicts,
     IReadOnlyDictionary<string, TomeStatsResponse> ByTome,
+    IReadOnlyDictionary<string, int> ByProject,
     GcState Gc);
