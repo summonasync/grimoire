@@ -64,6 +64,7 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.UpdateCount = 0;
         Store.GetCount = 0;
         Store.OnGetAsync = null;
+        Store.OnFetchAsync = null;
         Embeddings.Requests.Clear();
         Embeddings.Failure = null;
         GcState.Reset();

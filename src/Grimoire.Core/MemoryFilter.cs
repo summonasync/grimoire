@@ -8,6 +8,8 @@ public sealed record MemoryFilter
 
     public MemoryStatus? Status { get; init; }
 
+    public IReadOnlyList<MemoryStatus> Statuses { get; init; } = [];
+
     public IReadOnlyList<string> Tags { get; init; } = [];
 
     public IReadOnlyList<string> ExcludeTags { get; init; } = [];
@@ -34,6 +36,7 @@ public sealed record MemoryFilter
         Scopes.Count == 0 &&
         Kind is null &&
         Status is null &&
+        Statuses.Count == 0 &&
         Tags.Count == 0 &&
         ExcludeTags.Count == 0 &&
         Tome is null &&

@@ -17,6 +17,8 @@ public class FakeMemoryStore : IMemoryStore
 
     public Action? OnGetAsync { get; set; }
 
+    public Action<MemoryFilter>? OnFetchAsync { get; set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public IReadOnlyDictionary<Guid, float[]> Vectors =>
@@ -60,6 +62,7 @@ public class FakeMemoryStore : IMemoryStore
 
     public virtual Task<IReadOnlyList<MemoryPoint>> FetchAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        OnFetchAsync?.Invoke(filter);
         IReadOnlyList<MemoryPoint> points = Matching(filter)
             .Select(point => new MemoryPoint { Record = point.Record, Vector = point.Vector })
             .ToList();
@@ -131,7 +134,11 @@ public class FakeMemoryStore : IMemoryStore
             query = query.Where(point => point.Record.Kind == filter.Kind);
         }
 
-        if (filter.Status is not null)
+        if (filter.Statuses.Count > 0)
+        {
+            query = query.Where(point => filter.Statuses.Contains(point.Record.Status));
+        }
+        else if (filter.Status is not null)
         {
             query = query.Where(point => point.Record.Status == filter.Status);
         }

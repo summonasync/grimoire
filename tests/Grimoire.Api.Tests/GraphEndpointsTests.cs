@@ -279,6 +279,37 @@ public class GraphEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         graph.Edges.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Graph_Routes_FetchTomeWithExplicitAllStatuses()
+    {
+        factory.Reset();
+        var gone = factory.Store.Seed(
+            "gone note",
+            [0f, 1f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "cleaned");
+        var mourner = factory.Store.Seed($"mourner note [[{gone.Id}]]", [1f, 0f], tome: "alpha");
+        var filters = new List<MemoryFilter>();
+        factory.Store.OnFetchAsync = filters.Add;
+
+        var graph = await ReadGraph(await factory.NewClient().GetAsync("/api/tomes/alpha/graph"));
+        var related = await ReadRelated(await factory.NewClient().GetAsync($"/api/memories/{mourner.Id}/related"));
+
+        filters.Count.ShouldBe(2);
+        foreach (var filter in filters)
+        {
+            filter.Tome.ShouldBe("alpha");
+            filter.Statuses.ShouldBe(
+                [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+                ignoreOrder: true);
+        }
+
+        graph.Nodes.ShouldNotContain(node => node.Id == gone.Id);
+        graph.Edges.ShouldContain(edge => edge.From == mourner.Id && edge.To == gone.Id);
+        related.Edges.Single(edge => edge.Class == RecordEdgeClass.Link).Target.Id.ShouldBe(gone.Id);
+    }
+
     private static async Task<RelatedMemoryResponse> ReadRelated(HttpResponseMessage response)
     {
         await using var stream = await response.Content.ReadAsStreamAsync();

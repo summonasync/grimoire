@@ -11,6 +11,8 @@ namespace Grimoire.Api.Endpoints;
 
 internal static class GraphEndpoints
 {
+    private static readonly MemoryStatus[] AllStatuses = [.. Enum.GetValues<MemoryStatus>()];
+
     public static void MapGraphEndpoints(this WebApplication app, IMemoryStore store, MemoryEngineOptions engine)
     {
         app.MapGet("/api/memories/{id:guid}/related", async (Guid id, string? classes, CancellationToken cancellationToken) =>
@@ -31,7 +33,9 @@ internal static class GraphEndpoints
                 return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
             }
 
-            var points = await store.FetchAsync(new MemoryFilter { Tome = record.Tome }, cancellationToken);
+            var points = await store.FetchAsync(
+                new MemoryFilter { Tome = record.Tome, Statuses = AllStatuses },
+                cancellationToken);
             var graph = RecordGraphProjection.ProjectPoints(points, GraphOptions(requested, engine));
             var recordsById = points.ToDictionary(point => point.Record.Id, point => point.Record);
             var edges = graph.Edges
@@ -60,7 +64,9 @@ internal static class GraphEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_tome", TomeParam.InvalidMessage("tome", key));
             }
 
-            var points = await store.FetchAsync(new MemoryFilter { Tome = tome }, cancellationToken);
+            var points = await store.FetchAsync(
+                new MemoryFilter { Tome = tome, Statuses = AllStatuses },
+                cancellationToken);
             var graph = RecordGraphProjection.ProjectPoints(points, GraphOptions(requested, engine));
 
             var nodes = points

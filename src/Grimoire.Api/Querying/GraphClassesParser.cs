@@ -26,6 +26,6 @@ public static class GraphClassesParser
             });
         }
 
-        return classes;
+        return classes.Distinct().ToList();
     }
 }

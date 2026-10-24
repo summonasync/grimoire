@@ -19,6 +19,37 @@ public sealed class MemoryFilterTranslatorTests
     }
 
     [Fact]
+    public void Translate_WithStatusList_BuildsOneAnyOfCondition()
+    {
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter
+        {
+            Statuses = [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+        });
+
+        var nested = filter.Must.Single(item => item.Filter is not null).Filter!;
+        nested.Should.Select(condition => condition.Field!.Match!.Keyword)
+            .ShouldBe(["Active", "Superseded", "Tombstoned"]);
+        nested.Should.ShouldAllBe(condition => condition.Field!.Key == MemoryPayloadFields.Status);
+        filter.Must.ShouldNotContain(item => item.Field != null && item.Field.Key == MemoryPayloadFields.Status);
+    }
+
+    [Fact]
+    public void Translate_WithTomeAndStatusList_ConjoinsBothConstraints()
+    {
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter
+        {
+            Tome = "alpha",
+            Statuses = [MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+        });
+
+        filter.Must.Count.ShouldBe(2);
+        var nested = filter.Must.Single(item => item.Filter is not null).Filter!;
+        nested.Should.Select(condition => condition.Field!.Match!.Keyword)
+            .ShouldBe(["Superseded", "Tombstoned"]);
+        filter.Must.Single(item => item.Field is not null).Field!.Key.ShouldBe(MemoryPayloadFields.Tome);
+    }
+
+    [Fact]
     public void Translate_WithIdempotencyKey_AddsKeywordEquality()
     {
         var filter = MemoryFilterTranslator.Translate(new MemoryFilter { IdempotencyKey = "key-7" });
