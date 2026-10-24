@@ -47,4 +47,5 @@ export interface RetomeRecordsResult {
 export interface TomeForgetResult {
   tome: string;
   forgotten: number;
+  skipped: number;
 }

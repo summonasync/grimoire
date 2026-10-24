@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { confirmLeaveUnsaved } from "@/features/persona/lib/use-unsaved-guard";
 import { tomesQueryOptions } from "@/features/shelf";
 import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { PageHeader } from "@/shared/ui/page-header";
@@ -32,14 +31,7 @@ export function ShelfPage() {
           icon="book"
           title="The shelf is bare"
           reason="No tome holds a single record yet — the census appears once the first memory is written to the store."
-          action={{
-            label: "Open memories",
-            onClick: () => {
-              if (confirmLeaveUnsaved()) {
-                window.location.hash = "memories";
-              }
-            },
-          }}
+          action={{ label: "Open memories", href: "#memories" }}
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

@@ -5,6 +5,8 @@ import { healthQueryOptions } from "@/shared/api/health";
 import { versionQueryOptions } from "@/shared/api/version";
 import { memoriesQueryOptions } from "@/features/memories";
 import { statsQueryOptions } from "@/features/stats";
+import { tomesQueryOptions } from "@/features/shelf";
+import { useTomeFilter } from "@/widgets/app-shell/tome-context";
 import { compactNumber, relativeTime } from "@/shared/ui/format";
 import { Donut, Meter, resolveSliceColor } from "@/shared/ui/charts";
 import { Panel } from "@/shared/ui/panel";
@@ -44,10 +46,14 @@ function QuickAction({
 }
 
 export function ConsoleScreen() {
+  const { tome: railTome } = useTomeFilter();
   const stats = useQuery(statsQueryOptions());
+  const census = useQuery(tomesQueryOptions());
   const health = useQuery(healthQueryOptions());
   const version = useQuery(versionQueryOptions());
-  const recent = useQuery(memoriesQueryOptions({ limit: 8, status: "all" }));
+  const recent = useQuery(
+    memoriesQueryOptions({ limit: 8, status: "all", tome: railTome ?? undefined }),
+  );
 
   if (stats.error) {
     return (
@@ -68,6 +74,10 @@ export function ConsoleScreen() {
   const data = stats.data;
   const tomes = Object.entries(data.byTome);
   const total = data.active + data.superseded + data.tombstoned;
+  const scoped = railTome
+    ? (census.data?.tomes.find((entry) => entry.key === railTome) ?? null)
+    : null;
+  const storeWideTag = railTome ? " · store-wide" : "";
   const scopeSlices = scopeOrder
     .map((scope, index) => ({
       label: scope,
@@ -99,7 +109,9 @@ export function ConsoleScreen() {
           >
             {health.isPending ? "probing…" : (health.data?.status ?? "unknown")}
           </span>
-          <span className="text-muted">resolved tome: {data.tome}</span>
+          <span className="text-muted">
+            {railTome ? `viewing tome: ${railTome}` : `resolved tome: ${data.tome}`}
+          </span>
         </div>
       </header>
 
@@ -109,28 +121,44 @@ export function ConsoleScreen() {
           tone="accent"
           label="Tomes"
           value={tomes.length}
-          hint="Knowledge vaults"
+          hint={`Knowledge vaults${storeWideTag}`}
+          href="#shelf"
         />
-        <StatTile
-          icon="database"
-          tone="jade"
-          label="Total memories"
-          value={compactNumber(total)}
-          hint={`${compactNumber(data.active)} active`}
-        />
+        {scoped ? (
+          <StatTile
+            icon="database"
+            tone="jade"
+            label="Tome records"
+            value={compactNumber(scoped.active + scoped.tombstoned)}
+            hint={`${compactNumber(scoped.active)} active · ${compactNumber(scoped.tombstoned)} tombstoned`}
+            href="#memories"
+          />
+        ) : (
+          <StatTile
+            icon="database"
+            tone="jade"
+            label="Total memories"
+            value={compactNumber(total)}
+            hint={`${compactNumber(data.active)} active${storeWideTag}`}
+            href="#memories"
+          />
+        )}
         <StatTile
           icon="pulse"
           tone="gilt"
           label="Pending compaction"
           value={compactNumber(data.pendingCompaction)}
-          hint={data.pendingCompaction > 0 ? "Candidates ready" : "Store is compact"}
+          hint={(data.pendingCompaction > 0 ? "Candidates ready" : "Store is compact") + storeWideTag}
         />
         <StatTile
           icon="alert"
           tone={data.idempotencyConflicts > 0 ? "ember" : "neutral"}
           label="Idempotency conflicts"
           value={compactNumber(data.idempotencyConflicts)}
-          hint={data.idempotencyConflicts > 0 ? "Duplicate merges seen" : "None recorded"}
+          hint={
+            (data.idempotencyConflicts > 0 ? "Duplicate merges seen" : "None recorded") +
+            storeWideTag
+          }
         />
       </div>
 
@@ -153,7 +181,7 @@ export function ConsoleScreen() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel
           title="Memory distribution"
-          description="Active entries by scope"
+          description={railTome ? "Active entries by scope · store-wide" : "Active entries by scope"}
           icon="stats"
           className="xl:col-span-1"
         >
@@ -184,12 +212,16 @@ export function ConsoleScreen() {
           />
           <div className="mt-3 space-y-2 text-xs">
             <div className="flex justify-between">
-              <span className="text-muted">Superseded</span>
+              <span className="text-muted">Superseded{storeWideTag}</span>
               <span className="tabular-nums">{compactNumber(data.superseded)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">Tombstoned</span>
-              <span className="tabular-nums">{compactNumber(data.tombstoned)}</span>
+              <span className="text-muted">
+                {scoped ? "Tombstoned · tome" : `Tombstoned${storeWideTag}`}
+              </span>
+              <span className="tabular-nums">
+                {compactNumber(scoped ? scoped.tombstoned : data.tombstoned)}
+              </span>
             </div>
           </div>
         </Panel>
@@ -242,7 +274,9 @@ export function ConsoleScreen() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel
           title="Recent activity"
-          description="Newest records in the resolved tome"
+          description={
+            railTome ? `Newest records in '${railTome}'` : "Newest records in the resolved tome"
+          }
           icon="clock"
           className="xl:col-span-2"
           bodyClassName="p-0"
@@ -298,7 +332,15 @@ export function ConsoleScreen() {
           ) : (
             <ul className="space-y-3">
               {tomes.map(([tome, counts]) => (
-                <li key={tome}>
+                <li
+                  key={tome}
+                  aria-current={tome === railTome ? "true" : undefined}
+                  className={
+                    tome === railTome
+                      ? "-mx-2 rounded-lg bg-accent-soft/60 px-2 py-1.5 ring-1 ring-accent/30"
+                      : undefined
+                  }
+                >
                   <div className="flex items-center gap-2 text-sm">
                     <Sigil seed={tome} className="size-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{tome}</span>
@@ -333,7 +375,9 @@ export function ConsoleScreen() {
           web <span className="font-mono text-foreground/80">{webBuildSha}</span>
         </span>
         <span>
-          {data.tome} · {compactNumber(total)} records
+          {scoped
+            ? `${scoped.key} · ${compactNumber(scoped.active + scoped.tombstoned)} records`
+            : `${data.tome} · ${compactNumber(total)} records${storeWideTag}`}
         </span>
       </footer>
     </div>
