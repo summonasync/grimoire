@@ -332,6 +332,92 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         factory.Store.Records.Single().Tome.ShouldBe(TomeKey.DefaultTome);
     }
 
+    [Fact]
+    public async Task Post_Forget_TombstonesTheTomeAndReturnsCounts()
+    {
+        factory.Reset();
+        var first = factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha", createdAt: FakeClock.DefaultStart.AddHours(1));
+        factory.Store.Seed("beta note", [1f, 0f], tome: "beta");
+        factory.Store.Seed(
+            "alpha buried",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/forget", new { reason = "tome retired" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tome").GetString().ShouldBe("alpha");
+        body.GetProperty("forgotten").GetInt32().ShouldBe(2);
+
+        var forgotten = factory.Store.Records.Single(record => record.Id == first.Id);
+        forgotten.Status.ShouldBe(MemoryStatus.Tombstoned);
+        forgotten.TombstoneReason.ShouldBe("tome retired");
+        forgotten.Corrections.Single().Action.ShouldBe(CorrectionAction.Forget);
+        forgotten.Corrections.Single().Actor.ShouldBe(MemoryActor.Human);
+        factory.Store.Records.ShouldContain(record => record.Id == first.Id);
+        factory.Store.Records.Single(record => record.Content == "beta note").Status.ShouldBe(MemoryStatus.Active);
+        factory.Store.Records.Single(record => record.Content == "alpha buried").TombstoneReason.ShouldBe("gone");
+    }
+
+    [Fact]
+    public async Task Post_Forget_OnAnEmptyTome_ReturnsZero()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/ghost/forget", new { reason = "tome retired" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("tome").GetString().ShouldBe("ghost");
+        body.GetProperty("forgotten").GetInt32().ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Post_Forget_WithAMissingReason_Returns400InvalidReason(string reason)
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/forget", new { reason });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_reason");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Post_Forget_WithAMissingReasonProperty_Returns400InvalidRequest()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/forget", new { });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_request");
+        factory.Store.Records.Single().Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Post_Forget_WithAnInvalidKey_Returns400InvalidTome()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync($"/api/tomes/{Uri.EscapeDataString("Not Valid!!")}/forget", new { reason = "tome retired" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
     private static async Task<(string code, string message)> ReadError(HttpResponseMessage response)
     {
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);

@@ -134,5 +134,21 @@ internal static class TomeEndpoints
             var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, MemoryActor.Human);
             return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed));
         });
+
+        app.MapPost("/api/tomes/{key}/forget", async (string key, ForgetTomeRequest request, CancellationToken cancellationToken) =>
+        {
+            if (!TomeKey.TryNormalize(key, out var source))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_tome", TomeParam.InvalidMessage("tome", key));
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A tombstone reason is required.");
+            }
+
+            var result = await memories.ForgetTomeAsync(source, request.Reason, cancellationToken, MemoryActor.Human);
+            return Results.Ok(new TomeForgetResponse(source, result.Forgotten));
+        });
     }
 }

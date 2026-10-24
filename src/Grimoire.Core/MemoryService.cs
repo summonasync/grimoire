@@ -163,6 +163,40 @@ public sealed class MemoryService(
         return true;
     }
 
+    public async Task<ForgetTomeResult> ForgetTomeAsync(
+        string tome,
+        string reason,
+        CancellationToken cancellationToken,
+        MemoryActor? actor = null)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("A tombstone reason is required.", nameof(reason));
+        }
+
+        var resolved = TomeKey.Normalize(tome);
+        var records = await store.ListAsync(new MemoryFilter
+        {
+            Tome = resolved,
+            Status = MemoryStatus.Active,
+            Limit = null,
+        }, cancellationToken);
+
+        var now = clock.UtcNow;
+        var by = actor ?? MemoryActor.Human;
+        foreach (var record in records)
+        {
+            await store.UpdateAsync(CorrectionTrail.Append(record with
+            {
+                Status = MemoryStatus.Tombstoned,
+                TombstoneReason = reason,
+                TombstonedAt = now,
+            }, now, by, CorrectionAction.Forget, reason), cancellationToken);
+        }
+
+        return new ForgetTomeResult { Forgotten = records.Count };
+    }
+
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
         return store.ListAsync(filter with { Tome = ResolveTome(filter.Tome) }, cancellationToken);
