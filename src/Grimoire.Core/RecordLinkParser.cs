@@ -26,7 +26,8 @@ public static class RecordLinkParser
                 break;
             }
 
-            if (Guid.TryParse(content.AsSpan(open + 2, close - open - 2), out var id))
+            var token = content.AsSpan(open + 2, close - open - 2);
+            if (token.Length == 36 && Guid.TryParseExact(token, "D", out var id))
             {
                 ids.Add(id);
             }

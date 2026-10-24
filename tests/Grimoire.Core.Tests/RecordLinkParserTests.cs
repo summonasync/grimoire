@@ -28,6 +28,23 @@ public sealed class RecordLinkParserTests
         RecordLinkParser.Parse("see [[not-a-guid]] for the details").ShouldBeEmpty();
     }
 
+    [Theory]
+    [InlineData("N")]
+    [InlineData("B")]
+    [InlineData("P")]
+    public void Parse_NonCanonicalGuidForms_Rejected(string guidFormat)
+    {
+        var raw = Guid.NewGuid().ToString(guidFormat);
+
+        RecordLinkParser.Parse($"see [[{raw}]] for the details").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_PaddedGuidForm_Rejected()
+    {
+        RecordLinkParser.Parse($"see [[ {Guid.NewGuid():D} ]]").ShouldBeEmpty();
+    }
+
     [Fact]
     public void Parse_UnclosedToken_ReturnsNothing()
     {
