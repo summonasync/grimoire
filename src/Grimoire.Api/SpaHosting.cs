@@ -24,8 +24,7 @@ internal static class SpaHosting
         var response = context.Response;
         if (context.Request.Path.StartsWithSegments("/api"))
         {
-            response.StatusCode = StatusCodes.Status404NotFound;
-            await response.WriteAsJsonAsync(ApiResponses.Payload("not_found", $"No endpoint for '{context.Request.Path}'."), context.RequestAborted);
+            await RespondWithApiStatusAsync(context, response);
             return;
         }
 
@@ -45,5 +44,31 @@ internal static class SpaHosting
         response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         response.ContentType = SpaFallbackPage.ContentType;
         await response.WriteAsync(SpaFallbackPage.Html, context.RequestAborted);
+    }
+
+    private static async Task RespondWithApiStatusAsync(HttpContext context, HttpResponse response)
+    {
+        var (known, methods) = ApiRouteMatcher.Match(context.RequestServices, context.Request.Path);
+        if (!known)
+        {
+            response.StatusCode = StatusCodes.Status404NotFound;
+            await response.WriteAsJsonAsync(ApiResponses.Payload("not_found", $"No endpoint for '{context.Request.Path}'."), context.RequestAborted);
+            return;
+        }
+
+        if (!methods.Contains(context.Request.Method, StringComparer.OrdinalIgnoreCase))
+        {
+            response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+            response.Headers.Allow = string.Join(", ", methods);
+            await response.WriteAsJsonAsync(
+                ApiResponses.Payload("method_not_allowed", $"'{context.Request.Method}' is not allowed on '{context.Request.Path}'."),
+                context.RequestAborted);
+            return;
+        }
+
+        response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+        await response.WriteAsJsonAsync(
+            ApiResponses.Payload("unsupported_media_type", $"Unsupported media type for '{context.Request.Path}'. This API consumes application/json."),
+            context.RequestAborted);
     }
 }

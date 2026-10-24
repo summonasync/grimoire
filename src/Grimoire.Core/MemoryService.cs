@@ -213,7 +213,7 @@ public sealed class MemoryService(
             }, cancellationToken);
         }
 
-        var journal = await FetchCompactableJournalAsync(ResolveTome(null), cancellationToken);
+        var journal = await FetchCompactableJournalAsync(tome: null, cancellationToken);
         var pending = CompactionPlanner.Plan(journal, clock.UtcNow, _options.Compaction)
             .Sum(group => group.MemoryIds.Count);
 
@@ -256,7 +256,7 @@ public sealed class MemoryService(
         ? []
         : [.. tomes.Select(TomeKey.Normalize).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)];
 
-    private async Task<IReadOnlyList<MemoryPoint>> FetchCompactableJournalAsync(string tome, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<MemoryPoint>> FetchCompactableJournalAsync(string? tome, CancellationToken cancellationToken)
     {
         return await store.FetchAsync(new MemoryFilter
         {

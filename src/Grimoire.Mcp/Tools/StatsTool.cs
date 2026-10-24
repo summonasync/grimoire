@@ -12,11 +12,11 @@ internal sealed class StatsTool(MemoryService memories, MemoryActorProvider acto
     public const string Title = "Get memory stats";
 
     public const string Description =
-        "Report store health: active, superseded and tombstoned counts, records per scope, the pendingCompaction " +
-        "backlog, idempotencyConflicts and the gc heartbeat, where stale=true means the sweep is overdue and " +
-        "expired records may be piling up; byTome splits active and tombstoned per tome while counts span the " +
-        "whole store. Call it after a failed memory call to check reachability, or to size the compaction loop " +
-        "before working candidates.";
+        "Report store health: active, superseded and tombstoned counts, records per scope, idempotencyConflicts " +
+        "and the gc heartbeat, where stale=true means the sweep is overdue and expired records may be piling up; " +
+        "pendingCompaction is the whole-store compaction backlog across all tomes while memory_brief.compactionDue " +
+        "scopes the briefed tome; byTome splits active and tombstoned per tome while counts span the whole store. " +
+        "Call it after a failed memory call to check reachability, or to size the compaction loop before working candidates.";
 
     public Task<CallToolResult> GetStats(
         [Description("Tome named in the response as yours; omit unless you want to declare another tome you own. Stats themselves always span the whole store.")]

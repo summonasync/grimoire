@@ -138,6 +138,20 @@ public sealed class MemoryServiceStatsTests
     }
 
     [Fact]
+    public async Task Stats_PendingCompaction_SumsClustersAcrossTomes()
+    {
+        var stale = FakeClock.DefaultStart.AddDays(-30);
+        Seed("stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], accessed: stale);
+        Seed("stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.97f, 0.24f, 0f], accessed: stale);
+        Seed("alpha stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0f, 1f, 0f], accessed: stale, tome: "alpha");
+        Seed("alpha stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.24f, 0.97f, 0f], accessed: stale, tome: "alpha");
+
+        var stats = await _service.StatsAsync(CancellationToken.None);
+
+        stats.PendingCompaction.ShouldBe(4);
+    }
+
+    [Fact]
     public async Task Stats_PendingCompactionIsZeroWithoutClusters()
     {
         var stale = FakeClock.DefaultStart.AddDays(-30);
