@@ -335,6 +335,47 @@ public sealed class MemoryServiceStatsTests
     }
 
     [Fact]
+    public async Task PendingCompactionByTome_SplitsStaleClustersPerTome()
+    {
+        var stale = FakeClock.DefaultStart.AddDays(-30);
+        Seed("alpha stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], accessed: stale, tome: "alpha");
+        Seed("alpha stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.97f, 0.24f, 0f], accessed: stale, tome: "alpha");
+        Seed("beta stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], accessed: stale, tome: "beta");
+        Seed("beta stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.97f, 0.24f, 0f], accessed: stale, tome: "beta");
+        Seed("home stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], accessed: stale);
+        Seed("home stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.97f, 0.24f, 0f], accessed: stale);
+        Seed("gamma fresh", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], tome: "gamma");
+
+        var pending = await _service.PendingCompactionByTomeAsync(CancellationToken.None);
+
+        pending.Keys.ShouldBe(["alpha", "beta", TomeKey.DefaultTome, "gamma"]);
+        pending["alpha"].ShouldBe(2);
+        pending["beta"].ShouldBe(2);
+        pending[TomeKey.DefaultTome].ShouldBe(2);
+        pending["gamma"].ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task PendingCompactionByTome_EmptyStore_IsEmpty()
+    {
+        var pending = await _service.PendingCompactionByTomeAsync(CancellationToken.None);
+
+        pending.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task PendingCompactionByTome_SkipsTomesWithOnlyInactiveRecords()
+    {
+        Seed("alpha buried", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Tombstoned, vector: [1f, 0f, 0f], tome: "alpha", tombstoneReason: "gone", tombstonedAt: FakeClock.DefaultStart);
+        Seed("home stale one", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [1f, 0f, 0f], accessed: FakeClock.DefaultStart.AddDays(-30));
+        Seed("home stale two", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, vector: [0.97f, 0.24f, 0f], accessed: FakeClock.DefaultStart.AddDays(-30));
+
+        var pending = await _service.PendingCompactionByTomeAsync(CancellationToken.None);
+
+        pending.Keys.ShouldBe([TomeKey.DefaultTome]);
+    }
+
+    [Fact]
     public async Task Stats_PaysThreeListRoundTripsOnTheCensusAndConflictPath()
     {
         Seed("default active", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active);

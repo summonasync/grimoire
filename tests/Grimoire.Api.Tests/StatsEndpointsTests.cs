@@ -245,4 +245,43 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
         body.GetProperty("idempotencyConflicts").GetInt64().ShouldBe(1);
     }
+
+    [Fact]
+    public async Task Get_ByDefault_OmitsPerTomeCompactionAndKeepsTheShape()
+    {
+        factory.Reset();
+        var stale = FakeClock.DefaultStart.AddDays(-30);
+        factory.Store.Seed("stale one", [1f, 0f, 0f], createdAt: stale);
+        factory.Store.Seed("stale two", [0.97f, 0.24f, 0f], createdAt: stale);
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("pendingCompaction").GetInt64().ShouldBe(2);
+        body.TryGetProperty("pendingCompactionByTome", out _).ShouldBeFalse();
+        body.EnumerateObject().Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal)
+            .ShouldBe(["active", "activeByScope", "byTome", "gc", "idempotencyConflicts", "pendingCompaction", "superseded", "tombstoned", "tome"]);
+    }
+
+    [Fact]
+    public async Task Get_WithIncludeTomeCompaction_ReturnsPerTomeBacklog()
+    {
+        factory.Reset();
+        var stale = FakeClock.DefaultStart.AddDays(-30);
+        factory.Store.Seed("alpha stale one", [1f, 0f, 0f], createdAt: stale, tome: "alpha");
+        factory.Store.Seed("alpha stale two", [0.97f, 0.24f, 0f], createdAt: stale, tome: "alpha");
+        factory.Store.Seed("home stale one", [1f, 0f, 0f], createdAt: stale);
+        factory.Store.Seed("home stale two", [0.97f, 0.24f, 0f], createdAt: stale);
+        factory.Store.Seed("gamma fresh", [0f, 1f, 0f], tome: "gamma");
+
+        var response = await factory.NewClient().GetAsync("/api/stats?includeTomeCompaction=true");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var pending = body.GetProperty("pendingCompactionByTome");
+        pending.GetProperty("alpha").GetInt64().ShouldBe(2);
+        pending.GetProperty("default").GetInt64().ShouldBe(2);
+        pending.GetProperty("gamma").GetInt64().ShouldBe(0);
+    }
 }

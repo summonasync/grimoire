@@ -250,6 +250,25 @@ public sealed class MemoryService(
         return CompactionPlanner.Plan(journal, clock.UtcNow, _options.Compaction);
     }
 
+    public async Task<IReadOnlyDictionary<string, long>> PendingCompactionByTomeAsync(CancellationToken cancellationToken)
+    {
+        var active = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
+        var now = clock.UtcNow;
+        var pending = new Dictionary<string, long>();
+
+        foreach (var tome in active
+            .Select(record => record.Tome)
+            .Distinct()
+            .OrderBy(tome => tome, StringComparer.Ordinal))
+        {
+            var journal = await FetchCompactableJournalAsync(tome, cancellationToken);
+            pending[tome] = CompactionPlanner.Plan(journal, now, _options.Compaction)
+                .Sum(group => group.MemoryIds.Count);
+        }
+
+        return pending;
+    }
+
     private string ResolveTome(string? tome) => TomeKey.Normalize(tome ?? _options.DefaultTome);
 
     private static IReadOnlyList<string> NormalizeTomes(IReadOnlyList<string> tomes) => tomes.Count == 0

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Grimoire.Core;
 
 namespace Grimoire.Api.Contracts;
@@ -11,4 +12,8 @@ public sealed record StatsResponse(
     long PendingCompaction,
     long IdempotencyConflicts,
     IReadOnlyDictionary<string, TomeStatsResponse> ByTome,
-    GcState Gc);
+    GcState Gc)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, long>? PendingCompactionByTome { get; init; }
+}
