@@ -16,7 +16,8 @@ internal sealed class StatsCommand(CliEnvironment environment)
         var identity = await ActorResolver.ResolveAsync(
             environment, null, null, config.DefaultTome,
             services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
-        var stats = await services.GetRequiredService<MemoryService>().StatsAsync(cancellationToken);
+        var memories = services.GetRequiredService<MemoryService>();
+        var stats = await memories.StatsAsync(cancellationToken);
         environment.Output.WriteLine($"Active: {stats.Active} ({ScopeBreakdown(stats)})");
         environment.Output.WriteLine($"Superseded: {stats.Superseded}");
         environment.Output.WriteLine($"Tombstoned: {stats.Tombstoned}");
@@ -25,8 +26,49 @@ internal sealed class StatsCommand(CliEnvironment environment)
         environment.Output.WriteLine($"GC: {GcText(stats.Gc)}");
         environment.Output.WriteLine($"Tome: {identity.Tome} ({SourceText(identity.Source)})");
         environment.Output.WriteLine($"Per tome: {PerTome(stats)}");
+        environment.Output.WriteLine($"Per project: {await PerProjectAsync(memories, identity.Tome, cancellationToken)}");
+
+        if (invocation.Value("include-tome-compaction") is not null)
+        {
+            environment.Output.WriteLine(
+                $"Per-tome compaction: {PerTomeCompaction(await memories.PendingCompactionByTomeAsync(cancellationToken))}");
+        }
+
         return ExitCodes.Ok;
     }
+
+    private const string CrossProjectKey = "cross-project";
+
+    private static async Task<string> PerProjectAsync(
+        MemoryService memories,
+        string tome,
+        CancellationToken cancellationToken)
+    {
+        var records = await memories.ListAsync(
+            new MemoryFilter { Tome = tome, Status = MemoryStatus.Active },
+            cancellationToken);
+        var counts = new Dictionary<string, int>();
+
+        foreach (var record in records)
+        {
+            var key = record.ProjectId ?? CrossProjectKey;
+            counts[key] = counts.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+
+        return counts.Count == 0
+            ? "(none)"
+            : string.Join(
+                ", ",
+                counts.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => $"{pair.Key} ({pair.Value})"));
+    }
+
+    private static string PerTomeCompaction(IReadOnlyDictionary<string, long> pending) => pending.Count == 0
+        ? "(none)"
+        : string.Join(
+            ", ",
+            pending.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Key} ({pair.Value})"));
 
     private static string ScopeBreakdown(MemoryStats stats) => string.Join(
         ", ",

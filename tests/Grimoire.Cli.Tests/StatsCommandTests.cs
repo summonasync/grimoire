@@ -115,6 +115,58 @@ public sealed class StatsCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Stats_RendersPerProjectCountsForTheResolvedTome()
+    {
+        Seed("grimoire note", "default", projectId: "grimoire");
+        Seed("second grimoire note", "default", projectId: "grimoire");
+        Seed("wayfarer note", "default", projectId: "wayfarer");
+        Seed("untagged note", "default");
+        Seed(
+            "buried grimoire note",
+            "default",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "x",
+            tombstonedAt: _host.Clock.UtcNow,
+            projectId: "grimoire");
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Per project: cross-project (1), grimoire (2), wayfarer (1)");
+    }
+
+    [Fact]
+    public async Task Stats_WithoutProjectRecords_ShowsNonePerProject()
+    {
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Per project: (none)");
+    }
+
+    [Fact]
+    public async Task Stats_OmitsThePerTomeCompactionLineWithoutTheFlag()
+    {
+        SeedCompactablePair();
+
+        var code = await _host.RunAsync("stats");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldNotContain("Per-tome compaction:");
+    }
+
+    [Fact]
+    public async Task Stats_RendersPerTomeCompactionWhenOptedIn()
+    {
+        SeedCompactablePair();
+
+        var code = await _host.RunAsync("stats", "--include-tome-compaction");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Per-tome compaction: default (2)");
+    }
+
+    [Fact]
     public async Task Stats_RendersPerTomeLastWriteFromTheNewestRecord()
     {
         var older = _host.Clock.UtcNow.AddDays(-9);
@@ -169,7 +221,8 @@ public sealed class StatsCommandTests : IDisposable
         string tome,
         MemoryStatus status = MemoryStatus.Active,
         string? tombstoneReason = null,
-        DateTimeOffset? tombstonedAt = null)
+        DateTimeOffset? tombstonedAt = null,
+        string? projectId = null)
     {
         _host.Store.Seed(new MemoryRecord
         {
@@ -179,12 +232,34 @@ public sealed class StatsCommandTests : IDisposable
             Kind = MemoryKind.Journal,
             Actor = MemoryActor.Human,
             Tome = tome,
+            ProjectId = projectId,
             CreatedAt = _host.Clock.UtcNow,
             LastAccessedAt = _host.Clock.UtcNow,
             Status = status,
             TombstoneReason = tombstoneReason,
             TombstonedAt = tombstonedAt,
         }, [1f, 0f]);
+    }
+
+    private void SeedCompactablePair()
+    {
+        foreach (var content in new[] { "stale journal one", "stale journal two" })
+        {
+            var accessed = _host.Clock.UtcNow.AddDays(-10);
+            _host.Store.Seed(
+                new MemoryRecord
+                {
+                    Id = Guid.NewGuid(),
+                    Content = content,
+                    Scope = MemoryScope.Project,
+                    Kind = MemoryKind.Journal,
+                    Actor = MemoryActor.Human,
+                    Tome = "default",
+                    CreatedAt = accessed,
+                    LastAccessedAt = accessed,
+                },
+                [1f, 0f]);
+        }
     }
 
     public void Dispose() => _host.Dispose();

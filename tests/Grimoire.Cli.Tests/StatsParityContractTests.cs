@@ -32,6 +32,8 @@ public sealed class StatsParityContractTests : IDisposable
         new("TomeStats.Tombstoned", "1 tombstoned", "byTome.beta.tombstoned"),
         new("LastWriteByTome", "lastWrite ", "byTome.alpha.lastWriteAt"),
         new("TomeStats.LastWriteAt", "lastWrite ", "byTome.beta.lastWriteAt"),
+        new("ByProject", "Per project: ", "byProject"),
+        new("PendingCompactionByTome", "Per-tome compaction: ", "pendingCompactionByTome"),
     ];
 
     private static readonly string[] DeliberateDeltas =
@@ -135,6 +137,8 @@ public sealed class StatsParityContractTests : IDisposable
         output.ShouldContain(
             "Per tome: alpha (2 active, 1 tombstoned, lastWrite " +
             $"{FormatMoment(Start.AddDays(-1))}), beta (3 active, 1 tombstoned, lastWrite {FormatMoment(Start.AddHours(-2))})");
+        output.ShouldContain("Per project: (none)");
+        output.ShouldContain("Per-tome compaction: alpha (0), beta (0)");
     }
 
     [Fact]
@@ -160,11 +164,14 @@ public sealed class StatsParityContractTests : IDisposable
             .ShouldBe(Start.AddDays(-1));
         body.GetProperty("byTome").GetProperty("beta").GetProperty("lastWriteAt").GetDateTimeOffset()
             .ShouldBe(Start.AddHours(-2));
+        body.GetProperty("byProject").EnumerateObject().ShouldBeEmpty();
+        body.GetProperty("pendingCompactionByTome").GetProperty("alpha").GetInt64().ShouldBe(0);
+        body.GetProperty("pendingCompactionByTome").GetProperty("beta").GetInt64().ShouldBe(0);
     }
 
     private async Task<string> CliStatsAsync()
     {
-        var code = await _host.RunAsync("stats");
+        var code = await _host.RunAsync("stats", "--include-tome-compaction");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         return _host.Output.ToString();
@@ -187,7 +194,7 @@ public sealed class StatsParityContractTests : IDisposable
             _client = new HttpClient { BaseAddress = new Uri(address) };
         }
 
-        var response = await _client.GetAsync("/api/stats");
+        var response = await _client.GetAsync("/api/stats?includeTomeCompaction=true");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return await response.Content.ReadFromJsonAsync<JsonElement>();

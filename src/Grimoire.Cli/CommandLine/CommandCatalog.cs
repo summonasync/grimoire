@@ -96,6 +96,9 @@ internal static class CommandCatalog
     private static readonly FlagSpec Json = FlagSpec.Switch(
         "json", "Print the summary as JSON instead of the human-readable report.");
 
+    private static readonly FlagSpec IncludeTomeCompaction = FlagSpec.Switch(
+        "include-tome-compaction", "Add a per-tome pending-compaction census line to the stats output.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -228,6 +231,7 @@ internal static class CommandCatalog
             Name = "stats",
             Summary = "Show memory statistics.",
             Syntax = "stats",
+            Flags = [IncludeTomeCompaction],
         },
         new CommandSpec
         {
