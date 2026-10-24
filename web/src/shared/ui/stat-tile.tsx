@@ -64,7 +64,7 @@ export function StatTile({ icon, tone = "neutral", label, value, hint, footer, h
     <a
       href={href}
       className={cn(
-        "panel flex items-start gap-3 px-4 py-3.5 transition-colors hover:border-accent",
+        "panel flex items-start gap-3 px-4 py-3.5 transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
         toneRing[tone],
       )}
     >
