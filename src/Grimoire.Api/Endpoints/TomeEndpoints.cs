@@ -78,7 +78,7 @@ internal static class TomeEndpoints
             }
 
             var result = await memories.RetomeAsync(request.Ids, target, cancellationToken, MemoryActor.Human);
-            return Results.Ok(new RetomeResponse(result.Retomed, target));
+            return Results.Ok(new RetomeResponse(result.Retomed, target, result.Skipped));
         });
 
         app.MapPost("/api/tomes/{key}/rename", async (string key, RenameTomeRequest request, CancellationToken cancellationToken) =>
@@ -105,7 +105,7 @@ internal static class TomeEndpoints
             }
 
             var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, MemoryActor.Human);
-            return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed));
+            return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed, result.Skipped));
         });
 
         app.MapPost("/api/tomes/{key}/merge", async (string key, MergeTomeRequest request, CancellationToken cancellationToken) =>
@@ -132,7 +132,7 @@ internal static class TomeEndpoints
             }
 
             var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, MemoryActor.Human);
-            return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed));
+            return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed, result.Skipped));
         });
 
         app.MapPost("/api/tomes/{key}/forget", async (string key, ForgetTomeRequest request, CancellationToken cancellationToken) =>

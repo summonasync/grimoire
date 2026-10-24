@@ -209,14 +209,18 @@ public sealed class MemoryService(
         MemoryActor? actor = null)
     {
         var target = TomeKey.Normalize(targetTome);
-        var records = await store.ListAsync(filter with
+        var scoped = filter with
         {
             Tome = ResolveTome(filter.Tome),
             Status = MemoryStatus.Active,
             Limit = null,
-        }, cancellationToken);
+        };
+        var total = await store.CountAsync(scoped with { Status = null }, cancellationToken);
+        var records = await store.ListAsync(scoped, cancellationToken);
 
-        return await RewriteTomeAsync(records, target, actor, cancellationToken);
+        var result = await RewriteTomeAsync(records, target, actor, cancellationToken);
+
+        return result with { Skipped = (int)(total - result.Retomed) };
     }
 
     public async Task<RetomeResult> RetomeAsync(
@@ -227,16 +231,22 @@ public sealed class MemoryService(
     {
         var target = TomeKey.Normalize(targetTome);
         var records = new List<MemoryRecord>(ids.Count);
+        var skipped = 0;
         foreach (var id in ids.Distinct())
         {
             var record = await store.GetAsync(id, cancellationToken);
-            if (record is not null)
+            if (record is null || record.Status != MemoryStatus.Active)
             {
-                records.Add(record);
+                skipped++;
+                continue;
             }
+
+            records.Add(record);
         }
 
-        return await RewriteTomeAsync(records, target, actor, cancellationToken);
+        var result = await RewriteTomeAsync(records, target, actor, cancellationToken);
+
+        return result with { Skipped = skipped };
     }
 
     public async Task<GcResult> GcAsync(CancellationToken cancellationToken)

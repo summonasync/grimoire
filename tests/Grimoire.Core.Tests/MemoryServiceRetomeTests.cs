@@ -58,6 +58,44 @@ public sealed class MemoryServiceRetomeTests
     }
 
     [Fact]
+    public async Task Retome_ByFilter_ReportsTombstonedTailAsSkipped()
+    {
+        Seed(tome: "alpha");
+        Seed(tome: "alpha");
+        var buried = Seed(tome: "alpha");
+        await _service.ForgetAsync(buried.Id, "stale", CancellationToken.None, "alpha", TestMemories.Agent);
+
+        var result = await _service.RetomeAsync(
+            new MemoryFilter { Tome = "alpha" },
+            "gamma",
+            CancellationToken.None,
+            TestMemories.Agent);
+
+        result.Retomed.ShouldBe(2);
+        result.Skipped.ShouldBe(1);
+        _store.Records.Single(record => record.Id == buried.Id).Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Retome_ByIdList_ReportsMissingAndInactiveAsSkipped()
+    {
+        var moved = Seed(tome: "alpha");
+        var buried = Seed(tome: "alpha");
+        await _service.ForgetAsync(buried.Id, "stale", CancellationToken.None, "alpha", TestMemories.Agent);
+        var missing = Guid.NewGuid();
+
+        var result = await _service.RetomeAsync(
+            [moved.Id, buried.Id, missing],
+            "beta",
+            CancellationToken.None,
+            TestMemories.Agent);
+
+        result.Retomed.ShouldBe(1);
+        result.Skipped.ShouldBe(2);
+        _store.Records.Single(record => record.Id == moved.Id).Tome.ShouldBe("beta");
+    }
+
+    [Fact]
     public async Task Retome_ByIdList_MovesOnlyListedRecords()
     {
         var moved = Seed(tome: "alpha");
