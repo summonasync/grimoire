@@ -4,9 +4,10 @@ public static class AutoMemoryFileParser
 {
     private const string MemoryIndexFile = "memory.md";
 
-    public static async Task<IReadOnlyList<AutoMemoryCandidate>> ParseAsync(string directory, CancellationToken cancellationToken)
+    public static async Task<AutoMemoryParseResult> ParseAsync(string directory, CancellationToken cancellationToken)
     {
         var candidates = new List<AutoMemoryCandidate>();
+        var failures = new List<AutoMemoryParseFailure>();
 
         foreach (var path in Directory
                      .EnumerateFiles(directory, "*.md", SearchOption.TopDirectoryOnly)
@@ -15,7 +16,18 @@ public static class AutoMemoryFileParser
             cancellationToken.ThrowIfCancellationRequested();
 
             var fileName = Path.GetFileName(path);
-            var body = StripFrontmatter(await File.ReadAllTextAsync(path, cancellationToken));
+            string text;
+            try
+            {
+                text = await File.ReadAllTextAsync(path, cancellationToken);
+            }
+            catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+            {
+                failures.Add(new AutoMemoryParseFailure { FileName = fileName, Reason = failure.Message });
+                continue;
+            }
+
+            var body = StripFrontmatter(text);
 
             if (fileName.Equals(MemoryIndexFile, StringComparison.OrdinalIgnoreCase))
             {
@@ -37,7 +49,7 @@ public static class AutoMemoryFileParser
             });
         }
 
-        return candidates;
+        return new AutoMemoryParseResult { Candidates = candidates, Failures = failures };
     }
 
     private static string StripFrontmatter(string text)

@@ -90,6 +90,12 @@ internal static class CommandCatalog
     private static readonly FlagSpec ProjectBoardId = new(
         "board-project-id", "id", "Overmind board project id linked to the alias. Pass an empty value to clear it.");
 
+    private static readonly FlagSpec Source = new(
+        "source", "dir", "Directory of *.md memory files to import. The import marker is written here.");
+
+    private static readonly FlagSpec Json = FlagSpec.Switch(
+        "json", "Print the summary as JSON instead of the human-readable report.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -199,6 +205,16 @@ internal static class CommandCatalog
             Summary = "Restore a store export: validates the embedding fingerprint against the configured model, then upserts records with ids, statuses, timestamps and vectors preserved. Re-running an import is safe.",
             Syntax = "import <path>",
             MinPositional = 1,
+        },
+        new CommandSpec
+        {
+            Name = "auto-memory",
+            Summary = "Import runtime auto-memory cache files into the tome: each file is dedup-checked, tagged auto-memory:<file>, " +
+                      "project-tagged from the registry by the source directory, and recorded in the import marker. " +
+                      "Exits 1 when any file failed.",
+            Syntax = "auto-memory import --source <dir>",
+            MinPositional = 1,
+            Flags = [Source, Tome, Json],
         },
         new CommandSpec
         {

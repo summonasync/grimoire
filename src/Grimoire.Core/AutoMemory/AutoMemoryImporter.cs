@@ -26,13 +26,23 @@ public sealed class AutoMemoryImporter(
         }
 
         var resolvedTome = TomeKey.Normalize(tome ?? _options.DefaultTome);
-        var candidates = await AutoMemoryFileParser.ParseAsync(sourceDirectory, cancellationToken);
+        var parsed = await AutoMemoryFileParser.ParseAsync(sourceDirectory, cancellationToken);
         Dictionary<string, string> hashes = stateRead.State?.Hashes is { } known
             ? new Dictionary<string, string>(known)
             : [];
-        var outcomes = new List<AutoMemoryFileOutcome>();
+        var outcomes = new List<AutoMemoryFileOutcome>(parsed.Failures.Count);
 
-        foreach (var candidate in candidates)
+        foreach (var failure in parsed.Failures)
+        {
+            outcomes.Add(new AutoMemoryFileOutcome
+            {
+                FileName = failure.FileName,
+                Kind = AutoMemoryOutcomeKind.Failed,
+                Reason = failure.Reason,
+            });
+        }
+
+        foreach (var candidate in parsed.Candidates)
         {
             var hash = AutoMemoryImportState.ContentHash(candidate.Content);
             if (stateRead.State is { } previous && !Selected(candidate, hash, previous))
@@ -67,8 +77,8 @@ public sealed class AutoMemoryImporter(
 
         return new AutoMemoryImportSummary
         {
-            Files = candidates.Count,
-            Unchanged = candidates.Count - outcomes.Count,
+            Files = parsed.Candidates.Count + parsed.Failures.Count,
+            Unchanged = parsed.Candidates.Count + parsed.Failures.Count - outcomes.Count,
             Warnings = warnings,
             Outcomes = outcomes,
         };

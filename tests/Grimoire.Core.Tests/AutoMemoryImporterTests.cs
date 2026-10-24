@@ -57,7 +57,7 @@ public sealed class AutoMemoryImporterTests : IDisposable
         WriteFile("b.md", "second fact");
         WriteFile("a.md", "first fact");
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var candidates = (await Parse()).Candidates;
 
         candidates.Select(candidate => candidate.FileName).ShouldBe(["a.md", "b.md"]);
         candidates[0].Content.ShouldBe("first fact");
@@ -68,7 +68,7 @@ public sealed class AutoMemoryImporterTests : IDisposable
     {
         WriteFile("a.md", "---\nname: deploy\ndescription: notes\n---\ndeploy body");
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var candidates = (await Parse()).Candidates;
 
         candidates.ShouldHaveSingleItem().Content.ShouldBe("deploy body");
     }
@@ -79,7 +79,7 @@ public sealed class AutoMemoryImporterTests : IDisposable
         var text = "---\nname: unterminated\nbody stays whole";
         WriteFile("a.md", text);
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var candidates = (await Parse()).Candidates;
 
         candidates.ShouldHaveSingleItem().Content.ShouldBe(text);
     }
@@ -90,7 +90,7 @@ public sealed class AutoMemoryImporterTests : IDisposable
         WriteFile("MEMORY.md", "# Memory Index\n\n- [deploy](deploy.md)\n1. [ops](ops.md)\n");
         WriteFile("deploy.md", "deploy fact");
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var candidates = (await Parse()).Candidates;
 
         candidates.Select(candidate => candidate.FileName).ShouldBe(["deploy.md"]);
     }
@@ -100,7 +100,7 @@ public sealed class AutoMemoryImporterTests : IDisposable
     {
         WriteFile("MEMORY.md", "# Memory Index\n\n- [deploy](deploy.md)\nOwner prefers Friday deploys.\n");
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var candidates = (await Parse()).Candidates;
 
         var index = candidates.ShouldHaveSingleItem();
         index.FileName.ShouldBe("MEMORY.md");
@@ -113,9 +113,45 @@ public sealed class AutoMemoryImporterTests : IDisposable
         WriteFile("empty.md", string.Empty);
         WriteFile("blank.md", "\n  \n\t\n");
 
-        var candidates = await AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+        var parse = await Parse();
 
-        candidates.ShouldBeEmpty();
+        parse.Candidates.ShouldBeEmpty();
+        parse.Failures.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Parse_UnreadableFile_IsReportedAsFailureInsteadOfThrowing()
+    {
+        WriteFile("a.md", "coffee brewing notes");
+        WriteFile("locked.md", "locked body");
+        StripReadPermissions(Path.Combine(_directory, "locked.md"));
+
+        var parse = await Parse();
+
+        parse.Candidates.Select(candidate => candidate.FileName).ShouldBe(["a.md"]);
+        var failure = parse.Failures.ShouldHaveSingleItem();
+        failure.FileName.ShouldBe("locked.md");
+        failure.Reason.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Import_UnreadableFile_FailsPerFileAndImportsTheRest()
+    {
+        WriteFile("a.md", "coffee brewing notes");
+        WriteFile("locked.md", "locked body");
+        StripReadPermissions(Path.Combine(_directory, "locked.md"));
+
+        var summary = await Import();
+
+        summary.Files.ShouldBe(2);
+        summary.Imported.ShouldBe(1);
+        summary.Failed.ShouldBe(1);
+        var outcome = summary.Outcomes.Single(item => item.Kind == AutoMemoryOutcomeKind.Failed);
+        outcome.FileName.ShouldBe("locked.md");
+        outcome.Reason.ShouldNotBeNull();
+        _store.Records.Select(record => record.Tags.Single()).ShouldBe(["auto-memory:a.md"]);
+        var marker = (await AutoMemoryImportState.ReadAsync(_directory, CancellationToken.None)).State.ShouldNotBeNull();
+        marker.Hashes.Keys.ShouldBe(["a.md"]);
     }
 
     [Fact]
@@ -387,6 +423,9 @@ public sealed class AutoMemoryImporterTests : IDisposable
         _store.Records.Count.ShouldBe(1);
     }
 
+    private Task<AutoMemoryParseResult> Parse() =>
+        AutoMemoryFileParser.ParseAsync(_directory, CancellationToken.None);
+
     private Task<AutoMemoryImportSummary> Import(string? tome = "ops", string? projectId = "grim") =>
         _importer.ImportAsync(_directory, tome, TestMemories.Agent, projectId, CancellationToken.None);
 
@@ -395,5 +434,15 @@ public sealed class AutoMemoryImporterTests : IDisposable
         var path = Path.Combine(_directory, name);
         File.WriteAllText(path, content);
         File.SetLastWriteTimeUtc(path, FileStamp.UtcDateTime);
+    }
+
+    private static void StripReadPermissions(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("The unreadable-file scenario needs Unix file modes.");
+        }
+
+        File.SetUnixFileMode(path, UnixFileMode.None);
     }
 }

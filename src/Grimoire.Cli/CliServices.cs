@@ -65,6 +65,7 @@ internal static class CliServices
             sp.GetRequiredService<PersonaService>(),
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>()));
+        services.AddSingleton<AutoMemoryImporter>();
         return services.BuildServiceProvider();
     }
 }

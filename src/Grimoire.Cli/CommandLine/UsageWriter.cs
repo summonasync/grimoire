@@ -11,7 +11,7 @@ internal static class UsageWriter
         output.WriteLine("Commands:");
         foreach (var spec in CommandCatalog.All)
         {
-            output.WriteLine($"  {spec.Name.PadRight(10)}{spec.Summary}");
+            output.WriteLine($"  {spec.Name.PadRight(13)}{spec.Summary}");
         }
 
         output.WriteLine();
