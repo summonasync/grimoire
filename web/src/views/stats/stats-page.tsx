@@ -5,7 +5,7 @@ import { healthQueryOptions } from "@/shared/api/health";
 import { PageHeader } from "@/shared/ui/page-header";
 import { ProviderHealthCard } from "@/features/stats/components/provider-health-card";
 import { statsQueryOptions } from "@/features/stats/queries";
-import { Donut, resolveSliceColor } from "@/shared/ui/charts";
+import { Donut, Meter, resolveSliceColor } from "@/shared/ui/charts";
 import { Panel } from "@/shared/ui/panel";
 import { StatTile } from "@/shared/ui/stat-tile";
 import { EmptyState, NotTracked, QueryFailure, Skeleton } from "@/shared/ui/honest";
@@ -15,6 +15,19 @@ import { ProjectBadge } from "@/shared/ui/project-badge";
 import { Sigil } from "@/shared/ui/sigil";
 
 const CROSS_PROJECT_KEY = "cross-project";
+
+const tomeSourceLabels: Record<string, string> = {
+  explicitParam: "explicit parameter",
+  envTome: "env tome",
+  envActor: "env actor",
+  claimFile: "claim file",
+  clientInfo: "client info",
+  default: "default",
+};
+
+function tomeSourceLabel(source: string): string {
+  return tomeSourceLabels[source] ?? source;
+}
 
 export function StatsPage() {
   const stats = useQuery(statsQueryOptions());
@@ -51,6 +64,10 @@ export function StatsPage() {
     return countB - countA;
   });
   const totalByProject = projectRows.reduce((sum, [, count]) => sum + count, 0);
+  const compactionRows = tomeRows
+    .map(([tome, counts]) => ({ tome, pending: counts.pendingCompaction }))
+    .filter((row): row is { tome: string; pending: number } => typeof row.pending === "number");
+  const maxCompaction = compactionRows.reduce((max, row) => Math.max(max, row.pending), 0);
   const gc = data.gc;
 
   return (
@@ -63,6 +80,17 @@ export function StatsPage() {
             <Icon name="book" className="size-3.5 text-muted" />
             <span className="text-muted">Resolved tome</span>
             <span className="font-medium">{data.tome}</span>
+            {data.tomeSource && (
+              <>
+                <span className="text-muted">·</span>
+                <span
+                  className="text-muted"
+                  title="How this tome was resolved for this request"
+                >
+                  from {tomeSourceLabel(data.tomeSource)}
+                </span>
+              </>
+            )}
           </span>
         }
       />
@@ -274,10 +302,32 @@ export function StatsPage() {
         </Panel>
 
         <Panel title="Compaction queue" description="Candidates per tome" icon="database">
-          <NotTracked
-            label="Queue is not per-tome"
-            reason={`Only a global pending count is exposed (${compactNumber(data.pendingCompaction)}). Reclaimable bytes, oldest candidate and a manual run trigger do not exist in the API.`}
-          />
+          {compactionRows.length === 0 ? (
+            <NotTracked
+              label="Queue is not per-tome yet"
+              reason={`Only a global pending count is exposed (${compactNumber(data.pendingCompaction)}). Reclaimable bytes, oldest candidate and a manual run trigger do not exist in the API.`}
+            />
+          ) : (
+            <ul className="space-y-3">
+              {compactionRows.map((row) => (
+                <li key={row.tome}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Sigil seed={row.tome} className="size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{row.tome}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      {compactNumber(row.pending)}
+                    </span>
+                  </div>
+                  <Meter
+                    className="mt-1.5"
+                    value={row.pending}
+                    max={maxCompaction}
+                    color="var(--gilt)"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       </div>
     </div>

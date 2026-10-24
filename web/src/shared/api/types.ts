@@ -102,6 +102,7 @@ export interface TomeStats {
   active: number;
   tombstoned: number;
   lastWriteAt: string;
+  pendingCompaction?: number;
 }
 
 export interface GcState {
@@ -116,6 +117,7 @@ export interface GcState {
 
 export interface MemoryStats {
   tome: string;
+  tomeSource?: string;
   active: number;
   superseded: number;
   tombstoned: number;
