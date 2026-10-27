@@ -148,6 +148,10 @@ without one need the runtime or the self-contained release binary instead.
 External installers (Overmind's assisted install) spawn exactly these
 commands and then probe `grimoire --version`.
 
+Windows: a hidden-console launcher, a logon task and the config edits a fresh box
+needed live in [`deploy/windows/`](deploy/windows/README.md) (`grimoire ui` is
+Linux-only today).
+
 The local infrastructure story is unchanged: Qdrant + Ollama via
 [`deploy/docker-compose.yml`](deploy/docker-compose.yml), isolated
 per-product variant
