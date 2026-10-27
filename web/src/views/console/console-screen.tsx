@@ -337,7 +337,7 @@ export function ConsoleScreen() {
                   aria-current={tome === railTome ? "true" : undefined}
                   className={
                     tome === railTome
-                      ? "-mx-2 rounded-lg bg-accent-soft/60 px-2 py-1.5 ring-1 ring-accent/30"
+                      ? "-mx-2 rounded-lg bg-jade/6 px-2 py-1.5 ring-1 ring-jade/30"
                       : undefined
                   }
                 >

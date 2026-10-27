@@ -29,7 +29,7 @@ export function Panel({
         <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 font-display text-base leading-tight font-semibold">
-              {icon && <Icon name={icon} className="size-4 text-accent" />}
+              {icon && <Icon name={icon} className="size-4 text-jade" />}
               {title}
             </h2>
             {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}

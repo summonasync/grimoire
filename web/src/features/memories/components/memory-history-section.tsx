@@ -52,21 +52,21 @@ export function MemoryHistorySection({ record }: MemoryHistorySectionProps) {
                       aria-hidden
                       className={
                         isCurrent
-                          ? "absolute top-3 -left-[1.30rem] size-2.5 rounded-full bg-accent ring-2 ring-background"
+                          ? "absolute top-3 -left-[1.30rem] size-2.5 rounded-full bg-jade ring-2 ring-background"
                           : "absolute top-3 -left-[1.30rem] size-2 rounded-full border border-border-strong bg-surface"
                       }
                     />
                     <div
                       className={
                         isCurrent
-                          ? "rounded-lg border border-accent/40 bg-accent-soft p-2.5"
+                          ? "rounded-lg border border-jade/40 bg-jade/10 p-2.5"
                           : "rounded-lg border border-border bg-background/50 p-2.5"
                       }
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={entry.status} />
                         {isCurrent && (
-                          <span className="text-[0.7rem] font-medium text-accent">current</span>
+                          <span className="text-[0.7rem] font-medium text-jade">current</span>
                         )}
                         <span className="ml-auto font-mono text-[0.65rem] text-muted">
                           {shortId(entry.id)}
