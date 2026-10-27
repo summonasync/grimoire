@@ -30,7 +30,7 @@ export function PersonaSectionField({
   return (
     <section className="panel px-4 py-3.5">
       <div className="flex items-start gap-3">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent-soft font-display text-sm text-accent">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-jade/50 bg-jade/10 font-display text-sm text-jade">
           {index}
         </span>
         <div className="min-w-0 flex-1">

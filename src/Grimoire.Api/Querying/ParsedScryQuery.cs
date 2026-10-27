@@ -7,4 +7,5 @@ public sealed record ParsedScryQuery(
     IReadOnlyList<string> Tomes,
     bool IncludeJournal,
     ScryAttribution Attribution,
-    int Limit);
+    int Limit,
+    IReadOnlyList<string>? ProjectedKeys = null);

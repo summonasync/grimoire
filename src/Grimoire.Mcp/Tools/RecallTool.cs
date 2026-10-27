@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -19,7 +20,19 @@ internal sealed class RecallTool(
         "Search memory before you assume - ranked semantic matches over the active records of one tome; " +
         "superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior " +
         "context could change the answer; narrow with scope, projectId or tags before raising limit, and pass tome " +
-        "to read another tome you own, memory_scry answers across tomes.";
+        "to read another tome you own, memory_scry answers across tomes. Pass fields or compact to trim hits to " +
+        "the keys you need - the cheap path for recurring reads.";
+
+    private static readonly ReadProjectionSurface Surface = new()
+    {
+        AllowedKeys =
+        [
+            "content", "scope", "kind", "actor", "tags", "projectId", "sessionId",
+            "createdAt", "lastAccessedAt", "similarity",
+        ],
+        AlwaysOnKeys = ["memoryId", "score"],
+        CompactKeys = ["memoryId", "content", "tags", "createdAt"],
+    };
 
     public Task<CallToolResult> Recall(
         [Description("What to look for. Phrasing may be approximate - recall is semantic, not keyword match.")]
@@ -40,6 +53,10 @@ internal sealed class RecallTool(
         int limit = 5,
         [Description("Tome to search; omit for your resolved tome, or name another tome you own to read it. The response echoes the tome actually searched. For cross-tome context without leaving your tome use memory_scry.")]
         string? tome = null,
+        [Description("Project each hit to these camelCase keys, e.g. [\"content\", \"similarity\"]; memoryId and score are always included and an unknown field is rejected naming the allowed set.")]
+        string[]? fields = null,
+        [Description("Project each hit to the digest shape (memoryId, content, tags, createdAt) plus score - the cheap path for recurring reads; mutually exclusive with fields.")]
+        bool compact = false,
         CancellationToken cancellationToken = default)
     {
         var (scopeFilter, scopeError) = EnumParams.Parse<MemoryScope>(scope, nameof(scope));
@@ -75,6 +92,19 @@ internal sealed class RecallTool(
             return Task.FromResult(ToolResults.Failure(tomeError));
         }
 
+        IReadOnlyList<string>? projectedKeys;
+        try
+        {
+            projectedKeys = ReadProjection.Resolve(fields, compact, Surface);
+        }
+        catch (ReadProjectionValidationException projectionError)
+        {
+            return Task.FromResult(ToolResults.Failure(new ToolError(
+                ToolErrorCodes.InvalidRequest,
+                projectionError.Message,
+                nameof(fields))));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
@@ -91,10 +121,20 @@ internal sealed class RecallTool(
                 Limit = limit,
             }, ct);
 
-            return ToolResults.Success(new RecallView
+            if (projectedKeys is null)
+            {
+                return ToolResults.Success(new RecallView
+                {
+                    Tome = resolvedTome,
+                    Matches = [.. matches.Select(ToHit)],
+                    Count = matches.Count,
+                });
+            }
+
+            return ToolResults.Success(new ProjectedRecallView
             {
                 Tome = resolvedTome,
-                Matches = [.. matches.Select(ToHit)],
+                Matches = [.. matches.Select(match => ProjectHit(ToHit(match), projectedKeys))],
                 Count = matches.Count,
             });
         }, cancellationToken);
@@ -117,5 +157,31 @@ internal sealed class RecallTool(
             CreatedAt = match.Record.CreatedAt,
             LastAccessedAt = match.Record.LastAccessedAt,
         };
+    }
+
+    private static IReadOnlyDictionary<string, object?> ProjectHit(RecallHit hit, IReadOnlyList<string> keys)
+    {
+        var projected = new Dictionary<string, object?>(keys.Count, StringComparer.Ordinal);
+        foreach (var key in keys)
+        {
+            projected[key] = key switch
+            {
+                "memoryId" => hit.MemoryId,
+                "content" => hit.Content,
+                "scope" => hit.Scope,
+                "kind" => hit.Kind,
+                "actor" => hit.Actor,
+                "tags" => hit.Tags,
+                "projectId" => hit.ProjectId,
+                "sessionId" => hit.SessionId,
+                "similarity" => hit.Similarity,
+                "score" => hit.Score,
+                "createdAt" => hit.CreatedAt,
+                "lastAccessedAt" => hit.LastAccessedAt,
+                _ => throw new UnreachableException($"key '{key}' passed validation but has no projection."),
+            };
+        }
+
+        return projected;
     }
 }

@@ -40,7 +40,14 @@ internal static class MemoryEndpoints
                 parsed with { Filter = parsed.Filter with { Tome = tome } },
                 cancellationToken);
 
-            return Results.Ok(new MemoryListResponse(tome, records.Count, records));
+            object response = parsed.ProjectedKeys is { } keys
+                ? new ProjectedMemoryListResponse(
+                    tome,
+                    records.Count,
+                    [.. records.Select(record => MemoryRecordProjection.Project(record, keys))])
+                : new MemoryListResponse(tome, records.Count, records);
+
+            return Results.Ok(response);
         });
 
         app.MapGet("/api/memories/{id:guid}", async (Guid id, CancellationToken cancellationToken) =>

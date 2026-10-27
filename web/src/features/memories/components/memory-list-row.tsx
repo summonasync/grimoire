@@ -23,7 +23,7 @@ export function MemoryListRow({ record, selected, onOpen, checked, onToggle }: M
       aria-selected={selected}
       className={cn(
         "cursor-pointer border-b border-border/60 transition-colors last:border-0",
-        selected ? "bg-accent-soft" : "hover:bg-foreground/[0.03]",
+        selected ? "bg-jade/10" : "hover:bg-foreground/[0.03]",
       )}
     >
       {onToggle && (
@@ -34,7 +34,7 @@ export function MemoryListRow({ record, selected, onOpen, checked, onToggle }: M
             onChange={() => onToggle(record.id)}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Select record ${record.id}`}
-            className="mt-0.5 size-3.5 cursor-pointer accent-accent"
+            className="mt-0.5 size-3.5 cursor-pointer accent-jade"
           />
         </td>
       )}

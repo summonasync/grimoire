@@ -20,8 +20,8 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
     <div className="relative">
       <div
         className={cn(
-          "panel flex h-full min-w-0 flex-col gap-3 p-4 transition-colors hover:border-accent",
-          picked && "border-accent/60 ring-1 ring-accent/40",
+          "panel flex h-full min-w-0 flex-col gap-3 p-4 transition-colors hover:border-jade",
+          picked && "border-jade/60 ring-1 ring-jade/40",
         )}
       >
         <a
@@ -42,7 +42,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
             </p>
           </div>
           {summary.own && (
-            <span className="ml-auto shrink-0 rounded-md border border-accent/45 bg-accent-soft px-2 py-0.5 text-[0.7rem] font-medium text-accent">
+            <span className="ml-auto shrink-0 rounded-md border border-jade/45 bg-jade/10 px-2 py-0.5 text-[0.7rem] font-medium text-jade">
               your tome
             </span>
           )}

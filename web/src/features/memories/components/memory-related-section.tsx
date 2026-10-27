@@ -42,7 +42,7 @@ function NeighborRow({
       <button
         type="button"
         onClick={() => onOpen(targetId)}
-        className="w-full rounded-lg border border-border bg-background/50 p-2.5 text-left transition-colors hover:border-accent/50"
+        className="w-full rounded-lg border border-border bg-background/50 p-2.5 text-left transition-colors hover:border-jade/50"
       >
         <div className="flex flex-wrap items-center gap-2">
           <span
@@ -82,8 +82,8 @@ export function MemoryRelatedSection({ record, onOpen }: MemoryRelatedSectionPro
           className={cn(
             "ml-auto rounded-md border px-2 py-0.5 text-[0.7rem] font-medium transition-colors",
             includeCoMembership
-              ? "border-accent/55 bg-accent-soft text-foreground"
-              : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+              ? "border-jade/55 bg-jade/10 text-foreground"
+              : "border-border text-muted hover:border-jade/40 hover:text-foreground",
           )}
         >
           co-membership

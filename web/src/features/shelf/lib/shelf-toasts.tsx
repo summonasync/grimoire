@@ -91,7 +91,7 @@ export function ShelfToastProvider({ children }: { children: ReactNode }) {
                     action.onClick();
                     dismiss(toast.id);
                   }}
-                  className="shrink-0 cursor-pointer text-xs font-medium text-accent hover:underline"
+                  className="shrink-0 cursor-pointer text-xs font-medium text-jade hover:underline"
                 >
                   {action.label}
                 </button>
