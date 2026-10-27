@@ -32,6 +32,10 @@ public sealed record MemoryFilter
 
     public DateTimeOffset? CreatedAfter { get; init; }
 
+    public DateTimeOffset? CreatedBefore { get; init; }
+
+    public string? Actor { get; init; }
+
     public bool IsEmpty =>
         Scopes.Count == 0 &&
         Kind is null &&
@@ -46,5 +50,7 @@ public sealed record MemoryFilter
         ExpiresBefore is null &&
         TombstonedBefore is null &&
         IdempotencyKey is null &&
-        CreatedAfter is null;
+        CreatedAfter is null &&
+        CreatedBefore is null &&
+        Actor is null;
 }

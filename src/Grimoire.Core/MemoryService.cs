@@ -98,12 +98,16 @@ public sealed class MemoryService(
             Tomes = NormalizeTomes(query.Tomes),
             ProjectId = query.ProjectId,
             SessionId = query.SessionId,
+            CreatedAfter = query.CreatedAfter,
+            CreatedBefore = query.CreatedBefore,
+            Actor = query.Actor,
         };
 
         var fetchLimit = query.Limit * Math.Max(_options.RecallOversampling, 1);
         var matches = await store.SearchAsync(vector, filter, fetchLimit, cancellationToken);
 
         var top = matches
+            .Where(match => filter.Matches(match.Record))
             .Select(match => (Match: match, Score: MemoryScorer.Score(
                 match.Similarity,
                 match.Record,
@@ -199,9 +203,13 @@ public sealed class MemoryService(
         return new ForgetTomeResult { Forgotten = records.Count, Skipped = (int)(total - records.Count) };
     }
 
-    public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
-        return store.ListAsync(filter with { Tome = ResolveTome(filter.Tome) }, cancellationToken);
+        var resolved = filter with { Tome = ResolveTome(filter.Tome), Limit = null };
+        var records = await store.ListAsync(resolved, cancellationToken);
+        var matched = records.Where(resolved.Matches).ToArray();
+
+        return filter.Limit is { } limit ? matched.Take(limit).ToArray() : matched;
     }
 
     public async Task<RetomeResult> RetomeAsync(
