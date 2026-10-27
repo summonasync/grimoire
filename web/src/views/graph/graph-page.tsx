@@ -117,7 +117,7 @@ export function GraphPage() {
           <>
             <a
               href="#shelf"
-              className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+              className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/80 px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-jade hover:text-jade"
             >
               <Icon name="arrowLeft" className="size-3.5" />
               Shelf

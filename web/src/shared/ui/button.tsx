@@ -10,7 +10,7 @@ type Size = "sm" | "md";
 const variants: Record<Variant, string> = {
   primary:
     "border border-accent bg-accent text-accent-foreground hover:brightness-110 shadow-[0_0_18px_-8px_var(--accent)]",
-  outline: "border border-border-strong bg-transparent text-foreground hover:border-accent hover:text-accent",
+  outline: "border border-border-strong bg-transparent text-foreground hover:border-jade hover:text-jade",
   ghost: "border border-transparent bg-transparent text-muted hover:bg-foreground/5 hover:text-foreground",
   danger: "border border-ember/60 bg-ember/10 text-ember hover:bg-ember/20",
 };
@@ -43,7 +43,7 @@ export function Button({
       type={type}
       className={cn(
         "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium transition-all",
-        "focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-jade/60 focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100",
         variants[variant],
         sizes[size],
@@ -80,7 +80,7 @@ export function IconButton({
       title={label}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-lg transition-all",
-        "focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-jade/60 focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-45",
         variants[variant],
         size === "sm" ? "size-8" : "size-10",

@@ -14,7 +14,7 @@ const tones: Record<BadgeTone, string> = {
   jade: "border-jade/45 text-jade bg-jade/10",
   gilt: "border-gilt/45 text-gilt bg-gilt/10",
   ember: "border-ember/45 text-ember bg-ember/10",
-  accent: "border-accent/50 text-accent bg-accent-soft",
+  accent: "border-jade/50 text-jade bg-jade/10",
   muted: "border-border text-muted bg-transparent",
 };
 

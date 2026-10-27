@@ -34,9 +34,9 @@ function QuickAction({
   return (
     <a
       href={href}
-      className="flex items-center gap-2.5 rounded-lg border border-border-strong/80 bg-background/50 px-3.5 py-2.5 transition-colors hover:border-accent hover:bg-accent-soft"
+      className="flex items-center gap-2.5 rounded-lg border border-border-strong/80 bg-background/50 px-3.5 py-2.5 transition-colors hover:border-jade hover:bg-jade/10"
     >
-      <Icon name={icon} className="size-4 shrink-0 text-accent" />
+      <Icon name={icon} className="size-4 shrink-0 text-jade" />
       <span className="min-w-0 text-left">
         <span className="block text-sm leading-tight font-medium">{title}</span>
         <span className="block text-[0.7rem] text-muted">{subtitle}</span>
@@ -337,7 +337,7 @@ export function ConsoleScreen() {
                   aria-current={tome === railTome ? "true" : undefined}
                   className={
                     tome === railTome
-                      ? "-mx-2 rounded-lg bg-accent-soft/60 px-2 py-1.5 ring-1 ring-accent/30"
+                      ? "-mx-2 rounded-lg bg-jade/6 px-2 py-1.5 ring-1 ring-jade/30"
                       : undefined
                   }
                 >

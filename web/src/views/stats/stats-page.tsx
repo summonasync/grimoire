@@ -257,7 +257,7 @@ export function StatsPage() {
                     key={tome}
                     className={
                       tome === railTome
-                        ? "border-b border-border/60 bg-accent-soft/60 last:border-0"
+                        ? "border-b border-border/60 bg-jade/6 last:border-0"
                         : "border-b border-border/60 last:border-0"
                     }
                   >

@@ -86,7 +86,7 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
           onClick={() => setMenuOpen((open) => !open)}
           className={cn(
             "inline-flex size-7 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors",
-            "hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
+            "hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-jade/60 focus-visible:outline-none",
             menuOpen && "bg-foreground/5 text-foreground",
           )}
         >

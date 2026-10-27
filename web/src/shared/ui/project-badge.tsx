@@ -1,7 +1,6 @@
 import { cn } from "@/shared/lib/cn";
 
 const tones = [
-  "border-accent/50 text-accent bg-accent-soft",
   "border-jade/45 text-jade bg-jade/10",
   "border-gilt/45 text-gilt bg-gilt/10",
   "border-ember/45 text-ember bg-ember/10",
