@@ -1,10 +1,21 @@
 {
   "contract": {
-    "description": "Search memory before you assume - ranked semantic matches over the active records of one tome; superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior context could change the answer; narrow with scope, projectId or tags before raising limit, and pass tome to read another tome you own, memory_scry answers across tomes.",
+    "description": "Search memory before you assume - ranked semantic matches over the active records of one tome; superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior context could change the answer; narrow with scope, projectId or tags before raising limit, and pass tome to read another tome you own, memory_scry answers across tomes. Pass fields or compact to trim hits to the keys you need - the cheap path for recurring reads.",
     "destructive": false,
     "idempotent": true,
     "input": {
       "parameters": {
+        "compact": {
+          "default": false,
+          "type": "boolean"
+        },
+        "fields": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "kind": {
           "default": null,
           "type": [

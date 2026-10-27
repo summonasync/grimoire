@@ -289,6 +289,107 @@ public sealed class RecallToolTests
         scores[0].ShouldBe(scores[1], 1e-9);
     }
 
+    [Fact]
+    public async Task Recall_Fields_KeepMemoryIdAndScore_AndOmitSimilarityUnlessRequested()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("We chose Wolverine over MassTransit", VectorA);
+        session.Embeddings.Register("messaging stack decision", VectorA);
+        await Remember(session, "We chose Wolverine over MassTransit", "grimoire");
+
+        var projected = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "messaging stack decision",
+            ["fields"] = new[] { "content" },
+        });
+
+        projected.ShouldSucceed();
+        var hit = projected.Payload().GetProperty("matches")[0];
+        KeysOf(hit).ShouldBe(["memoryId", "score", "content"], ignoreOrder: true);
+        hit.GetProperty("content").GetString().ShouldBe("We chose Wolverine over MassTransit");
+        hit.GetProperty("score").GetDouble().ShouldBeGreaterThan(0);
+        hit.TryGetProperty("similarity", out _).ShouldBeFalse();
+
+        var withSimilarity = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "messaging stack decision",
+            ["fields"] = new[] { "content", "similarity" },
+        });
+
+        withSimilarity.ShouldSucceed();
+        var similarityHit = withSimilarity.Payload().GetProperty("matches")[0];
+        KeysOf(similarityHit).ShouldBe(["memoryId", "score", "content", "similarity"], ignoreOrder: true);
+        similarityHit.GetProperty("similarity").GetDouble().ShouldBeGreaterThan(0.99);
+    }
+
+    [Fact]
+    public async Task Recall_Compact_ReturnsTheDigestKeySetPlusScore()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("We chose Wolverine over MassTransit", VectorA);
+        session.Embeddings.Register("messaging stack decision", VectorA);
+        await Remember(session, "We chose Wolverine over MassTransit", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "messaging stack decision",
+            ["compact"] = true,
+        });
+
+        result.ShouldSucceed();
+        var hit = result.Payload().GetProperty("matches")[0];
+        KeysOf(hit).ShouldBe(["memoryId", "score", "content", "tags", "createdAt"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Recall_UnknownField_ReturnsInvalidRequestNamingTheAllowedSet()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["fields"] = new[] { "bodyChars" },
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("fields");
+        message.ShouldContain("bodyChars");
+        message.ShouldContain("Allowed fields:");
+        foreach (var field in new[]
+                 {
+                     "content", "scope", "kind", "actor", "tags", "projectId", "sessionId",
+                     "createdAt", "lastAccessedAt", "similarity",
+                 })
+        {
+            message.ShouldContain(field);
+        }
+    }
+
+    [Fact]
+    public async Task Recall_FieldsWithCompact_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["fields"] = new[] { "content" },
+            ["compact"] = true,
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("fields");
+        message.ShouldContain("mutually exclusive");
+    }
+
+    private static string[] KeysOf(JsonElement hit)
+    {
+        return [.. hit.EnumerateObject().Select(property => property.Name)];
+    }
+
     private static string? ProjectIdOf(JsonElement hit)
     {
         return hit.TryGetProperty("projectId", out var project) && project.ValueKind == JsonValueKind.String
