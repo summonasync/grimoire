@@ -602,6 +602,83 @@ public sealed class MemoryServiceRememberTests
         tombstonedSuccessor.TombstoneReason.ShouldBe($"restored {target.Record.Id}");
     }
 
+    [Fact]
+    public async Task Remember_TaughtFollowUpWithSupersedes_IsNotAReplayAndSupersedesTarget()
+    {
+        var target = await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var followUp = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Record.Id }, CancellationToken.None);
+
+        followUp.IdempotentReplay.ShouldBeFalse();
+        followUp.SupersededId.ShouldBe(target.Record.Id);
+        (await _store.GetAsync(target.Record.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+        _store.Records.Count(record => record.Content == "deploy on friday").ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Remember_RetryWithSameSupersedes_ReplaysWithoutDoubleSupersede()
+    {
+        var target = await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var first = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Record.Id }, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var retry = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Record.Id }, CancellationToken.None);
+
+        retry.IdempotentReplay.ShouldBeTrue();
+        retry.Record.Id.ShouldBe(first.Record.Id);
+        retry.SupersededId.ShouldBeNull();
+        var superseded = (await _store.GetAsync(target.Record.Id, CancellationToken.None))!;
+        superseded.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.SupersededBy.ShouldBe(first.Record.Id);
+        superseded.Corrections.Count.ShouldBe(1);
+        _store.UpsertCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Remember_AtExactNearBoundary_MatchIsIncluded()
+    {
+        var seed = new float[] { 0.85f, 0.52678f, 0f };
+        var boundary = VectorMath.CosineSimilarity(Vectors["deploy on friday"], seed);
+        var options = new MemoryEngineOptions { NearDuplicateSimilarityThreshold = boundary };
+        var service = TestMemories.Service(_store, _embeddings, _clock, options);
+        _store.Seed(TestMemories.Create("staging deploy window moved", seed, projectId: "grim", tags: ["ops"]), seed);
+
+        var result = await service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.NearMatches.Single().Similarity.ShouldBe(boundary);
+    }
+
+    [Fact]
+    public async Task Remember_AtExactDedupBoundary_MatchIsSupersededAndNotListed()
+    {
+        var seed = new float[] { 0.85f, 0.52678f, 0f };
+        var boundary = VectorMath.CosineSimilarity(Vectors["deploy on friday"], seed);
+        var options = new MemoryEngineOptions { DedupSimilarityThreshold = boundary };
+        var service = TestMemories.Service(_store, _embeddings, _clock, options);
+        _store.Seed(TestMemories.Create("staging deploy window moved", seed, projectId: "grim", tags: ["ops"]), seed);
+
+        var result = await service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.SupersededId.ShouldNotBeNull();
+        result.NearMatches.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_BlankFirstLine_YieldsEmptySnippet()
+    {
+        _store.Seed(
+            TestMemories.Create("\nsecond line has the words", [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]),
+            [0.85f, 0.52678f, 0f]);
+
+        var result = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.NearMatches.Single().Snippet.ShouldBeEmpty();
+    }
+
     private void SeedNear(float similarity)
     {
         var vector = new[] { similarity, MathF.Sqrt(1f - similarity * similarity), 0f };
