@@ -11,4 +11,6 @@ public sealed record RememberResult
     public bool IdempotentReplay { get; init; }
 
     public bool MaintenancePending { get; init; }
+
+    public IReadOnlyList<NearMatch> NearMatches { get; init; } = [];
 }

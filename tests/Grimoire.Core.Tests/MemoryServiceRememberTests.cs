@@ -376,4 +376,235 @@ public sealed class MemoryServiceRememberTests
         _embeddings.Requests.Count.ShouldBe(2);
         _store.UpsertCount.ShouldBe(2);
     }
+
+    [Fact]
+    public async Task Remember_BelowNearBand_CarriesNoNearMatches()
+    {
+        await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        var second = await _service.RememberAsync(Request("halfway related"), CancellationToken.None);
+
+        second.NearMatches.ShouldBeEmpty();
+        second.SupersededExisting.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Remember_InNearBand_ReturnsMatchAndKeepsOriginal()
+    {
+        var original = TestMemories.Create("staging deploy window moved", [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]);
+        _store.Seed(original, [0.85f, 0.52678f, 0f]);
+
+        var result = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        var near = result.NearMatches.Single();
+        near.MemoryId.ShouldBe(original.Id);
+        near.Similarity.ShouldBe(0.85, 0.001);
+        near.Snippet.ShouldBe("staging deploy window moved");
+        result.SupersededExisting.ShouldBeFalse();
+        (await _store.GetAsync(original.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Remember_InNearBand_AppliesConfiguredThreshold()
+    {
+        var options = new MemoryEngineOptions { NearDuplicateSimilarityThreshold = 0.86 };
+        var service = TestMemories.Service(_store, _embeddings, _clock, options);
+        _store.Seed(
+            TestMemories.Create("staging deploy window moved", [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]),
+            [0.85f, 0.52678f, 0f]);
+
+        var result = await service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.NearMatches.ShouldBeEmpty();
+        result.SupersededExisting.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Remember_InNearBand_OrdersBySimilarityAndCapsAtThree()
+    {
+        SeedNear(0.85f);
+        SeedNear(0.84f);
+        SeedNear(0.83f);
+        SeedNear(0.82f);
+
+        var result = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.NearMatches.Count.ShouldBe(3);
+        result.NearMatches[0].Similarity.ShouldBe(0.85, 0.001);
+        result.NearMatches[1].Similarity.ShouldBe(0.84, 0.001);
+        result.NearMatches[2].Similarity.ShouldBe(0.83, 0.001);
+    }
+
+    [Fact]
+    public async Task Remember_InNearBand_TruncatesSnippetToFirstLineWithinLimit()
+    {
+        var content = new string('x', 200) + "\nsecond line";
+        _store.Seed(TestMemories.Create(content, [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]), [0.85f, 0.52678f, 0f]);
+
+        var result = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        result.NearMatches.Single().Snippet.ShouldBe(new string('x', 160));
+    }
+
+    [Fact]
+    public async Task Remember_InDedupBand_SupersedesWithoutNearMatches()
+    {
+        var first = await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var second = await _service.RememberAsync(Request("deploy on fridays"), CancellationToken.None);
+
+        second.SupersededExisting.ShouldBeTrue();
+        second.NearMatches.ShouldBeEmpty();
+        (await _store.GetAsync(first.Record.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+    }
+
+    [Fact]
+    public async Task Remember_InNearBand_ReusesProbeEmbedding()
+    {
+        await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        _store.Seed(
+            TestMemories.Create("staging deploy window moved", [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]),
+            [0.85f, 0.52678f, 0f]);
+
+        await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
+
+        _embeddings.Requests.ShouldBe(["coffee brewing", "deploy on friday"]);
+    }
+
+    [Fact]
+    public async Task Remember_WithSupersedes_SupersedesTargetAndPrefersItInResult()
+    {
+        var target = await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var result = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Record.Id }, CancellationToken.None);
+
+        result.SupersededId.ShouldBe(target.Record.Id);
+        result.NearMatches.ShouldBeEmpty();
+        var superseded = (await _store.GetAsync(target.Record.Id, CancellationToken.None))!;
+        superseded.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.SupersededBy.ShouldBe(result.Record.Id);
+        var line = superseded.Corrections.Single();
+        line.Action.ShouldBe(CorrectionAction.Supersede);
+        line.Reason.ShouldBe($"superseded by {result.Record.Id}");
+    }
+
+    [Fact]
+    public async Task Remember_SupersedesUnknownTarget_AppliesNothing()
+    {
+        var error = await Should.ThrowAsync<ArgumentException>(
+            () => _service.RememberAsync(Request("deploy on friday") with { Supersedes = Guid.NewGuid() }, CancellationToken.None));
+
+        error.Message.ShouldContain("does not exist in tome");
+        _store.Records.ShouldBeEmpty();
+        _embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SupersedesForeignTomeTarget_AppliesNothing()
+    {
+        var foreign = TestMemories.Create("coffee brewing", [0f, 1f, 0f], tome: "elsewhere");
+        _store.Seed(foreign, [0f, 1f, 0f]);
+
+        var error = await Should.ThrowAsync<ArgumentException>(
+            () => _service.RememberAsync(Request("deploy on friday") with { Supersedes = foreign.Id }, CancellationToken.None));
+
+        error.Message.ShouldContain("does not exist in tome");
+        _store.Records.Single().Id.ShouldBe(foreign.Id);
+        _embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(MemoryStatus.Tombstoned)]
+    [InlineData(MemoryStatus.Superseded)]
+    public async Task Remember_SupersedesInactiveTarget_AppliesNothing(MemoryStatus status)
+    {
+        var target = TestMemories.Create(
+            "coffee brewing",
+            [0f, 1f, 0f],
+            status: status,
+            tombstoneReason: status == MemoryStatus.Tombstoned ? "gone" : null,
+            tombstonedAt: status == MemoryStatus.Tombstoned ? FakeClock.DefaultStart : null,
+            supersededBy: status == MemoryStatus.Superseded ? Guid.NewGuid() : null);
+        _store.Seed(target, [0f, 1f, 0f]);
+
+        var error = await Should.ThrowAsync<ArgumentException>(
+            () => _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Id }, CancellationToken.None));
+
+        error.Message.ShouldContain("not active");
+        _store.Records.Single().Id.ShouldBe(target.Id);
+        target.Status.ShouldBe(status);
+        _embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_ProbeAndExplicitNameSameTarget_SupersedesOnce()
+    {
+        var target = TestMemories.Create("deploy on friday", [1f, 0f, 0f], projectId: "grim", tags: ["ops"]);
+        _store.Seed(target, [1f, 0f, 0f]);
+
+        var result = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Id }, CancellationToken.None);
+
+        result.SupersededId.ShouldBe(target.Id);
+        var superseded = (await _store.GetAsync(target.Id, CancellationToken.None))!;
+        superseded.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.SupersededBy.ShouldBe(result.Record.Id);
+        superseded.Corrections.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_ProbeAndExplicitNameDifferentTargets_SupersedesBoth()
+    {
+        var probed = TestMemories.Create("deploy on friday", [1f, 0f, 0f], projectId: "grim", tags: ["ops"]);
+        _store.Seed(probed, [1f, 0f, 0f]);
+        var explicitTarget = await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        var result = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = explicitTarget.Record.Id }, CancellationToken.None);
+
+        result.SupersededId.ShouldBe(explicitTarget.Record.Id);
+        (await _store.GetAsync(probed.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+        (await _store.GetAsync(explicitTarget.Record.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+        _store.Records.Count(record => record.Status == MemoryStatus.Active).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Remember_ExplicitTargetInNearBand_SupersedesItAndSkipsTheNearListing()
+    {
+        var target = TestMemories.Create("staging deploy window moved", [0.85f, 0.52678f, 0f], projectId: "grim", tags: ["ops"]);
+        _store.Seed(target, [0.85f, 0.52678f, 0f]);
+
+        var result = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Id }, CancellationToken.None);
+
+        result.SupersededId.ShouldBe(target.Id);
+        result.NearMatches.ShouldBeEmpty();
+        (await _store.GetAsync(target.Id, CancellationToken.None))!.Status.ShouldBe(MemoryStatus.Superseded);
+    }
+
+    [Fact]
+    public async Task Restore_ExplicitSupersede_ReversesLikeAuto()
+    {
+        var target = await _service.RememberAsync(Request("coffee brewing"), CancellationToken.None);
+        var successor = await _service.RememberAsync(Request("deploy on friday") with { Supersedes = target.Record.Id }, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromHours(3));
+        var corrections = TestMemories.Corrections(_store, _clock);
+
+        var restored = await corrections.RestoreAsync(target.Record.Id, "coffee was right", CancellationToken.None);
+
+        restored.Restored.ShouldBeTrue();
+        var revived = (await _store.GetAsync(target.Record.Id, CancellationToken.None))!;
+        revived.Status.ShouldBe(MemoryStatus.Active);
+        revived.SupersededBy.ShouldBe(successor.Record.Id);
+        revived.Corrections.Last().Action.ShouldBe(CorrectionAction.Restore);
+        var tombstonedSuccessor = (await _store.GetAsync(successor.Record.Id, CancellationToken.None))!;
+        tombstonedSuccessor.Status.ShouldBe(MemoryStatus.Tombstoned);
+        tombstonedSuccessor.TombstoneReason.ShouldBe($"restored {target.Record.Id}");
+    }
+
+    private void SeedNear(float similarity)
+    {
+        var vector = new[] { similarity, MathF.Sqrt(1f - similarity * similarity), 0f };
+        _store.Seed(TestMemories.Create($"near {similarity}", vector, projectId: "grim", tags: ["ops"]), vector);
+    }
 }

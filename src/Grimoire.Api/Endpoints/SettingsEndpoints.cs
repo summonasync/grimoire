@@ -13,6 +13,7 @@ internal static class SettingsEndpoints
         app.MapGet("/api/settings", () => Results.Ok(new SettingsResponse(
             new EngineSettings(
                 engineOptions.SessionTtlHours,
+                engineOptions.NearDuplicateSimilarityThreshold,
                 engineOptions.DedupSimilarityThreshold,
                 engineOptions.RelatedSimilarityThreshold,
                 engineOptions.TombstoneRetentionDays,

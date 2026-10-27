@@ -10,6 +10,10 @@ public sealed class MemoryService(
 {
     private const int DuplicateProbeLimit = 5;
 
+    private const int NearMatchLimit = 3;
+
+    private const int NearSnippetChars = 160;
+
     private readonly MemoryEngineOptions _options = options ?? new();
 
     private readonly GcOptions _gcOptions = gcOptions ?? new();
@@ -35,9 +39,11 @@ public sealed class MemoryService(
         }
 
         await ValidateSourcesAsync(request, tome, cancellationToken);
+        var superseded = await ValidateSupersedesAsync(request, tome, cancellationToken);
 
         var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
-        var duplicates = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
+        var matches = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
+        var nearMatches = SelectNearMatches(matches, superseded?.Id);
 
         var record = new MemoryRecord
         {
@@ -63,14 +69,14 @@ public sealed class MemoryService(
         Guid? supersededId;
         try
         {
-            supersededId = await SupersedeDuplicatesAsync(duplicates, record, cancellationToken);
+            supersededId = await SupersedeDuplicatesAsync(SupersedeTargets(matches, superseded), record, cancellationToken);
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
-            return new RememberResult { Record = record, MaintenancePending = true };
+            return new RememberResult { Record = record, NearMatches = nearMatches, MaintenancePending = true };
         }
 
-        return new RememberResult { Record = record, SupersededId = supersededId };
+        return new RememberResult { Record = record, SupersededId = supersededId, NearMatches = nearMatches };
     }
 
     public async Task<IReadOnlyList<RecallMatch>> RecallAsync(RecallQuery query, CancellationToken cancellationToken)
@@ -436,7 +442,7 @@ public sealed class MemoryService(
         IReadOnlyDictionary<string, TomeStats> ByTome,
         IReadOnlyDictionary<string, DateTimeOffset> LastWriteByTome);
 
-    private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(
+    private async Task<IReadOnlyList<VectorMatch>> ProbeDuplicatesAsync(
         RememberRequest request,
         string tome,
         ReadOnlyMemory<float> vector,
@@ -450,15 +456,47 @@ public sealed class MemoryService(
             request.Scope == MemoryScope.Session ? request.SessionId : null), vector, excludeId: null, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<MemoryRecord>> ProbeDuplicatesAsync(MemoryFilter filter, ReadOnlyMemory<float> vector, Guid? excludeId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<VectorMatch>> ProbeDuplicatesAsync(MemoryFilter filter, ReadOnlyMemory<float> vector, Guid? excludeId, CancellationToken cancellationToken)
     {
         var matches = await store.SearchAsync(vector, filter, DuplicateProbeLimit, cancellationToken);
 
         return matches
-            .Where(match => match.Similarity >= _options.DedupSimilarityThreshold)
-            .Select(match => match.Record)
-            .Where(record => excludeId is null || record.Id != excludeId)
+            .Where(match => match.Similarity >= _options.NearDuplicateSimilarityThreshold)
+            .Where(match => excludeId is null || match.Record.Id != excludeId)
             .ToArray();
+    }
+
+    private IReadOnlyList<MemoryRecord> DuplicateRecords(IReadOnlyList<VectorMatch> matches) => [.. matches
+        .Where(match => match.Similarity >= _options.DedupSimilarityThreshold)
+        .Select(match => match.Record)];
+
+    private IReadOnlyList<MemoryRecord> SupersedeTargets(IReadOnlyList<VectorMatch> matches, MemoryRecord? superseded)
+    {
+        var duplicates = DuplicateRecords(matches);
+
+        return superseded is null
+            ? duplicates
+            : [superseded, .. duplicates.Where(record => record.Id != superseded.Id)];
+    }
+
+    private IReadOnlyList<NearMatch> SelectNearMatches(IReadOnlyList<VectorMatch> matches, Guid? supersededId) => [.. matches
+        .Where(match => match.Similarity < _options.DedupSimilarityThreshold)
+        .Where(match => match.Record.Id != supersededId)
+        .OrderByDescending(match => match.Similarity)
+        .ThenBy(match => match.Record.Id)
+        .Take(NearMatchLimit)
+        .Select(match => new NearMatch
+        {
+            MemoryId = match.Record.Id,
+            Similarity = match.Similarity,
+            Snippet = Snippet(match.Record.Content),
+        })];
+
+    private static string Snippet(string content)
+    {
+        var line = content.Split('\n')[0].TrimEnd('\r');
+
+        return line.Length <= NearSnippetChars ? line : line[..NearSnippetChars];
     }
 
     private MemoryFilter DuplicateProbeFilter(string tome, MemoryScope scope, MemoryKind kind, string? projectId, string? sessionId) => new()
@@ -500,14 +538,14 @@ public sealed class MemoryService(
                 return true;
             }
 
-            var duplicates = await ProbeDuplicatesAsync(DuplicateProbeFilter(
+            var matches = await ProbeDuplicatesAsync(DuplicateProbeFilter(
                 original.Tome,
                 original.Scope,
                 original.Kind,
                 original.ProjectId,
                 original.Scope == MemoryScope.Session ? original.SessionId : null), self.Vector, original.Id, cancellationToken);
 
-            await SupersedeDuplicatesAsync(duplicates, original, cancellationToken);
+            await SupersedeDuplicatesAsync(DuplicateRecords(matches), original, cancellationToken);
             return true;
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
@@ -554,6 +592,28 @@ public sealed class MemoryService(
             throw new ArgumentException(
                 $"Source memories do not exist in tome '{tome}': {string.Join(", ", missing)}.", nameof(request.Sources));
         }
+    }
+
+    private async Task<MemoryRecord?> ValidateSupersedesAsync(RememberRequest request, string tome, CancellationToken cancellationToken)
+    {
+        if (request.Supersedes is not { } id)
+        {
+            return null;
+        }
+
+        var target = await store.GetAsync(id, cancellationToken);
+
+        if (target is null || target.Tome != tome)
+        {
+            throw new ArgumentException($"Superseded memory does not exist in tome '{tome}': {id}.", nameof(request.Supersedes));
+        }
+
+        if (target.Status != MemoryStatus.Active)
+        {
+            throw new ArgumentException($"Superseded memory is not active: {id}.", nameof(request.Supersedes));
+        }
+
+        return target;
     }
 
     private async Task<long> CountIdempotencyConflictsAsync(CancellationToken cancellationToken)
