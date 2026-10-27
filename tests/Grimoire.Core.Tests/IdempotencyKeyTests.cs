@@ -79,6 +79,16 @@ public sealed class IdempotencyKeyTests
     }
 
     [Fact]
+    public void Compute_ChangesWithSupersedesTarget()
+    {
+        var plain = Request();
+        var superseding = plain with { Supersedes = Guid.NewGuid() };
+
+        IdempotencyKey.Compute(plain).ShouldNotBe(IdempotencyKey.Compute(superseding));
+        IdempotencyKey.Compute(superseding).ShouldBe(IdempotencyKey.Compute(superseding));
+    }
+
+    [Fact]
     public void Compute_NormalizesAbsentOptionalPartsToEmpty()
     {
         var absentProject = Request(projectId: null);

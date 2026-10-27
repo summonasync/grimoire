@@ -20,7 +20,10 @@ internal sealed class RememberTool(
         "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - " +
         "with your actor provenance on it. Call it when the human states a preference, decision or correction: " +
         "write durable facts in English and keep the human's verbatim quotes as spoken; a near-duplicate " +
-        "supersedes the older record, an identical write replays it, and never store secrets. Scope 'Project' " +
+        "supersedes the older record, an identical write replays it, and never store secrets. When the response " +
+        "carries nearDuplicates, the write landed close to existing memories - if one of them is the same fact " +
+        "restated, re-remember with supersedes set to its memoryId to replace it instead of keeping both. " +
+        "Scope 'Project' " +
         "demands a registered projectId: pass one of the registered aliases, or omit it and the caller's " +
         "working directory picks the registered project automatically (auto-tag) - the MCP server inherits " +
         "the cwd of the client that launched it, so start it from the project root; an unknown projectId is " +
@@ -45,6 +48,8 @@ internal sealed class RememberTool(
         double importance = 0.5,
         [Description("Tome the memory belongs to. Writes are tome-bound: passing tome is how a write lands in another tome you own; omit it to write into your resolved tome. The response echoes where the memory landed.")]
         string? tome = null,
+        [Description("Guid string of the memory this write replaces. The target must exist and be Active in the landed tome, or the call is rejected with nothing applied. Reach for it when a nearDuplicate in the response is the same fact restated.")]
+        string? supersedes = null,
         CancellationToken cancellationToken = default)
     {
         var (scopeValue, scopeError) = EnumParams.ParseRequired<MemoryScope>(scope, nameof(scope));
@@ -116,6 +121,20 @@ internal sealed class RememberTool(
             return Task.FromResult(ToolResults.Failure(tomeError.NothingApplied()));
         }
 
+        Guid? supersededTarget = null;
+        if (supersedes is not null)
+        {
+            if (!Guid.TryParseExact(supersedes, "D", out var parsedSupersedes))
+            {
+                return Task.FromResult(ToolResults.Failure(new ToolError(
+                    ToolErrorCodes.InvalidRequest,
+                    $"supersedes: '{supersedes}' is not a canonical UUID - pass the id exactly as returned by a previous memory tool call.",
+                    nameof(supersedes)).NothingApplied()));
+            }
+
+            supersededTarget = parsedSupersedes;
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
@@ -130,6 +149,7 @@ internal sealed class RememberTool(
                 SessionId = sessionId,
                 Tags = tags ?? [],
                 Importance = importance,
+                Supersedes = supersededTarget,
             }, ct);
 
             return ToolResults.Success(new RememberView
@@ -144,6 +164,14 @@ internal sealed class RememberTool(
                 Tags = result.Record.Tags,
                 SupersededExisting = result.SupersededExisting,
                 SupersededMemoryId = result.SupersededId,
+                NearDuplicates = result.NearMatches.Count == 0
+                    ? null
+                    : [.. result.NearMatches.Select(match => new NearDuplicateView
+                      {
+                          MemoryId = match.MemoryId,
+                          Similarity = match.Similarity,
+                          Snippet = match.Snippet,
+                      })],
                 IdempotentReplay = result.IdempotentReplay,
                 MaintenancePending = result.MaintenancePending,
                 BodyChars = content.Length,

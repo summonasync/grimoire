@@ -6,6 +6,8 @@ public sealed record MemoryEngineOptions
 
     public double SessionTtlHours { get; init; } = 24;
 
+    public double NearDuplicateSimilarityThreshold { get; init; } = 0.80;
+
     public double DedupSimilarityThreshold { get; init; } = 0.92;
 
     public double RelatedSimilarityThreshold { get; init; } = 0.82;

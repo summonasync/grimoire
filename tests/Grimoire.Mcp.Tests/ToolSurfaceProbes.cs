@@ -22,7 +22,7 @@ internal static class ToolSurfaceProbes
         session.Embeddings.Register("snapshot probe standing fact", [1f, 0, 0]);
         session.Embeddings.Register("snapshot probe superseded fact", [0f, 1, 0]);
         session.Embeddings.Register("snapshot probe superseded fact v2", [0f, 1, 0.05f]);
-        session.Embeddings.Register("snapshot probe fresh fact", [0f, 0, 1]);
+        session.Embeddings.Register("snapshot probe fresh fact", [1f, 0.7f, 0]);
         session.Embeddings.Register("snapshot probe journal note", [0f, 1, 1]);
         session.Embeddings.Register("snapshot probe disposable note", [1f, 1, 0]);
 
