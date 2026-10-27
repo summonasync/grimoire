@@ -2,4 +2,8 @@ using Grimoire.Core;
 
 namespace Grimoire.Api.Querying;
 
-public sealed record ParsedMemoryQuery(IReadOnlyList<MemoryStatus> Statuses, MemoryFilter Filter, int Limit);
+public sealed record ParsedMemoryQuery(
+    IReadOnlyList<MemoryStatus> Statuses,
+    MemoryFilter Filter,
+    int Limit,
+    IReadOnlyList<string>? ProjectedKeys = null);

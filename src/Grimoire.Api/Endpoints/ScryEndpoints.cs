@@ -1,4 +1,5 @@
 using System.Net;
+using Grimoire.Api.Contracts;
 using Grimoire.Api.Querying;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -21,7 +22,15 @@ internal static class ScryEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, ex.Code, ex.Message);
             }
 
-            return Results.Ok(await scry.RunAsync(parsed, cancellationToken));
+            var response = await scry.RunAsync(parsed, cancellationToken);
+            return Results.Ok(parsed.ProjectedKeys is { } keys
+                ? new ProjectedScryResponse(
+                    response.Tomes,
+                    response.Attribution,
+                    response.Count,
+                    [.. response.Items.Select(item => ScryItemProjection.Project(item, keys))],
+                    response.ElapsedMs)
+                : response);
         });
     }
 }

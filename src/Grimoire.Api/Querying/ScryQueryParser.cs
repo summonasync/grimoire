@@ -41,7 +41,8 @@ public static class ScryQueryParser
             [.. tomes.Distinct(StringComparer.Ordinal).OrderBy(tome => tome, StringComparer.Ordinal)],
             query.IncludeJournal ?? false,
             attribution,
-            query.Limit ?? DefaultLimit);
+            query.Limit ?? DefaultLimit,
+            FieldsParam.Resolve(query.Fields, ScryItemProjection.Surface));
     }
 
     private static ScryAttribution ParseAttribution(string? raw)

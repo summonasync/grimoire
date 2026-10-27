@@ -25,7 +25,8 @@ public static class MemoryQueryParser
                 SessionId = query.SessionId,
                 Tome = ParseTome(query.Tome),
             },
-            Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit));
+            Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit),
+            FieldsParam.Resolve(query.Fields, MemoryRecordProjection.Surface));
     }
 
     private static IReadOnlyList<MemoryStatus> ParseStatuses(string? raw)
