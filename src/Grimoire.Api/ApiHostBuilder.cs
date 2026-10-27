@@ -62,7 +62,7 @@ public static class ApiHostBuilder
             memories,
             new MemoryEditor(store, embeddings, clock),
             new CorrectionService(store, clock, engineOptions),
-            new MemoryQueryRunner(store, embeddings),
+            new MemoryQueryRunner(store, embeddings, engineOptions),
             store,
             tomeResolver,
             new ProjectTagResolver(services.GetService<IProjectRegistry>() ?? new ProjectRegistry([])),

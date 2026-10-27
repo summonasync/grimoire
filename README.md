@@ -126,6 +126,26 @@ Wire an agent to the memory (stdio MCP):
 }
 ```
 
+When a crew of agents shares one memory, give every session its own actor.
+`GRIMOIRE_ACTOR` is `<alias>` or `<alias>+<vendor>`, and each agent gets a
+launcher that sets it before the CLI starts — `Gandalf.cmd` sets
+`GRIMOIRE_ACTOR=Gandalf+claude`, one such wrapper per crew member:
+
+```bat
+@echo off
+set GRIMOIRE_ACTOR=Gandalf+claude
+set GRIMOIRE_TOME=crew
+claude
+```
+
+Set `GRIMOIRE_TOME` too — one kebab-case tome key for the whole crew. Without
+it the tome resolves from each actor's alias and the crew forks into one tome
+per agent; the explicit key keeps every agent in one tome with distinct
+actors. A session started outside its launcher never sees the per-agent
+value: it writes under the shared actor — the machine-level `GRIMOIRE_ACTOR`
+when one is set, the client's default attribution otherwise. Restarting it
+through the launcher fixes attribution for everything written afterwards.
+
 ## Distribution
 
 The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs
@@ -183,6 +203,14 @@ score = similarity × 0.5 ^ (age_days / halfLife(scope)) × (0.5 + 0.5 × import
 Half-lives per scope: session 0.5d, project 30d, global 90d, personal 180d.
 All defaults live in `~/.grimoire/config.json`, overridable with
 `GRIMOIRE_*` env vars.
+
+Reads narrow with `since`/`until` and `actor` — the same parameters on
+`memory_list`, `memory_recall` and the loopback `GET /api/memories`.
+Timestamps are ISO-8601; a date-only value means midnight local time, and
+`until` is exclusive — `until=2026-10-27` is everything written before that
+day. The `actor` filter matches the full string when it carries a vendor
+(`Radim+claude` pins one writer) and the alias part otherwise (`Radim` also
+matches `Radim+claude`, case-insensitive).
 
 Standing rules, enforced from day one:
 

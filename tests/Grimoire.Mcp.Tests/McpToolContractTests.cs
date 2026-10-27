@@ -47,11 +47,11 @@ public sealed class McpToolContractTests
     {
         var data = new TheoryData<string, string[], string[]>();
         data.Add("memory_remember", ["content", "scope"], ["kind", "projectId", "sessionId", "tags", "importance", "tome", "supersedes"]);
-        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "limit", "tome", "fields", "compact"]);
+        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "since", "until", "actor", "limit", "tome", "fields", "compact"]);
         data.Add("memory_forget", ["memoryId", "reason"], ["tome"]);
         data.Add("memory_restore", ["memoryId", "reason"], ["tome"]);
         data.Add("memory_history", ["memoryId"], ["tome"]);
-        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit", "tome", "fields", "compact"]);
+        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "since", "until", "actor", "limit", "tome", "fields", "compact"]);
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
@@ -87,11 +87,17 @@ public sealed class McpToolContractTests
         data.Add("memory_recall", "query", "string");
         data.Add("memory_recall", "limit", "integer");
         data.Add("memory_recall", "tome", "string");
+        data.Add("memory_recall", "since", "string");
+        data.Add("memory_recall", "until", "string");
+        data.Add("memory_recall", "actor", "string");
         data.Add("memory_forget", "memoryId", "string");
         data.Add("memory_restore", "memoryId", "string");
         data.Add("memory_restore", "reason", "string");
         data.Add("memory_history", "memoryId", "string");
         data.Add("memory_list", "limit", "integer");
+        data.Add("memory_list", "since", "string");
+        data.Add("memory_list", "until", "string");
+        data.Add("memory_list", "actor", "string");
         data.Add("memory_brief", "scopes", "array");
         data.Add("memory_brief", "factsPerScope", "integer");
         data.Add("memory_scry", "query", "string");

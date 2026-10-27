@@ -130,6 +130,11 @@ internal sealed class FakeMemoryStore : IMemoryStore
             return false;
         }
 
+        if (filter.Statuses.Count > 0 && !filter.Statuses.Contains(record.Status))
+        {
+            return false;
+        }
+
         if (filter.Tags.Count > 0 && !record.Tags.Any(filter.Tags.Contains))
         {
             return false;

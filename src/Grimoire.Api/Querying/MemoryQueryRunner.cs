@@ -2,8 +2,10 @@ using Grimoire.Core;
 
 namespace Grimoire.Api.Querying;
 
-public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider embeddings)
+public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider embeddings, MemoryEngineOptions? options = null)
 {
+    private readonly MemoryEngineOptions _options = options ?? new();
+
     public async Task<IReadOnlyList<MemoryRecord>> RunAsync(string? queryText, ParsedMemoryQuery parsed, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(parsed);
@@ -17,8 +19,7 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
         var merged = new List<VectorMatch>();
         foreach (var status in parsed.Statuses)
         {
-            var matches = await store.SearchAsync(vector, parsed.Filter with { Status = status }, parsed.Limit, cancellationToken);
-            merged.AddRange(matches);
+            merged.AddRange(await SearchAsync(vector, parsed.Filter with { Status = status }, parsed.Limit, cancellationToken));
         }
 
         return [.. merged
@@ -26,6 +27,25 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
             .ThenBy(match => match.Record.Id)
             .Take(parsed.Limit)
             .Select(match => match.Record)];
+    }
+
+    private async Task<IReadOnlyList<VectorMatch>> SearchAsync(
+        ReadOnlyMemory<float> vector,
+        MemoryFilter filter,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var window = limit * Math.Max(_options.RecallOversampling, 1);
+        var matches = await store.SearchAsync(vector, filter, window, cancellationToken);
+        var kept = matches.Where(match => filter.Matches(match.Record)).ToArray();
+
+        if (kept.Length < limit && matches.Count == window)
+        {
+            var escalated = await store.SearchAsync(vector, filter, window * 2, cancellationToken);
+            kept = [.. escalated.Where(match => filter.Matches(match.Record))];
+        }
+
+        return kept;
     }
 
     private async Task<IReadOnlyList<MemoryRecord>> ListAsync(ParsedMemoryQuery parsed, CancellationToken cancellationToken)
@@ -38,6 +58,7 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
         }
 
         return [.. merged
+            .Where(parsed.Filter.Matches)
             .OrderByDescending(record => record.CreatedAt)
             .ThenByDescending(record => record.Id)
             .Take(parsed.Limit)];
