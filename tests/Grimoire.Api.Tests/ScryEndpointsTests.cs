@@ -287,6 +287,86 @@ public class ScryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
             .ShouldBe(["alpha", "squad"]);
     }
 
+    [Fact]
+    public async Task Scry_WithFields_ProjectsHitsToMemoryIdScorePlusTheRequestedKeys()
+    {
+        factory.Reset();
+        Seed("alpha squad decision", tome: "alpha");
+
+        var body = await ScryAsync("alpha squad decision", "fields=content");
+        var hit = body.GetProperty("items")[0];
+
+        hit.EnumerateObject().Select(property => property.Name).ShouldBe(["memoryId", "score", "content"]);
+        hit.GetProperty("content").GetString().ShouldBe("alpha squad decision");
+        hit.GetProperty("memoryId").GetString().ShouldNotBeNullOrWhiteSpace();
+        hit.GetProperty("score").GetDouble().ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Scry_WithFields_MakesSimilarityAndMatchedTermsSelectable()
+    {
+        factory.Reset();
+        Seed("alpha squad decision", tome: "alpha", tags: ["ops-crew"]);
+        factory.Embeddings.Vectors["alpha ops"] = [1f, 0f];
+
+        var body = await ScryAsync("alpha ops", "fields=similarity,matchedTerms,tome");
+        var hit = body.GetProperty("items")[0];
+
+        hit.EnumerateObject().Select(property => property.Name)
+            .ShouldBe(["memoryId", "score", "similarity", "matchedTerms", "tome"]);
+        hit.GetProperty("matchedTerms").EnumerateArray().Select(span => span.GetProperty("term").GetString())
+            .ShouldBe(["alpha", "ops"]);
+        hit.GetProperty("similarity").GetDouble().ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Scry_WithUnknownField_Returns400NamingTheAllowedSet()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/scry?q=anything&fields=aura");
+        var (code, message) = await ReadErrorDetail(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+        message.ShouldContain("aura");
+        message.ShouldContain("Allowed fields:");
+        message.ShouldContain("matchedTerms");
+    }
+
+    [Theory]
+    [InlineData("content,,createdAt")]
+    [InlineData("content,%20,createdAt")]
+    [InlineData(",")]
+    public async Task Scry_WithEmptyFieldEntries_Returns400(string fields)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/scry?q=anything&fields={fields}");
+        var (code, _) = await ReadErrorDetail(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+    }
+
+    [Fact]
+    public async Task Scry_WithoutFields_ReturnsTheUnchangedFullHitShape()
+    {
+        factory.Reset();
+        Seed("alpha squad decision", tome: "alpha", actor: MemoryActor.Agent("bob", "qwen"));
+
+        var body = await ScryAsync("alpha squad decision", "attribution=light");
+        var hit = body.GetProperty("items")[0];
+
+        hit.EnumerateObject().Select(property => property.Name).ShouldBe(
+        [
+            "memoryId", "content", "tome", "scope", "kind", "actor", "tags", "matchedTerms",
+            "projectId", "similarity", "score", "createdAt",
+        ]);
+        body.EnumerateObject().Select(property => property.Name)
+            .ShouldBe(["tomes", "attribution", "count", "items", "elapsedMs"]);
+    }
+
     private void Seed(
         string content,
         string tome = TomeKey.DefaultTome,
@@ -312,5 +392,13 @@ public class ScryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         await using var stream = await response.Content.ReadAsStreamAsync();
         var body = await JsonSerializer.DeserializeAsync<JsonElement>(stream, TestJson.Options);
         return body.GetProperty("error").GetProperty("code").GetString()!;
+    }
+
+    private static async Task<(string code, string message)> ReadErrorDetail(HttpResponseMessage response)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        var body = (await JsonSerializer.DeserializeAsync<JsonElement>(stream, TestJson.Options))!;
+        var error = body.GetProperty("error");
+        return (error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
     }
 }

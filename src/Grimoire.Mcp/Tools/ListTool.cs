@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using Grimoire.Core;
 using Grimoire.Mcp.Projections;
 using ModelContextProtocol.Protocol;
@@ -15,8 +16,21 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
     public const string Description =
         "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and " +
         "tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already " +
-        "retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes " +
-        "the tome listed.";
+        "retracted. Pass fields or compact to project each entry down to the keys you need - the cheap path for " +
+        "periodic scans. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response " +
+        "echoes the tome listed.";
+
+    private static readonly ReadProjectionSurface Surface = new()
+    {
+        AllowedKeys =
+        [
+            "content", "scope", "kind", "status", "actor", "tags", "projectId", "sessionId",
+            "importance", "accessCount", "supersededBy", "tombstoneReason", "expiresAt",
+            "createdAt", "lastAccessedAt", "bodyChars",
+        ],
+        AlwaysOnKeys = ["memoryId"],
+        CompactKeys = ["memoryId", "content", "tags", "createdAt"],
+    };
 
     public Task<CallToolResult> List(
         [Description("Restrict to one scope.")]
@@ -38,6 +52,10 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
         int limit = 50,
         [Description("Tome to browse; omit for your resolved tome, or name another tome you own to audit it. The response echoes the tome listed.")]
         string? tome = null,
+        [Description("Project each entry to these camelCase keys, e.g. [\"content\", \"createdAt\"]; memoryId is always included and an unknown field is rejected naming the allowed set.")]
+        string[]? fields = null,
+        [Description("Project each entry to the digest shape (memoryId, content, tags, createdAt) - the cheap path for periodic scans; mutually exclusive with fields.")]
+        bool compact = false,
         CancellationToken cancellationToken = default)
     {
         var (scopeFilter, scopeError) = EnumParams.Parse<MemoryScope>(scope, nameof(scope));
@@ -71,6 +89,19 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
             return Task.FromResult(ToolResults.Failure(tomeError));
         }
 
+        IReadOnlyList<string>? projectedKeys;
+        try
+        {
+            projectedKeys = ReadProjection.Resolve(fields, compact, Surface);
+        }
+        catch (ReadProjectionValidationException projectionError)
+        {
+            return Task.FromResult(ToolResults.Failure(new ToolError(
+                ToolErrorCodes.InvalidRequest,
+                projectionError.Message,
+                nameof(fields))));
+        }
+
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
@@ -87,10 +118,20 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
             }, ct);
 
             var entries = records.Select(ToEntry).ToArray();
-            return ToolResults.Success(new ListView
+            if (projectedKeys is null)
+            {
+                return ToolResults.Success(new ListView
+                {
+                    Tome = resolvedTome,
+                    Memories = entries,
+                    Count = entries.Length,
+                });
+            }
+
+            return ToolResults.Success(new ProjectedListView
             {
                 Tome = resolvedTome,
-                Memories = entries,
+                Memories = [.. entries.Select(entry => ProjectEntry(entry, projectedKeys))],
                 Count = entries.Length,
             });
         }, cancellationToken);
@@ -118,5 +159,36 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
             LastAccessedAt = record.LastAccessedAt,
             BodyChars = record.Content.Length,
         };
+    }
+
+    private static IReadOnlyDictionary<string, object?> ProjectEntry(MemoryListEntry entry, IReadOnlyList<string> keys)
+    {
+        var projected = new Dictionary<string, object?>(keys.Count, StringComparer.Ordinal);
+        foreach (var key in keys)
+        {
+            projected[key] = key switch
+            {
+                "memoryId" => entry.MemoryId,
+                "content" => entry.Content,
+                "scope" => entry.Scope,
+                "kind" => entry.Kind,
+                "status" => entry.Status,
+                "actor" => entry.Actor,
+                "tags" => entry.Tags,
+                "projectId" => entry.ProjectId,
+                "sessionId" => entry.SessionId,
+                "importance" => entry.Importance,
+                "accessCount" => entry.AccessCount,
+                "supersededBy" => entry.SupersededBy,
+                "tombstoneReason" => entry.TombstoneReason,
+                "expiresAt" => entry.ExpiresAt,
+                "createdAt" => entry.CreatedAt,
+                "lastAccessedAt" => entry.LastAccessedAt,
+                "bodyChars" => entry.BodyChars,
+                _ => throw new UnreachableException($"key '{key}' passed validation but has no projection."),
+            };
+        }
+
+        return projected;
     }
 }

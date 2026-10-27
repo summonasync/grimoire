@@ -9,4 +9,5 @@ public sealed record MemoryListQuery(
     string? ProjectId,
     string? SessionId,
     string? Tome,
-    int? Limit);
+    int? Limit,
+    string? Fields);
