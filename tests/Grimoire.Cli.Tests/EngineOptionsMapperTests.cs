@@ -13,6 +13,7 @@ public sealed class EngineOptionsMapperTests
         var options = EngineOptionsMapper.ToEngineOptions(new MemoryOptions
         {
             SessionTtlHours = 6,
+            NearDuplicateSimilarityThreshold = 0.85,
             DedupSimilarityThreshold = 0.8,
             RelatedSimilarityThreshold = 0.75,
             RecallForeignProjectFactor = 0.75,
@@ -23,6 +24,7 @@ public sealed class EngineOptionsMapperTests
 
         options.DefaultTome.ShouldBe("ainora-luna");
         options.SessionTtlHours.ShouldBe(6);
+        options.NearDuplicateSimilarityThreshold.ShouldBe(0.85);
         options.DedupSimilarityThreshold.ShouldBe(0.8);
         options.RelatedSimilarityThreshold.ShouldBe(0.75);
         options.RecallForeignProjectFactor.ShouldBe(0.75);

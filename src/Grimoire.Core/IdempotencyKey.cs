@@ -16,6 +16,7 @@ public static class IdempotencyKey
         AppendPart(payload, request.ProjectId ?? string.Empty);
         AppendPart(payload, request.SessionId ?? string.Empty);
         AppendPart(payload, request.Content);
+        AppendPart(payload, request.Supersedes?.ToString() ?? string.Empty);
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload.ToString()))).ToLowerInvariant();
     }

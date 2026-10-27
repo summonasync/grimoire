@@ -7,6 +7,7 @@ public sealed record UpdateSettingsRequest
     public static readonly IReadOnlyList<string> EditableKeys =
     [
         "memory.sessionTtlHours",
+        "memory.nearDuplicateSimilarityThreshold",
         "memory.dedupSimilarityThreshold",
         "memory.relatedSimilarityThreshold",
         "memory.tombstoneRetentionDays",
@@ -16,6 +17,8 @@ public sealed record UpdateSettingsRequest
     ];
 
     public double? SessionTtlHours { get; init; }
+
+    public double? NearDuplicateSimilarityThreshold { get; init; }
 
     public double? DedupSimilarityThreshold { get; init; }
 

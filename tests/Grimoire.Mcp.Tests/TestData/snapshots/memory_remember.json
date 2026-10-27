@@ -1,6 +1,6 @@
 {
   "contract": {
-    "description": "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - with your actor provenance on it. Call it when the human states a preference, decision or correction: write durable facts in English and keep the human's verbatim quotes as spoken; a near-duplicate supersedes the older record, an identical write replays it, and never store secrets. Scope 'Project' demands a registered projectId: pass one of the registered aliases, or omit it and the caller's working directory picks the registered project automatically (auto-tag) - the MCP server inherits the cwd of the client that launched it, so start it from the project root; an unknown projectId is rejected with the registered set, and on Global/Personal projectId stays optional provenance.",
+    "description": "Write a durable memory and get back the stored record - id, tome, scope, kind and supersede outcome - with your actor provenance on it. Call it when the human states a preference, decision or correction: write durable facts in English and keep the human's verbatim quotes as spoken; a near-duplicate supersedes the older record, an identical write replays it, and never store secrets. When the response carries nearDuplicates, the write landed close to existing memories - if one of them is the same fact restated, re-remember with supersedes set to its memoryId to replace it instead of keeping both. Scope 'Project' demands a registered projectId: pass one of the registered aliases, or omit it and the caller's working directory picks the registered project automatically (auto-tag) - the MCP server inherits the cwd of the client that launched it, so start it from the project root; an unknown projectId is rejected with the registered set, and on Global/Personal projectId stays optional provenance.",
     "destructive": false,
     "idempotent": false,
     "input": {
@@ -27,6 +27,13 @@
           "type": "string"
         },
         "sessionId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supersedes": {
           "default": null,
           "type": [
             "string",
@@ -65,6 +72,13 @@
     "kind": "string",
     "maintenancePending": "boolean",
     "memoryId": "string",
+    "nearDuplicates": {
+      "arrayOf": {
+        "memoryId": "string",
+        "similarity": "number",
+        "snippet": "string"
+      }
+    },
     "projectId": "string",
     "scope": "string",
     "supersededExisting": "boolean",

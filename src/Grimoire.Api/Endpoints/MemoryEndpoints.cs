@@ -115,6 +115,7 @@ internal static class MemoryEndpoints
                     Tags = request.Tags,
                     Importance = request.Importance,
                     Sources = request.Sources,
+                    Supersedes = request.Supersedes,
                 }, cancellationToken);
 
                 return Results.Created(
@@ -124,7 +125,15 @@ internal static class MemoryEndpoints
                         tome,
                         result.SupersededId,
                         result.IdempotentReplay,
-                        result.MaintenancePending));
+                        result.MaintenancePending)
+                    {
+                        NearDuplicates = result.NearMatches.Count == 0
+                            ? null
+                            : [.. result.NearMatches.Select(match => new NearDuplicateResponse(
+                                match.MemoryId,
+                                match.Similarity,
+                                match.Snippet))],
+                    });
             }
             catch (ArgumentException ex)
             {

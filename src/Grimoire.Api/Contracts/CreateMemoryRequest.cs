@@ -21,4 +21,6 @@ public sealed record CreateMemoryRequest
     public double Importance { get; init; } = 0.5;
 
     public IReadOnlyList<Guid> Sources { get; init; } = [];
+
+    public Guid? Supersedes { get; init; }
 }
