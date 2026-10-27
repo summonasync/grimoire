@@ -14,10 +14,10 @@ public static class ReadProjection
             throw new ReadProjectionValidationException("fields and compact are mutually exclusive; pass one of them.");
         }
 
-        var allowed = new HashSet<string>(surface.AllowedKeys, StringComparer.Ordinal);
+        var acceptable = new HashSet<string>(surface.AllowedKeys.Concat(surface.AlwaysOnKeys), StringComparer.Ordinal);
         foreach (var field in fields)
         {
-            if (!allowed.Contains(field))
+            if (!acceptable.Contains(field))
             {
                 throw new ReadProjectionValidationException(
                     $"Unknown field '{field}'. Allowed fields: {string.Join(", ", surface.AllowedKeys)}.");

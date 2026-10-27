@@ -90,4 +90,18 @@ public sealed class ReadProjectionTests
         Should.Throw<ReadProjectionValidationException>(() =>
             ReadProjection.Resolve([field], compact: false, Surface));
     }
+
+    [Fact]
+    public void Resolve_AlwaysOnFieldOutsideAllowedSet_IsAccepted()
+    {
+        ReadProjectionSurface sparse = new()
+        {
+            AllowedKeys = ["content"],
+            AlwaysOnKeys = ["memoryId"],
+            CompactKeys = ["memoryId", "content"],
+        };
+
+        ReadProjection.Resolve(["memoryId"], compact: false, sparse)
+            .ShouldBe(["memoryId"]);
+    }
 }
