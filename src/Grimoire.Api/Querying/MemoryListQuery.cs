@@ -10,4 +10,7 @@ public sealed record MemoryListQuery(
     string? SessionId,
     string? Tome,
     int? Limit,
+    string? Since,
+    string? Until,
+    string? Actor,
     string? Fields);

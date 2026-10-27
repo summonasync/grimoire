@@ -14,6 +14,8 @@ public sealed class FakeMemoryStore : IMemoryStore
 
     public int ListCallCount { get; private set; }
 
+    public int SearchCallCount { get; private set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public void Seed(MemoryRecord record, params float[] vector) => _points[record.Id] = new StoredPoint(record, vector);
@@ -59,6 +61,7 @@ public sealed class FakeMemoryStore : IMemoryStore
 
     public Task<IReadOnlyList<VectorMatch>> SearchAsync(ReadOnlyMemory<float> vector, MemoryFilter filter, int limit, CancellationToken cancellationToken)
     {
+        SearchCallCount++;
         IReadOnlyList<VectorMatch> matches = Matching(filter)
             .Select(point => new VectorMatch
             {
@@ -125,6 +128,11 @@ public sealed class FakeMemoryStore : IMemoryStore
         if (filter.Status is not null)
         {
             query = query.Where(point => point.Record.Status == filter.Status);
+        }
+
+        if (filter.Statuses.Count > 0)
+        {
+            query = query.Where(point => filter.Statuses.Contains(point.Record.Status));
         }
 
         if (filter.Tags.Count > 0)

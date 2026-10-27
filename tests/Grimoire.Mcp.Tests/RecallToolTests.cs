@@ -407,4 +407,45 @@ public sealed class RecallToolTests
             ["projectId"] = projectId,
         });
     }
+
+    [Fact]
+    public async Task Recall_SinceFilter_DropsMatchesOutsideTheWindow()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("old decision", VectorA);
+        session.Embeddings.Register("new decision", VectorA);
+        session.Embeddings.Register("decision", VectorA);
+        await Remember(session, "old decision", "grimoire");
+        session.Clock.UtcNow = session.Clock.UtcNow.AddDays(3);
+        await Remember(session, "new decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "decision",
+            ["since"] = "2026-10-19",
+        });
+
+        result.ShouldSucceed();
+        var matches = result.Payload().GetProperty("matches").EnumerateArray().ToArray();
+        matches.Length.ShouldBe(1);
+        matches[0].GetProperty("content").GetString().ShouldBe("new decision");
+    }
+
+    [Fact]
+    public async Task Recall_UnparsableUntil_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["until"] = "eventually",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("until");
+        message.ShouldContain("'until'");
+        message.ShouldContain("eventually");
+    }
 }

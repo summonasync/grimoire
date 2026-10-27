@@ -20,5 +20,11 @@ public sealed record RecallQuery
 
     public string? SessionId { get; init; }
 
+    public DateTimeOffset? CreatedAfter { get; init; }
+
+    public DateTimeOffset? CreatedBefore { get; init; }
+
+    public string? Actor { get; init; }
+
     public int Limit { get; init; } = 5;
 }

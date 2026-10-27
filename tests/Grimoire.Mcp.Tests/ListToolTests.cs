@@ -356,6 +356,106 @@ public sealed class ListToolTests
         miss.Payload().GetProperty("count").GetInt32().ShouldBe(0);
     }
 
+    [Fact]
+    public async Task List_SinceAndUntil_BoundTheCreationWindow()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("older", new float[] { 1, 0, 0 });
+        session.Embeddings.Register("newer", new float[] { 0, 1, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "older",
+            ["scope"] = "Global",
+        });
+        session.Clock.UtcNow = session.Clock.UtcNow.AddDays(3);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "newer",
+            ["scope"] = "Global",
+        });
+
+        var recent = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["since"] = "2026-10-19",
+        });
+        var early = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["until"] = "2026-10-19",
+        });
+
+        recent.ShouldSucceed();
+        recent.Payload().GetProperty("count").GetInt32().ShouldBe(1);
+        recent.Payload().GetProperty("memories")[0].GetProperty("content").GetString().ShouldBe("newer");
+        early.ShouldSucceed();
+        early.Payload().GetProperty("count").GetInt32().ShouldBe(1);
+        early.Payload().GetProperty("memories")[0].GetProperty("content").GetString().ShouldBe("older");
+    }
+
+    [Fact]
+    public async Task List_ActorFilter_MatchesTheWriterAlias()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("first", new float[] { 1, 0, 0 });
+        session.Embeddings.Register("second", new float[] { 0, 1, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "first",
+            ["scope"] = "Global",
+        });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "second",
+            ["scope"] = "Global",
+        });
+
+        var own = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["actor"] = McpTestSession.ClientActor,
+        });
+        var stranger = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["actor"] = "someone-else",
+        });
+
+        own.ShouldSucceed();
+        own.Payload().GetProperty("count").GetInt32().ShouldBe(2);
+        stranger.ShouldSucceed();
+        stranger.Payload().GetProperty("count").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task List_UnparsableSince_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["since"] = "not-a-date",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("since");
+        message.ShouldContain("'since'");
+        message.ShouldContain("not-a-date");
+    }
+
+    [Fact]
+    public async Task List_SinceLaterThanUntil_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["since"] = "2026-10-20",
+            ["until"] = "2026-10-19",
+        });
+
+        var (code, _, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("since");
+    }
+
     private static string[] KeysOf(JsonElement entry)
     {
         return [.. entry.EnumerateObject().Select(property => property.Name)];

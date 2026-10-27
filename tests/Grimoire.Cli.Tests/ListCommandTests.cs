@@ -35,7 +35,10 @@ public sealed class ListCommandTests : IDisposable
     [Fact]
     public async Task List_FlowsScopeTagsAndLimit()
     {
-        _host.Store.Add("tagged", [1f, 0f], tags: ["a"]);
+        _host.Store.Add("first", [1f, 0f], tags: ["a"]);
+        _host.Store.Add("second", [1f, 0f], tags: ["a"]);
+        _host.Store.Add("third", [1f, 0f], tags: ["a"]);
+        _host.Store.Add("fourth", [1f, 0f], tags: ["a"]);
 
         var code = await _host.RunAsync("list", "--scope", "project,global", "--tag", "a,b", "--limit", "3");
 
@@ -43,7 +46,12 @@ public sealed class ListCommandTests : IDisposable
         var filter = _host.Store.ListedFilters.ShouldHaveSingleItem();
         filter.Scopes.ShouldBe([MemoryScope.Project, MemoryScope.Global]);
         filter.Tags.ShouldBe(["a", "b"]);
-        filter.Limit.ShouldBe(3);
+        filter.Limit.ShouldBeNull();
+        var output = _host.Output.ToString();
+        output.ShouldContain("first");
+        output.ShouldContain("second");
+        output.ShouldContain("third");
+        output.ShouldNotContain("fourth");
     }
 
     [Fact]

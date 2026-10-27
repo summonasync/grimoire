@@ -19,9 +19,9 @@ internal sealed class RecallTool(
     public const string Description =
         "Search memory before you assume - ranked semantic matches over the active records of one tome; " +
         "superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior " +
-        "context could change the answer; narrow with scope, projectId or tags before raising limit, and pass tome " +
-        "to read another tome you own, memory_scry answers across tomes. Pass fields or compact to trim hits to " +
-        "the keys you need - the cheap path for recurring reads.";
+        "context could change the answer; narrow with scope, projectId, tags or the since/until/actor filters " +
+        "before raising limit, and pass tome to read another tome you own, memory_scry answers across tomes. " +
+        "Pass fields or compact to trim hits to the keys you need - the cheap path for recurring reads.";
 
     private static readonly ReadProjectionSurface Surface = new()
     {
@@ -49,6 +49,12 @@ internal sealed class RecallTool(
         string? sessionId = null,
         [Description("Restrict to memories carrying any of these tags.")]
         string[]? tags = null,
+        [Description("Only records created at or after this; yyyy-MM-dd means local midnight, an ISO-8601 instant is used as-is.")]
+        string? since = null,
+        [Description("Only records created before this; exclusive; yyyy-MM-dd means local midnight, an ISO-8601 instant is used as-is.")]
+        string? until = null,
+        [Description("Only records written by this actor: an alias alone matches any vendor, alias+vendor pins one exactly.")]
+        string? actor = null,
         [Description("Maximum matches to return, default 5.")]
         int limit = 5,
         [Description("Tome to search; omit for your resolved tome, or name another tome you own to read it. The response echoes the tome actually searched. For cross-tome context without leaving your tome use memory_scry.")]
@@ -87,6 +93,12 @@ internal sealed class RecallTool(
                 nameof(limit))));
         }
 
+        var (range, rangeError) = DateParams.Parse(since, until);
+        if (rangeError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(rangeError));
+        }
+
         if (TomeParams.Validate(tome, nameof(tome)) is { } tomeError)
         {
             return Task.FromResult(ToolResults.Failure(tomeError));
@@ -118,6 +130,9 @@ internal sealed class RecallTool(
                 ProjectId = projectId,
                 CallerProjectId = projects.ResolveByPath(callerPaths.Path)?.Alias,
                 SessionId = sessionId,
+                CreatedAfter = range.Since,
+                CreatedBefore = range.Until,
+                Actor = actor,
                 Limit = limit,
             }, ct);
 
