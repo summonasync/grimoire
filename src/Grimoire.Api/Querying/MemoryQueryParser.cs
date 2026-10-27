@@ -30,7 +30,8 @@ public static class MemoryQueryParser
                 CreatedBefore = range.Until,
                 Actor = query.Actor,
             },
-            Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit));
+            Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit),
+            FieldsParam.Resolve(query.Fields, MemoryRecordProjection.Surface));
     }
 
     private static CreatedAtRange ParseRange(string? since, string? until)

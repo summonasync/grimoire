@@ -32,7 +32,7 @@ export function ScryPage() {
       <PageHeader title="Scry" description="Search across tomes. See what others remember." />
 
       <div className="panel flex items-center gap-3 px-4 py-3">
-        <Icon name="search" className="size-5 shrink-0 text-accent" />
+        <Icon name="search" className="size-5 shrink-0 text-jade" />
         <input
           type="search"
           value={filters.query}

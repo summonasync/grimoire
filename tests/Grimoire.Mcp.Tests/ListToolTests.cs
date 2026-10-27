@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Grimoire.Core;
 using ModelContextProtocol.Protocol;
 
@@ -5,6 +6,13 @@ namespace Grimoire.Mcp.Tests;
 
 public sealed class ListToolTests
 {
+    private static readonly string[] AllowedFields =
+    [
+        "content", "scope", "kind", "status", "actor", "tags", "projectId", "sessionId",
+        "importance", "accessCount", "supersededBy", "tombstoneReason", "expiresAt",
+        "createdAt", "lastAccessedAt", "bodyChars",
+    ];
+
     [Fact]
     public async Task List_DefaultsToActiveRecordsOnly()
     {
@@ -146,6 +154,150 @@ public sealed class ListToolTests
         entry.GetProperty("kind").GetString().ShouldBe("Fact");
         entry.GetProperty("actor").GetString().ShouldBe(McpTestSession.ClientActor);
         entry.GetProperty("bodyChars").GetInt32().ShouldBe(content.Length);
+    }
+
+    [Fact]
+    public async Task List_Fields_ProjectEntriesToExactlyTheRequestedKeys()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        const string content = "The deploy pipeline gates on green tests";
+        session.Embeddings.Register(content, new float[] { 1, 0, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = content,
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["fields"] = new[] { "content", "createdAt" },
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.GetProperty("tome").GetString().ShouldBe(McpTestSession.ClientActor);
+        var entry = payload.GetProperty("memories")[0];
+        KeysOf(entry).ShouldBe(["memoryId", "content", "createdAt"], ignoreOrder: true);
+        entry.GetProperty("content").GetString().ShouldBe(content);
+        entry.GetProperty("createdAt").GetString().ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task List_Compact_ReturnsTheDigestKeySet()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("digest probe", new float[] { 1, 0, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "digest probe",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["compact"] = true,
+        });
+
+        result.ShouldSucceed();
+        var entry = result.Payload().GetProperty("memories")[0];
+        KeysOf(entry).ShouldBe(["memoryId", "content", "tags", "createdAt"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task List_EmptyFieldsArray_BehavesAsOmitted()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("full shape probe", new float[] { 1, 0, 0 });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "full shape probe",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["fields"] = Array.Empty<string>(),
+        });
+
+        result.ShouldSucceed();
+        var entry = result.Payload().GetProperty("memories")[0];
+        entry.TryGetProperty("status", out _).ShouldBeTrue();
+        entry.TryGetProperty("bodyChars", out _).ShouldBeTrue();
+        entry.TryGetProperty("importance", out _).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task List_UnknownField_ReturnsInvalidRequestNamingTheAllowedSet()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["fields"] = new[] { "content", "body" },
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("fields");
+        message.ShouldContain("body");
+        message.ShouldContain("Allowed fields:");
+        foreach (var field in AllowedFields)
+        {
+            message.ShouldContain(field);
+        }
+    }
+
+    [Fact]
+    public async Task List_FieldsWithCompact_ReturnsInvalidRequest()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["fields"] = new[] { "content" },
+            ["compact"] = true,
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("fields");
+        message.ShouldContain("mutually exclusive");
+    }
+
+    [Fact]
+    public async Task List_CompactPayload_StaysWithinSeventyPercentOfFull()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        for (var i = 0; i < FixtureContents.Length; i++)
+        {
+            session.Embeddings.Register(FixtureContents[i], FixtureVectors[i]);
+            await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+            {
+                ["content"] = FixtureContents[i],
+                ["scope"] = "Project",
+                ["projectId"] = "grimoire",
+                ["kind"] = "Fact",
+                ["tags"] = new[] { "periodic-scan" },
+            });
+            session.Clock.UtcNow = session.Clock.UtcNow.AddMinutes(1);
+        }
+
+        var full = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>());
+        var compact = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["compact"] = true,
+        });
+
+        full.ShouldSucceed();
+        compact.ShouldSucceed();
+        full.Payload().GetProperty("count").GetInt32().ShouldBe(FixtureContents.Length);
+
+        var fullSize = full.Text().Length;
+        var compactSize = compact.Text().Length;
+        compactSize.ShouldBeLessThanOrEqualTo((int)(fullSize * 0.7),
+            $"compact payload was {compactSize} chars against {fullSize} for the full payload");
     }
 
     [Fact]
@@ -303,4 +455,53 @@ public sealed class ListToolTests
         code.ShouldBe(ToolErrorCodes.InvalidRequest);
         param.ShouldBe("since");
     }
+
+    private static string[] KeysOf(JsonElement entry)
+    {
+        return [.. entry.EnumerateObject().Select(property => property.Name)];
+    }
+
+    private static readonly float[][] FixtureVectors =
+    [
+        [1f, 0f, 0f],
+        [0f, 1f, 0f],
+        [0f, 0f, 1f],
+        [-1f, 0f, 0f],
+        [0f, -1f, 0f],
+        [0f, 0f, -1f],
+        [0.7f, 0.7f, 0f],
+        [0.7f, -0.7f, 0f],
+        [-0.7f, 0.7f, 0f],
+        [0f, 0.7f, 0.7f],
+        [0.7f, 0f, 0.7f],
+        [0f, -0.7f, 0.7f],
+    ];
+
+    private static readonly string[] FixtureContents =
+    [
+        "We ship the indexer behind a feature flag and flip it per environment; a rollback is a flag flip, never " +
+        "a redeploy. The flag lives in the deploy manifest so no hotfix PR is needed, and reviews still apply.",
+        "Decision on the retry policy: idempotent handlers retry three times with jittered backoff, everything " +
+        "else fails fast and surfaces the error to the caller. Poison messages move to the parking lot queue.",
+        "The vector store keeps one collection per tome; cross-tome search is a deliberate scry call, never an " +
+        "accident. Embedding dimensions are pinned per model, and a dimension mismatch fails the upsert loudly.",
+        "Journal: migrated the staging cluster to the new storage node tonight. Latency stayed flat, the snapshot " +
+        "restore took eleven minutes, and the old node stays warm for a week in case the numbers drift.",
+        "Fact: the API gateway rejects payloads above one megabyte with a 413 and logs the caller alias, so " +
+        "oversized writes stay traceable without storing the body. Clients are expected to chunk large documents.",
+        "We agreed to keep migrations in a separate assembly so the runtime image never ships migration code. The " +
+        "runner is invoked explicitly during deploys, and every migration carries a reviewed down script.",
+        "Preference: error messages name the parameter that failed and the allowed set, never a bare validation " +
+        "string. Callers should fix their request from the message alone, and the log line mirrors the wire error.",
+        "Decision: the scheduler owns all timers and handlers stay passive. A handler that needs a delay asks the " +
+        "scheduler instead of spawning threads, and every job publishes a heartbeat so a stuck loop is visible.",
+        "The onboarding checklist now includes a smoke read of each face: list, recall and brief must answer on a " +
+        "fresh install before release. A face that errors blocks the release until the failure is triaged.",
+        "Fact: clock drift across the three workers stays under fifty milliseconds after the NTP fix, and the " +
+        "compaction sweep relies on that budget. If drift exceeds it the sweep logs a warning and defers.",
+        "Journal: traced the timeout spike to a cold embedding provider; the first call after an idle period paid " +
+        "a four second model load. We now send a warmup ping during service start, and the p99 fell back.",
+        "We keep the read path cache-free by contract: every read hits the store and bumps access stats, so the " +
+        "popularity signals stay honest. A cached face must bypass the stats bump and say so in its description.",
+    ];
 }

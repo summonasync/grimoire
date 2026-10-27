@@ -67,7 +67,7 @@ export function SettingsTuning() {
             className={cn(
               "rounded-lg px-3 py-1.5 text-sm transition-colors",
               tab === entry.id
-                ? "bg-accent-soft font-medium text-foreground ring-1 ring-accent/45"
+                ? "bg-jade/10 font-medium text-foreground ring-1 ring-jade/45"
                 : "text-muted hover:bg-foreground/5 hover:text-foreground",
             )}
           >

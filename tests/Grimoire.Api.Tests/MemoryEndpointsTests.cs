@@ -1206,6 +1206,81 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         (await ReadError(response)).code.ShouldBe("invalid_tome");
     }
 
+    [Fact]
+    public async Task List_WithFields_ProjectsEachItemToIdPlusTheRequestedKeys()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f], tags: ["ops-crew"]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories?fields=content,createdAt"));
+
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["tome", "count", "items"]);
+        var item = body.GetProperty("items")[0];
+        item.EnumerateObject().Select(property => property.Name).ShouldBe(["id", "content", "createdAt"]);
+        item.GetProperty("content").GetString().ShouldBe("projected note");
+        item.GetProperty("createdAt").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task List_WithExplicitIdField_KeepsIdSingle()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories?fields=id,content"));
+
+        body.GetProperty("items")[0].EnumerateObject().Select(property => property.Name)
+            .ShouldBe(["id", "content"]);
+    }
+
+    [Fact]
+    public async Task List_WithUnknownField_Returns400NamingTheAllowedSet()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/memories?fields=content,psychicVibes");
+        var (code, message) = await ReadError(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+        message.ShouldContain("psychicVibes");
+        message.ShouldContain("Allowed fields:");
+        message.ShouldContain("tombstoneReason");
+    }
+
+    [Theory]
+    [InlineData("content,,createdAt")]
+    [InlineData("content,%20,createdAt")]
+    [InlineData(",")]
+    public async Task List_WithEmptyFieldEntries_Returns400(string fields)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/api/memories?fields={fields}");
+        var (code, _) = await ReadError(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+    }
+
+    [Fact]
+    public async Task List_WithoutFields_ReturnsTheUnchangedFullRecordShape()
+    {
+        factory.Reset();
+        factory.Store.Seed("full shape note", [1f, 0f], tags: ["ops-crew"]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories"));
+        var item = body.GetProperty("items")[0];
+
+        item.EnumerateObject().Select(property => property.Name).ShouldBe(
+        [
+            "id", "content", "scope", "kind", "actor", "tome", "projectId", "sessionId", "tags",
+            "importance", "createdAt", "lastAccessedAt", "accessCount", "expiresAt", "status",
+            "supersededBy", "tombstoneReason", "tombstonedAt", "sources", "corrections", "idempotencyKey",
+        ]);
+    }
+
     private void RaceOnGet(int atCall, Action mutate)
     {
         factory.Store.OnGetAsync = () =>

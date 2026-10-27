@@ -37,7 +37,7 @@ interface EmptyStateProps {
 }
 
 const emptyStateActionClasses =
-  "mt-4 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
+  "mt-4 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-jade hover:text-jade focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60";
 
 export function EmptyState({
   icon = "spark",
@@ -95,7 +95,7 @@ export function QueryFailure({ message, onRetry, className }: QueryFailureProps)
       <button
         type="button"
         onClick={onRetry}
-        className="mt-3 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+        className="mt-3 rounded-lg border border-border-strong px-3 py-1.5 text-xs text-muted transition-colors hover:border-jade hover:text-jade"
       >
         Retry
       </button>

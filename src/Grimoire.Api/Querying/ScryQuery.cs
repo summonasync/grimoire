@@ -5,4 +5,5 @@ public sealed record ScryQuery(
     string? Tomes,
     bool? IncludeJournal,
     string? Attribution,
-    int? Limit);
+    int? Limit,
+    string? Fields);

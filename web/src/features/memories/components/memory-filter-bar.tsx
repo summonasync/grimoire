@@ -67,8 +67,8 @@ function StatusChip({
       className={cn(
         "rounded-md border px-2 py-1 text-[0.7rem] font-medium transition-colors",
         on
-          ? "border-accent/55 bg-accent-soft text-foreground"
-          : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+          ? "border-jade/55 bg-jade/10 text-foreground"
+          : "border-border text-muted hover:border-jade/40 hover:text-foreground",
       )}
     >
       {label}
@@ -121,8 +121,8 @@ export function MemoryFilterBar({ filters, onChange, onReset }: MemoryFilterBarP
               className={cn(
                 "rounded-md border px-2 py-1 text-[0.7rem] font-medium transition-colors",
                 on
-                  ? "border-accent/55 bg-accent-soft text-foreground"
-                  : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+                  ? "border-jade/55 bg-jade/10 text-foreground"
+                  : "border-border text-muted hover:border-jade/40 hover:text-foreground",
               )}
             >
               {scope}
@@ -193,7 +193,7 @@ export function MemoryFilterBar({ filters, onChange, onReset }: MemoryFilterBarP
       <button
         type="button"
         onClick={onReset}
-        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[0.7rem] text-muted transition-colors hover:border-accent/50 hover:text-accent"
+        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[0.7rem] text-muted transition-colors hover:border-jade/50 hover:text-jade"
       >
         <Icon name="close" className="size-3" />
         Reset

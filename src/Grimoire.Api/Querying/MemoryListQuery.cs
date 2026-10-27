@@ -12,4 +12,5 @@ public sealed record MemoryListQuery(
     int? Limit,
     string? Since,
     string? Until,
-    string? Actor);
+    string? Actor,
+    string? Fields);

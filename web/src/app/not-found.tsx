@@ -4,7 +4,7 @@ export default function NotFound() {
   return (
     <div className="text-sm text-muted">
       <p>This page does not exist.</p>
-      <Link href="/" className="mt-2 inline-block text-accent hover:underline">
+      <Link href="/" className="mt-2 inline-block text-jade hover:underline">
         Back to the console
       </Link>
     </div>

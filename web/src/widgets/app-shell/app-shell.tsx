@@ -46,7 +46,7 @@ export function AppShell({ tabs }: AppShellProps) {
 
           <aside className="glass-shell relative z-20 flex w-56 shrink-0 flex-col border-r border-border">
             <div className="flex items-center gap-2.5 px-4 py-5">
-              <span className="flex size-9 items-center justify-center rounded-lg border border-accent/40 bg-accent-soft">
+              <span className="flex size-9 items-center justify-center rounded-lg border border-jade/40 bg-jade/10">
                 <Sigil seed="grimoire-wordmark" className="size-5" />
               </span>
               <div className="min-w-0">
@@ -69,13 +69,13 @@ export function AppShell({ tabs }: AppShellProps) {
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
                         active === item.id
-                          ? "bg-accent-soft font-medium text-foreground ring-1 ring-accent/45"
+                          ? "bg-jade/10 font-medium text-foreground ring-1 ring-jade/45"
                           : "text-muted hover:bg-foreground/5 hover:text-foreground",
                       )}
                     >
                       <Icon
                         name={item.icon}
-                        className={cn("size-4", active === item.id && "text-accent")}
+                        className={cn("size-4", active === item.id && "text-jade")}
                       />
                       {item.label}
                     </a>
