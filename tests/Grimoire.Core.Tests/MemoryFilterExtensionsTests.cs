@@ -166,6 +166,113 @@ public sealed class MemoryFilterExtensionsTests
 
         flipped.Matches(record).ShouldBeFalse();
     }
+
+    [Theory]
+    [InlineData(FilterDimension.Scopes)]
+    [InlineData(FilterDimension.Kind)]
+    [InlineData(FilterDimension.Status)]
+    [InlineData(FilterDimension.Statuses)]
+    [InlineData(FilterDimension.Tags)]
+    [InlineData(FilterDimension.ExcludeTags)]
+    [InlineData(FilterDimension.Tome)]
+    [InlineData(FilterDimension.Tomes)]
+    [InlineData(FilterDimension.ProjectId)]
+    [InlineData(FilterDimension.SessionId)]
+    [InlineData(FilterDimension.ExpiresBefore)]
+    [InlineData(FilterDimension.TombstonedBefore)]
+    [InlineData(FilterDimension.IdempotencyKey)]
+    [InlineData(FilterDimension.CreatedAfter)]
+    public async Task Matches_AgreesWithStoreFiltering(FilterDimension dimension)
+    {
+        var (filter, passing, failing) = DimensionCase(dimension);
+        var store = new FakeMemoryStore();
+        store.Seed(passing, 1f, 0f);
+        store.Seed(failing, 1f, 0f);
+
+        var listed = await store.ListAsync(filter, CancellationToken.None);
+
+        filter.Matches(passing).ShouldBe(listed.Any(record => record.Id == passing.Id));
+        filter.Matches(failing).ShouldBe(listed.Any(record => record.Id == failing.Id));
+    }
+
+    private static (MemoryFilter Filter, MemoryRecord Passing, MemoryRecord Failing) DimensionCase(
+        FilterDimension dimension) => dimension switch
+        {
+            FilterDimension.Scopes => (new MemoryFilter { Scopes = [MemoryScope.Project] },
+                DimensionRecord(), DimensionRecord(scope: MemoryScope.Session)),
+            FilterDimension.Kind => (new MemoryFilter { Kind = MemoryKind.Journal },
+                DimensionRecord(), DimensionRecord(kind: MemoryKind.Fact)),
+            FilterDimension.Status => (new MemoryFilter { Status = MemoryStatus.Active },
+                DimensionRecord(), DimensionRecord(status: MemoryStatus.Tombstoned)),
+            FilterDimension.Statuses => (new MemoryFilter { Statuses = [MemoryStatus.Active] },
+                DimensionRecord(), DimensionRecord(status: MemoryStatus.Superseded)),
+            FilterDimension.Tags => (new MemoryFilter { Tags = ["alpha"] },
+                DimensionRecord(tags: ["alpha"]), DimensionRecord(tags: ["beta"])),
+            FilterDimension.ExcludeTags => (new MemoryFilter { ExcludeTags = ["alpha"] },
+                DimensionRecord(tags: ["beta"]), DimensionRecord(tags: ["alpha"])),
+            FilterDimension.Tome => (new MemoryFilter { Tome = TomeKey.DefaultTome },
+                DimensionRecord(), DimensionRecord(tome: "other-tome")),
+            FilterDimension.Tomes => (new MemoryFilter { Tomes = [TomeKey.DefaultTome] },
+                DimensionRecord(), DimensionRecord(tome: "other-tome")),
+            FilterDimension.ProjectId => (new MemoryFilter { ProjectId = "p-1" },
+                DimensionRecord(projectId: "p-1"), DimensionRecord(projectId: "p-2")),
+            FilterDimension.SessionId => (new MemoryFilter { SessionId = "s-1" },
+                DimensionRecord(sessionId: "s-1"), DimensionRecord(sessionId: "s-2")),
+            FilterDimension.ExpiresBefore => (new MemoryFilter { ExpiresBefore = Start.AddHours(6) },
+                DimensionRecord(expiresAt: Start.AddHours(5)), DimensionRecord(expiresAt: Start.AddHours(9))),
+            FilterDimension.TombstonedBefore => (new MemoryFilter { TombstonedBefore = Start.AddHours(6) },
+                DimensionRecord(tombstonedAt: Start.AddHours(5)), DimensionRecord(tombstonedAt: Start.AddHours(9))),
+            FilterDimension.IdempotencyKey => (new MemoryFilter { IdempotencyKey = "key-1" },
+                DimensionRecord(idempotencyKey: "key-1"), DimensionRecord(idempotencyKey: "key-2")),
+            FilterDimension.CreatedAfter => (new MemoryFilter { CreatedAfter = Start },
+                DimensionRecord(), DimensionRecord(created: Start.AddHours(-1))),
+            _ => throw new ArgumentOutOfRangeException(nameof(dimension)),
+        };
+
+    private static MemoryRecord DimensionRecord(
+        MemoryScope scope = MemoryScope.Project,
+        MemoryKind kind = MemoryKind.Journal,
+        MemoryStatus status = MemoryStatus.Active,
+        MemoryActor? actor = null,
+        DateTimeOffset? created = null,
+        DateTimeOffset? expiresAt = null,
+        DateTimeOffset? tombstonedAt = null,
+        string? idempotencyKey = null,
+        string? projectId = null,
+        string? sessionId = null,
+        IReadOnlyList<string>? tags = null,
+        string? tome = null) => TestMemories.Create(
+            "note", [1f, 0f],
+            scope: scope,
+            kind: kind,
+            actor: actor,
+            created: created,
+            expiresAt: expiresAt,
+            status: status,
+            tombstonedAt: tombstonedAt,
+            idempotencyKey: idempotencyKey,
+            projectId: projectId,
+            sessionId: sessionId,
+            tags: tags,
+            tome: tome);
+}
+
+public enum FilterDimension
+{
+    Scopes,
+    Kind,
+    Status,
+    Statuses,
+    Tags,
+    ExcludeTags,
+    Tome,
+    Tomes,
+    ProjectId,
+    SessionId,
+    ExpiresBefore,
+    TombstonedBefore,
+    IdempotencyKey,
+    CreatedAfter,
 }
 
 public enum CompositionDimension

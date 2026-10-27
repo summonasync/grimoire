@@ -109,6 +109,53 @@ public sealed class MemoryServiceReadFilterTests
         matches.Select(match => match.Record.Id).ShouldBe([wanted.Id]);
     }
 
+    [Fact]
+    public async Task Recall_RefillsTheWindowWhenFiltersWashOutTheFirstPage()
+    {
+        Seed("noise 1", [0.9950f, 0.0998f, 0f], actor: MemoryActor.Human);
+        Seed("noise 2", [0.9899f, 0.1421f, 0f], actor: MemoryActor.Human);
+        Seed("noise 3", [0.9848f, 0.1736f, 0f], actor: MemoryActor.Human);
+        Seed("noise 4", [0.9798f, 0.2000f, 0f], actor: MemoryActor.Human);
+        Seed("noise 5", [0.9747f, 0.2234f, 0f], actor: MemoryActor.Human);
+        var first = Seed("deep 1", [0.8660f, 0.5f, 0f]);
+        var second = Seed("deep 2", [0.4f, 0.9165f, 0f]);
+        Seed("deep 3", [0.3f, 0.9539f, 0f]);
+
+        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.Select(match => match.Record.Id).ShouldBe([first.Id, second.Id]);
+    }
+
+    [Fact]
+    public async Task Recall_DoesNotRefillWhenTheFirstWindowFillsThePage()
+    {
+        Seed("hot", [0.9f, 0.4359f, 0f]);
+        Seed("warm", [0.8f, 0.6f, 0f]);
+        Seed("mild", [0.7f, 0.7141f, 0f]);
+        Seed("cool", [0.6f, 0.8f, 0f]);
+
+        var matches = await _service.RecallAsync(Query(limit: 1), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(1);
+        matches.Count.ShouldBe(1);
+        matches[0].Record.Content.ShouldBe("hot");
+    }
+
+    [Fact]
+    public async Task Recall_DoesNotRefillWhenTheStoreIsAlreadyExhausted()
+    {
+        Seed("noise 1", [0.9950f, 0.0998f, 0f], actor: MemoryActor.Human);
+        Seed("noise 2", [0.9899f, 0.1421f, 0f], actor: MemoryActor.Human);
+        var only = Seed("only match", [0.8660f, 0.5f, 0f]);
+
+        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(1);
+        matches.Count.ShouldBe(1);
+        matches[0].Record.Id.ShouldBe(only.Id);
+    }
+
     private MemoryRecord Seed(
         string content,
         float[]? vector = null,

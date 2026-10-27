@@ -105,9 +105,15 @@ public sealed class MemoryService(
 
         var fetchLimit = query.Limit * Math.Max(_options.RecallOversampling, 1);
         var matches = await store.SearchAsync(vector, filter, fetchLimit, cancellationToken);
+        var kept = matches.Where(match => filter.Matches(match.Record)).ToArray();
 
-        var top = matches
-            .Where(match => filter.Matches(match.Record))
+        if (kept.Length < query.Limit && matches.Count == fetchLimit)
+        {
+            var escalated = await store.SearchAsync(vector, filter, fetchLimit * 2, cancellationToken);
+            kept = escalated.Where(match => filter.Matches(match.Record)).ToArray();
+        }
+
+        var top = kept
             .Select(match => (Match: match, Score: MemoryScorer.Score(
                 match.Similarity,
                 match.Record,
