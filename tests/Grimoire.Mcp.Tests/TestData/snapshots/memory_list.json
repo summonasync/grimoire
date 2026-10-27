@@ -1,10 +1,17 @@
 {
   "contract": {
-    "description": "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes the tome listed.",
+    "description": "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already retracted. since/until bound the creation window and actor narrows to one writer. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes the tome listed.",
     "destructive": false,
     "idempotent": true,
     "input": {
       "parameters": {
+        "actor": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "kind": {
           "default": null,
           "type": [
@@ -37,6 +44,13 @@
             "null"
           ]
         },
+        "since": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
           "default": "Active",
           "type": "string"
@@ -49,6 +63,13 @@
           ]
         },
         "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "until": {
           "default": null,
           "type": [
             "string",

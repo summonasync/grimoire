@@ -14,6 +14,8 @@ public static class MemoryQueryParser
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        var range = ParseRange(query.Since, query.Until);
+
         return new ParsedMemoryQuery(
             ParseStatuses(query.Status),
             new MemoryFilter
@@ -24,8 +26,23 @@ public static class MemoryQueryParser
                 ProjectId = query.ProjectId,
                 SessionId = query.SessionId,
                 Tome = ParseTome(query.Tome),
+                CreatedAfter = range.Since,
+                CreatedBefore = range.Until,
+                Actor = query.Actor,
             },
             Math.Clamp(query.Limit ?? DefaultLimit, 1, MaxLimit));
+    }
+
+    private static CreatedAtRange ParseRange(string? since, string? until)
+    {
+        try
+        {
+            return CreatedAtRange.Parse(since, until);
+        }
+        catch (ArgumentException failure)
+        {
+            throw new MemoryQueryException($"invalid_{failure.ParamName}", failure.Message);
+        }
     }
 
     private static IReadOnlyList<MemoryStatus> ParseStatuses(string? raw)

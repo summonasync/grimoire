@@ -22,6 +22,7 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
         }
 
         return [.. merged
+            .Where(match => parsed.Filter.Matches(match.Record))
             .OrderByDescending(match => match.Similarity)
             .ThenBy(match => match.Record.Id)
             .Take(parsed.Limit)
@@ -38,6 +39,7 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
         }
 
         return [.. merged
+            .Where(parsed.Filter.Matches)
             .OrderByDescending(record => record.CreatedAt)
             .ThenByDescending(record => record.Id)
             .Take(parsed.Limit)];

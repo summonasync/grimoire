@@ -1,10 +1,17 @@
 {
   "contract": {
-    "description": "Search memory before you assume - ranked semantic matches over the active records of one tome; superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior context could change the answer; narrow with scope, projectId or tags before raising limit, and pass tome to read another tome you own, memory_scry answers across tomes.",
+    "description": "Search memory before you assume - ranked semantic matches over the active records of one tome; superseded and tombstoned never surface, and a read bumps the record's access stats. Call it when prior context could change the answer; narrow with scope, projectId, tags or the since/until/actor filters before raising limit, and pass tome to read another tome you own, memory_scry answers across tomes.",
     "destructive": false,
     "idempotent": true,
     "input": {
       "parameters": {
+        "actor": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "kind": {
           "default": null,
           "type": [
@@ -40,6 +47,13 @@
             "null"
           ]
         },
+        "since": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "tags": {
           "default": null,
           "type": [
@@ -48,6 +62,13 @@
           ]
         },
         "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "until": {
           "default": null,
           "type": [
             "string",

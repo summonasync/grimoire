@@ -176,6 +176,85 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task List_SinceUntilAndActor_ProjectThrough()
+    {
+        factory.Reset();
+        var agentNote = factory.Store.Seed("fresh agent note", [1f, 0f], createdAt: FakeClock.DefaultStart);
+        var humanNote = factory.Store.Seed(
+            "stale human note",
+            [1f, 0f],
+            createdAt: FakeClock.DefaultStart.AddDays(-2),
+            actor: MemoryActor.Human);
+
+        var inWindow = await GetRecords(factory.NewClient(), "/api/memories?since=2026-10-17T00:00:00Z");
+        var beforeWindow = await GetRecords(factory.NewClient(), "/api/memories?until=2026-10-16T00:00:00Z");
+        var byAgent = await GetRecords(factory.NewClient(), "/api/memories?actor=dotnet-coder");
+        var byHuman = await GetRecords(factory.NewClient(), "/api/memories?actor=human");
+        var combined = await GetRecords(factory.NewClient(), "/api/memories?since=2026-10-15T00:00:00Z&actor=human");
+
+        inWindow.Select(record => record.Id).ShouldBe([agentNote.Id]);
+        beforeWindow.Select(record => record.Id).ShouldBe([humanNote.Id]);
+        byAgent.Select(record => record.Id).ShouldBe([agentNote.Id]);
+        byHuman.Select(record => record.Id).ShouldBe([humanNote.Id]);
+        combined.Select(record => record.Id).ShouldBe([humanNote.Id]);
+    }
+
+    [Fact]
+    public async Task List_WithGarbageSince_Returns400NamingTheParameter()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/memories?since=yesterday");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_since");
+        error.message.ShouldContain("'since'");
+        error.message.ShouldContain("yesterday");
+    }
+
+    [Fact]
+    public async Task List_WithGarbageUntil_Returns400NamingTheParameter()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/memories?until=later");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_until");
+        error.message.ShouldContain("'until'");
+        error.message.ShouldContain("later");
+    }
+
+    [Fact]
+    public async Task List_WithSinceAfterUntil_Returns400()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/memories?since=2026-10-20&until=2026-10-19");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_since");
+        message.ShouldContain("must not be later than 'until'");
+    }
+
+    [Fact]
+    public async Task List_WithBlankNewParams_MatchesTheAbsentParamResponseByteForByte()
+    {
+        factory.Reset();
+        factory.Store.Seed("stable note", [1f, 0f]);
+
+        var absent = await factory.NewClient().GetAsync("/api/memories");
+        var blank = await factory.NewClient().GetAsync("/api/memories?since=&until=&actor=");
+
+        absent.StatusCode.ShouldBe(HttpStatusCode.OK);
+        blank.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await absent.Content.ReadAsStringAsync()).ShouldBe(await blank.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task List_WithQuery_RanksByEmbeddingSimilarity()
     {
         factory.Reset();

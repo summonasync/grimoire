@@ -128,6 +128,22 @@ public sealed class MemoryServiceReadFilterTests
     }
 
     [Fact]
+    public async Task Recall_WhenEscalationIsStillMostlyNoise_ReturnsTheHonestShortPage()
+    {
+        Seed("noise 1", [0.9950f, 0.0998f, 0f], actor: MemoryActor.Human);
+        Seed("noise 2", [0.9899f, 0.1421f, 0f], actor: MemoryActor.Human);
+        Seed("noise 3", [0.9848f, 0.1736f, 0f], actor: MemoryActor.Human);
+        Seed("noise 4", [0.9798f, 0.2000f, 0f], actor: MemoryActor.Human);
+        Seed("noise 5", [0.9747f, 0.2234f, 0f], actor: MemoryActor.Human);
+        var only = Seed("only honest", [0.8660f, 0.5f, 0f]);
+
+        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.Select(match => match.Record.Id).ShouldBe([only.Id]);
+    }
+
+    [Fact]
     public async Task Recall_DoesNotRefillWhenTheFirstWindowFillsThePage()
     {
         Seed("hot", [0.9f, 0.4359f, 0f]);

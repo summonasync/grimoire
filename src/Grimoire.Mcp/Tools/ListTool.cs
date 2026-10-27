@@ -15,8 +15,8 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
     public const string Description =
         "Browse stored memories by filter, newest first - full records, Active by default, with status, actor and " +
         "tags; pass status to audit Superseded or Tombstoned rows, for example to confirm a Fact was already " +
-        "retracted. Prefer memory_recall for meaning-based lookup; reads are tome-scoped and the response echoes " +
-        "the tome listed.";
+        "retracted. since/until bound the creation window and actor narrows to one writer. Prefer memory_recall for " +
+        "meaning-based lookup; reads are tome-scoped and the response echoes the tome listed.";
 
     public Task<CallToolResult> List(
         [Description("Restrict to one scope.")]
@@ -34,6 +34,12 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
         string? sessionId = null,
         [Description("Restrict to memories carrying any of these tags.")]
         string[]? tags = null,
+        [Description("Only records created at or after this; yyyy-MM-dd means local midnight, an ISO-8601 instant is used as-is.")]
+        string? since = null,
+        [Description("Only records created before this; exclusive; yyyy-MM-dd means local midnight, an ISO-8601 instant is used as-is.")]
+        string? until = null,
+        [Description("Only records written by this actor: an alias alone matches any vendor, alias+vendor pins one exactly.")]
+        string? actor = null,
         [Description("Maximum entries to return, default 50.")]
         int limit = 50,
         [Description("Tome to browse; omit for your resolved tome, or name another tome you own to audit it. The response echoes the tome listed.")]
@@ -56,6 +62,12 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
         if (statusError is not null)
         {
             return Task.FromResult(ToolResults.Failure(statusError));
+        }
+
+        var (range, rangeError) = DateParams.Parse(since, until);
+        if (rangeError is not null)
+        {
+            return Task.FromResult(ToolResults.Failure(rangeError));
         }
 
         if (limit <= 0)
@@ -83,6 +95,9 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
                 Tome = resolvedTome,
                 ProjectId = projectId,
                 SessionId = sessionId,
+                CreatedAfter = range.Since,
+                CreatedBefore = range.Until,
+                Actor = actor,
                 Limit = limit,
             }, ct);
 
