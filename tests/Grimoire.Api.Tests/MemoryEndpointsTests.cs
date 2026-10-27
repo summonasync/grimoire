@@ -557,6 +557,178 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_WithNearBandHit_ReturnsNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("sourdough starter feeding schedule", [0.8660254f, 0.5f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["sourdough starter feeding notes"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            "/api/memories",
+            new { content = "sourdough starter feeding notes", scope = "global" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        var near = body.GetProperty("nearDuplicates");
+        near.GetArrayLength().ShouldBe(1);
+        var seeded = factory.Store.Records.Single(record => record.Content == "sourdough starter feeding schedule");
+        near[0].GetProperty("memoryId").GetGuid().ShouldBe(seeded.Id);
+        near[0].GetProperty("similarity").GetDouble().ShouldBeGreaterThan(0.80);
+        near[0].GetProperty("similarity").GetDouble().ShouldBeLessThan(0.92);
+        near[0].GetProperty("snippet").GetString().ShouldBe("sourdough starter feeding schedule");
+        seeded.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Post_WithoutNearBand_OmitsNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("unrelated cooking note", [1f, 0f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["quantum tunneling deadlines"] = [0f, 1f];
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            "/api/memories",
+            new { content = "quantum tunneling deadlines", scope = "global" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await response.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("supersededId").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("idempotentReplay").GetBoolean().ShouldBeFalse();
+        body.GetProperty("maintenancePending").GetBoolean().ShouldBeFalse();
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Post_WithSupersedes_ReplacesTheNamedTarget()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed("deploy on friday", [1f, 0f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["deploy moved to monday"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "deploy moved to monday",
+            scope = "global",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("supersededId").GetGuid().ShouldBe(target.Id);
+        var successor = body.GetProperty("record").GetProperty("id").GetGuid();
+        (await response.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        var superseded = factory.Store.Records.Single(record => record.Id == target.Id);
+        superseded.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.SupersededBy.ShouldBe(successor);
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Post_WithMissingSupersedesTarget_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["ghost chase"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "ghost chase",
+            scope = "global",
+            supersedes = Guid.NewGuid(),
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("does not exist in tome");
+        factory.Store.Records.ShouldBeEmpty();
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithSupersedesTargetInAnotherTome_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed("alpha only fact", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "cross tome grab",
+            scope = "global",
+            tome = "beta",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("does not exist in tome 'beta'");
+        factory.Store.Records.Single().Id.ShouldBe(target.Id);
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithTombstonedSupersedesTarget_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed(
+            "already forgotten",
+            [1f, 0f],
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "retracted",
+            tombstonedAt: FakeClock.DefaultStart);
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "resurrect attempt",
+            scope = "global",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("is not active");
+        factory.Store.Records.Single().Id.ShouldBe(target.Id);
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithMalformedSupersedes_Returns400InvalidRequest()
+    {
+        factory.Reset();
+        using var content = new StringContent(
+            """{"content":"bad guid","scope":"global","supersedes":"not-a-guid"}""",
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        var response = await factory.NewClient().PostAsync("/api/memories", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_request");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_IdenticalReplayAfterNearHit_CarriesNoNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("sourdough starter feeding schedule", [0.8660254f, 0.5f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["sourdough starter feeding notes"] = [1f, 0f];
+        var client = factory.NewClient();
+
+        var first = await client.PostAsJsonAsync("/api/memories", new { content = "sourdough starter feeding notes", scope = "global" });
+        var replay = await client.PostAsJsonAsync("/api/memories", new { content = "sourdough starter feeding notes", scope = "global" });
+
+        first.StatusCode.ShouldBe(HttpStatusCode.Created);
+        replay.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(replay);
+        body.GetProperty("idempotentReplay").GetBoolean().ShouldBeTrue();
+        (await replay.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Patch_ContentChange_ReEmbedsAndUpsertsSameId()
     {
         factory.Reset();
