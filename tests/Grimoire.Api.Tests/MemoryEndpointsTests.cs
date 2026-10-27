@@ -241,6 +241,45 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task List_WithQuery_RefillsTheWindowWhenActorFiltersWashOutThePage()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["vector"] = [1f, 0f];
+        factory.Store.Seed("decoy 1", [0.9950f, 0.0998f], actor: MemoryActor.Human);
+        factory.Store.Seed("decoy 2", [0.9899f, 0.1421f], actor: MemoryActor.Human);
+        factory.Store.Seed("decoy 3", [0.9848f, 0.1736f], actor: MemoryActor.Human);
+        factory.Store.Seed("decoy 4", [0.9798f, 0.2000f], actor: MemoryActor.Human);
+        factory.Store.Seed("decoy 5", [0.9747f, 0.2234f], actor: MemoryActor.Human);
+        factory.Store.Seed("decoy 6", [0.9696f, 0.2449f], actor: MemoryActor.Human);
+        var first = factory.Store.Seed("deep one", [0.8660f, 0.5f]);
+        var second = factory.Store.Seed("deep two", [0.4f, 0.9165f]);
+
+        var records = await GetRecords(factory.NewClient(), "/api/memories?query=vector&limit=2&actor=dotnet-coder");
+
+        records.Select(record => record.Id).ShouldBe([first.Id, second.Id]);
+    }
+
+    [Theory]
+    [InlineData("since", true)]
+    [InlineData("until", false)]
+    public async Task List_BoundaryInstant_IsInclusiveForSinceAndExclusiveForUntil(string param, bool kept)
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("boundary note", [1f, 0f], createdAt: FakeClock.DefaultStart);
+
+        var records = await GetRecords(factory.NewClient(), $"/api/memories?{param}=2026-10-17T12:00:00Z");
+
+        if (kept)
+        {
+            records.Select(stored => stored.Id).ShouldBe([record.Id]);
+        }
+        else
+        {
+            records.ShouldBeEmpty();
+        }
+    }
+
+    [Fact]
     public async Task List_WithBlankNewParams_MatchesTheAbsentParamResponseByteForByte()
     {
         factory.Reset();
