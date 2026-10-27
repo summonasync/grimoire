@@ -11,6 +11,8 @@ public sealed class RememberToolTests
 
     private static readonly float[] VectorNearA = [1, 0.1f, 0];
 
+    private static readonly float[] VectorNearBand = [1, 0.7f, 0];
+
     [Fact]
     public async Task Remember_ProjectScopeWithoutProjectIdAndNoPathMatch_RejectsMissing()
     {
@@ -367,6 +369,192 @@ public sealed class RememberToolTests
     }
 
     [Fact]
+    public async Task Remember_NearBandHit_ReportsNearDuplicatesWithoutSuperseding()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("decision v1", VectorA);
+        session.Embeddings.Register("decision restated", VectorNearBand);
+
+        var first = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v1",
+            ["scope"] = "Global",
+        });
+        var second = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision restated",
+            ["scope"] = "Global",
+        });
+
+        var firstId = first.Payload().GetProperty("memoryId").GetGuid();
+        var payload = second.Payload();
+        payload.GetProperty("supersededExisting").GetBoolean().ShouldBeFalse();
+        var match = payload.GetProperty("nearDuplicates").EnumerateArray().ShouldHaveSingleItem();
+        match.GetProperty("memoryId").GetGuid().ShouldBe(firstId);
+        match.GetProperty("similarity").GetDouble().ShouldBeInRange(0.80, 0.92);
+        match.GetProperty("snippet").GetString().ShouldBe("decision v1");
+        session.Store.Points.Count(point => point.Record.Status == MemoryStatus.Active).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Remember_BelowBandMatch_OmitsNearDuplicates()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("decision v1", VectorA);
+        session.Embeddings.Register("grocery list", VectorB);
+
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v1",
+            ["scope"] = "Global",
+        });
+        var second = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "grocery list",
+            ["scope"] = "Global",
+        });
+
+        var payload = second.Payload();
+        payload.GetProperty("supersededExisting").GetBoolean().ShouldBeFalse();
+        payload.TryGetProperty("nearDuplicates", out _).ShouldBeFalse("orthogonal content sits below the near band");
+        session.Store.Points.Count(point => point.Record.Status == MemoryStatus.Active).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Remember_ExplicitSupersedes_ReplacesTheTargetWithoutNearData()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("decision v1", VectorA);
+        session.Embeddings.Register("grocery list", VectorB);
+
+        var first = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v1",
+            ["scope"] = "Global",
+        });
+        var firstId = first.Payload().GetProperty("memoryId").GetGuid();
+        var second = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "grocery list",
+            ["scope"] = "Global",
+            ["supersedes"] = firstId.ToString(),
+        });
+
+        var secondId = second.Payload().GetProperty("memoryId").GetGuid();
+        var payload = second.Payload();
+        payload.GetProperty("supersededExisting").GetBoolean().ShouldBeTrue();
+        payload.GetProperty("supersededMemoryId").GetGuid().ShouldBe(firstId);
+        payload.TryGetProperty("nearDuplicates", out _).ShouldBeFalse("orthogonal content keeps the probe empty");
+
+        var superseded = session.Store.Points.Single(point => point.Record.Id == firstId);
+        superseded.Record.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.Record.SupersededBy.ShouldBe(secondId);
+        session.Store.Points.ShouldContain(point => point.Record.Id == secondId && point.Record.Status == MemoryStatus.Active);
+    }
+
+    [Theory]
+    [InlineData("not-a-guid")]
+    [InlineData("666b2f1bd9b34eba9c7d8b3a1f2e4d5c")]
+    public async Task Remember_MalformedSupersedes_RejectsWithoutTouchingTheStore(string supersedes)
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v2",
+            ["scope"] = "Global",
+            ["supersedes"] = supersedes,
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("supersedes");
+        message.ShouldContain($"'{supersedes}'");
+        message.ShouldContain("canonical UUID");
+        message.ShouldContain("Nothing was applied by this call.");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SupersedesMissingTarget_RejectsBeforeEmbedding()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v2",
+            ["scope"] = "Global",
+            ["supersedes"] = "00000000-0000-0000-0000-000000000001",
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("Supersedes");
+        message.ShouldContain("does not exist in tome");
+        message.ShouldContain("00000000-0000-0000-0000-000000000001");
+        session.Store.Points.ShouldBeEmpty();
+        session.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Remember_SupersedesForeignTomeTarget_RejectsWithoutApplying()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var first = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha rule",
+            ["scope"] = "Global",
+            ["tome"] = "alpha",
+        });
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "alpha rule v2",
+            ["scope"] = "Global",
+            ["supersedes"] = first.Payload().GetProperty("memoryId").GetGuid().ToString(),
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("Supersedes");
+        message.ShouldContain("does not exist in tome");
+        message.ShouldContain(McpTestSession.ClientActor);
+        session.Store.Points.ShouldHaveSingleItem().Record.Status.ShouldBe(MemoryStatus.Active);
+        session.Embeddings.Requests.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Remember_SupersedesInactiveTarget_RejectsWithoutApplying()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var first = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v1",
+            ["scope"] = "Global",
+        });
+        var firstId = first.Payload().GetProperty("memoryId").GetGuid().ToString();
+        await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = firstId,
+            ["reason"] = "retracted",
+        });
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "decision v2",
+            ["scope"] = "Global",
+            ["supersedes"] = firstId,
+        });
+
+        var (code, message, param) = result.Error();
+        code.ShouldBe(ToolErrorCodes.InvalidRequest);
+        param.ShouldBe("Supersedes");
+        message.ShouldContain("is not active");
+        session.Store.Points.ShouldHaveSingleItem().Record.Status.ShouldBe(MemoryStatus.Tombstoned);
+    }
+
+    [Fact]
     public async Task Remember_WhenEmbeddingTimesOut_ReturnsUpstreamUnavailable()
     {
         await using var session = await McpTestSession.StartAsync();
@@ -424,6 +612,7 @@ public sealed class RememberToolTests
         payload.GetProperty("idempotentReplay").GetBoolean().ShouldBeTrue();
         payload.GetProperty("maintenancePending").GetBoolean().ShouldBeFalse();
         payload.GetProperty("memoryId").GetGuid().ShouldBe(firstId);
+        payload.TryGetProperty("nearDuplicates", out _).ShouldBeFalse("replays keep the T0 shape and carry no near data");
         session.Store.Points.ShouldHaveSingleItem();
     }
 
