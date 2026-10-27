@@ -9,6 +9,7 @@ internal static class EngineOptionsMapper
     {
         DefaultTome = defaultTome,
         SessionTtlHours = options.SessionTtlHours,
+        NearDuplicateSimilarityThreshold = options.NearDuplicateSimilarityThreshold,
         DedupSimilarityThreshold = options.DedupSimilarityThreshold,
         RelatedSimilarityThreshold = options.RelatedSimilarityThreshold,
         RecallForeignProjectFactor = options.RecallForeignProjectFactor,

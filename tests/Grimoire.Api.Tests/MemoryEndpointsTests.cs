@@ -557,6 +557,178 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_WithNearBandHit_ReturnsNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("sourdough starter feeding schedule", [0.8660254f, 0.5f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["sourdough starter feeding notes"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            "/api/memories",
+            new { content = "sourdough starter feeding notes", scope = "global" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        var near = body.GetProperty("nearDuplicates");
+        near.GetArrayLength().ShouldBe(1);
+        var seeded = factory.Store.Records.Single(record => record.Content == "sourdough starter feeding schedule");
+        near[0].GetProperty("memoryId").GetGuid().ShouldBe(seeded.Id);
+        near[0].GetProperty("similarity").GetDouble().ShouldBeGreaterThan(0.80);
+        near[0].GetProperty("similarity").GetDouble().ShouldBeLessThan(0.92);
+        near[0].GetProperty("snippet").GetString().ShouldBe("sourdough starter feeding schedule");
+        seeded.Status.ShouldBe(MemoryStatus.Active);
+    }
+
+    [Fact]
+    public async Task Post_WithoutNearBand_OmitsNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("unrelated cooking note", [1f, 0f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["quantum tunneling deadlines"] = [0f, 1f];
+
+        var response = await factory.NewClient().PostAsJsonAsync(
+            "/api/memories",
+            new { content = "quantum tunneling deadlines", scope = "global" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await response.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("supersededId").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("idempotentReplay").GetBoolean().ShouldBeFalse();
+        body.GetProperty("maintenancePending").GetBoolean().ShouldBeFalse();
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Post_WithSupersedes_ReplacesTheNamedTarget()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed("deploy on friday", [1f, 0f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["deploy moved to monday"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "deploy moved to monday",
+            scope = "global",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(response);
+        body.GetProperty("supersededId").GetGuid().ShouldBe(target.Id);
+        var successor = body.GetProperty("record").GetProperty("id").GetGuid();
+        (await response.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        var superseded = factory.Store.Records.Single(record => record.Id == target.Id);
+        superseded.Status.ShouldBe(MemoryStatus.Superseded);
+        superseded.SupersededBy.ShouldBe(successor);
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Post_WithMissingSupersedesTarget_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["ghost chase"] = [1f, 0f];
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "ghost chase",
+            scope = "global",
+            supersedes = Guid.NewGuid(),
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("does not exist in tome");
+        factory.Store.Records.ShouldBeEmpty();
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithSupersedesTargetInAnotherTome_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed("alpha only fact", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "cross tome grab",
+            scope = "global",
+            tome = "beta",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("does not exist in tome 'beta'");
+        factory.Store.Records.Single().Id.ShouldBe(target.Id);
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithTombstonedSupersedesTarget_Returns400AndWritesNothing()
+    {
+        factory.Reset();
+        var target = factory.Store.Seed(
+            "already forgotten",
+            [1f, 0f],
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "retracted",
+            tombstonedAt: FakeClock.DefaultStart);
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "resurrect attempt",
+            scope = "global",
+            supersedes = target.Id,
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_memory");
+        message.ShouldContain("is not active");
+        factory.Store.Records.Single().Id.ShouldBe(target.Id);
+        factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_WithMalformedSupersedes_Returns400InvalidRequest()
+    {
+        factory.Reset();
+        using var content = new StringContent(
+            """{"content":"bad guid","scope":"global","supersedes":"not-a-guid"}""",
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        var response = await factory.NewClient().PostAsync("/api/memories", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_request");
+        factory.Store.Records.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_IdenticalReplayAfterNearHit_CarriesNoNearDuplicates()
+    {
+        factory.Reset();
+        factory.Store.Seed("sourdough starter feeding schedule", [0.8660254f, 0.5f], scope: MemoryScope.Global);
+        factory.Embeddings.Vectors["sourdough starter feeding notes"] = [1f, 0f];
+        var client = factory.NewClient();
+
+        var first = await client.PostAsJsonAsync("/api/memories", new { content = "sourdough starter feeding notes", scope = "global" });
+        var replay = await client.PostAsJsonAsync("/api/memories", new { content = "sourdough starter feeding notes", scope = "global" });
+
+        first.StatusCode.ShouldBe(HttpStatusCode.Created);
+        replay.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await ReadFromJsonAsync<JsonElement>(replay);
+        body.GetProperty("idempotentReplay").GetBoolean().ShouldBeTrue();
+        (await replay.Content.ReadAsStringAsync()).ShouldNotContain("nearDuplicates");
+        factory.Store.Records.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Patch_ContentChange_ReEmbedsAndUpsertsSameId()
     {
         factory.Reset();
@@ -1086,6 +1258,81 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
+    [Fact]
+    public async Task List_WithFields_ProjectsEachItemToIdPlusTheRequestedKeys()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f], tags: ["ops-crew"]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories?fields=content,createdAt"));
+
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["tome", "count", "items"]);
+        var item = body.GetProperty("items")[0];
+        item.EnumerateObject().Select(property => property.Name).ShouldBe(["id", "content", "createdAt"]);
+        item.GetProperty("content").GetString().ShouldBe("projected note");
+        item.GetProperty("createdAt").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task List_WithExplicitIdField_KeepsIdSingle()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories?fields=id,content"));
+
+        body.GetProperty("items")[0].EnumerateObject().Select(property => property.Name)
+            .ShouldBe(["id", "content"]);
+    }
+
+    [Fact]
+    public async Task List_WithUnknownField_Returns400NamingTheAllowedSet()
+    {
+        factory.Reset();
+        factory.Store.Seed("projected note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/memories?fields=content,psychicVibes");
+        var (code, message) = await ReadError(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+        message.ShouldContain("psychicVibes");
+        message.ShouldContain("Allowed fields:");
+        message.ShouldContain("tombstoneReason");
+    }
+
+    [Theory]
+    [InlineData("content,,createdAt")]
+    [InlineData("content,%20,createdAt")]
+    [InlineData(",")]
+    public async Task List_WithEmptyFieldEntries_Returns400(string fields)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync($"/api/memories?fields={fields}");
+        var (code, _) = await ReadError(response);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        code.ShouldBe("invalid_fields");
+    }
+
+    [Fact]
+    public async Task List_WithoutFields_ReturnsTheUnchangedFullRecordShape()
+    {
+        factory.Reset();
+        factory.Store.Seed("full shape note", [1f, 0f], tags: ["ops-crew"]);
+
+        var body = await ReadFromJsonAsync<JsonElement>(await factory.NewClient().GetAsync("/api/memories"));
+        var item = body.GetProperty("items")[0];
+
+        item.EnumerateObject().Select(property => property.Name).ShouldBe(
+        [
+            "id", "content", "scope", "kind", "actor", "tome", "projectId", "sessionId", "tags",
+            "importance", "createdAt", "lastAccessedAt", "accessCount", "expiresAt", "status",
+            "supersededBy", "tombstoneReason", "tombstonedAt", "sources", "corrections", "idempotencyKey",
+        ]);
     }
 
     private void RaceOnGet(int atCall, Action mutate)

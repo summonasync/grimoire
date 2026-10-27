@@ -51,7 +51,7 @@ export function StatTile({ icon, tone = "neutral", label, value, hint, footer, h
       {footer ? (
         <div className="ml-auto shrink-0 self-end text-right">{footer}</div>
       ) : (
-        href && <Icon name="arrowRight" className="ml-auto size-4 shrink-0 self-center text-accent" />
+        href && <Icon name="arrowRight" className="ml-auto size-4 shrink-0 self-center text-jade" />
       )}
     </>
   );
@@ -64,7 +64,7 @@ export function StatTile({ icon, tone = "neutral", label, value, hint, footer, h
     <a
       href={href}
       className={cn(
-        "panel flex items-start gap-3 px-4 py-3.5 transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+        "panel flex items-start gap-3 px-4 py-3.5 transition-colors hover:border-jade focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60",
         toneRing[tone],
       )}
     >

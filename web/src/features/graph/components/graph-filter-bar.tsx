@@ -48,8 +48,8 @@ export function GraphFilterBar({
               className={cn(
                 "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.7rem] font-medium transition-colors",
                 on
-                  ? "border-accent/55 bg-accent-soft text-foreground"
-                  : "border-border text-muted hover:border-accent/40 hover:text-foreground",
+                  ? "border-jade/55 bg-jade/10 text-foreground"
+                  : "border-border text-muted hover:border-jade/40 hover:text-foreground",
               )}
             >
               <span

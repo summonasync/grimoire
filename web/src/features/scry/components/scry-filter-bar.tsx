@@ -98,7 +98,7 @@ export function ScryFilterBar({ filters, onChange, onReset }: ScryFilterBarProps
         <button
           type="button"
           onClick={onReset}
-          className="ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[0.7rem] text-muted transition-colors hover:border-accent/50 hover:text-accent"
+          className="ml-auto flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[0.7rem] text-muted transition-colors hover:border-jade/50 hover:text-jade"
         >
           <Icon name="close" className="size-3" />
           Reset

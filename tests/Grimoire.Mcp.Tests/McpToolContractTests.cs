@@ -28,7 +28,7 @@ public sealed class McpToolContractTests
     public static TheoryData<string, string[]> TeachingKeywords()
     {
         var data = new TheoryData<string, string[]>();
-        data.Add("memory_remember", ["supersedes", "actor provenance", "never store secrets", "tome", "durable facts in English", "quotes as spoken"]);
+        data.Add("memory_remember", ["supersedes", "nearDuplicates", "actor provenance", "never store secrets", "tome", "durable facts in English", "quotes as spoken"]);
         data.Add("memory_recall", ["before you assume", "memory_scry", "tome", "access stats", "narrow with scope"]);
         data.Add("memory_forget", ["tombstone", "forgotten=false", "tome"]);
         data.Add("memory_restore", ["undo door", "one active truth", "restored=false", "correction trail", "tome", "converges"]);
@@ -46,12 +46,12 @@ public sealed class McpToolContractTests
     public static TheoryData<string, string[], string[]> ParameterContracts()
     {
         var data = new TheoryData<string, string[], string[]>();
-        data.Add("memory_remember", ["content", "scope"], ["kind", "projectId", "sessionId", "tags", "importance", "tome"]);
-        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "limit", "tome"]);
+        data.Add("memory_remember", ["content", "scope"], ["kind", "projectId", "sessionId", "tags", "importance", "tome", "supersedes"]);
+        data.Add("memory_recall", ["query"], ["scope", "kind", "projectId", "sessionId", "tags", "limit", "tome", "fields", "compact"]);
         data.Add("memory_forget", ["memoryId", "reason"], ["tome"]);
         data.Add("memory_restore", ["memoryId", "reason"], ["tome"]);
         data.Add("memory_history", ["memoryId"], ["tome"]);
-        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit", "tome"]);
+        data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "limit", "tome", "fields", "compact"]);
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
@@ -83,6 +83,7 @@ public sealed class McpToolContractTests
         data.Add("memory_remember", "content", "string");
         data.Add("memory_remember", "tags", "array");
         data.Add("memory_remember", "importance", "number");
+        data.Add("memory_remember", "supersedes", "string");
         data.Add("memory_recall", "query", "string");
         data.Add("memory_recall", "limit", "integer");
         data.Add("memory_recall", "tome", "string");
@@ -98,6 +99,10 @@ public sealed class McpToolContractTests
         data.Add("memory_scry", "tomes", "array");
         data.Add("memory_scry", "includeJournal", "boolean");
         data.Add("memory_scry", "limit", "integer");
+        data.Add("memory_list", "fields", "array");
+        data.Add("memory_list", "compact", "boolean");
+        data.Add("memory_recall", "fields", "array");
+        data.Add("memory_recall", "compact", "boolean");
         data.Add("projects", "action", "string");
         data.Add("projects", "alias", "string");
         data.Add("projects", "paths", "array");

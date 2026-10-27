@@ -4,6 +4,7 @@ namespace Grimoire.Api.Contracts;
 
 public sealed record EngineSettings(
     double SessionTtlHours,
+    double NearDuplicateSimilarityThreshold,
     double DedupSimilarityThreshold,
     double RelatedSimilarityThreshold,
     double TombstoneRetentionDays,
