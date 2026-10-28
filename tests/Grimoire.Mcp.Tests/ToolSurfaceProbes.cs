@@ -141,6 +141,31 @@ internal static class ToolSurfaceProbes
             ["action"] = "List",
         });
 
+        session.Embeddings.Register("snapshot probe deploy journal one", [1f, 0.7f, 0]);
+        session.Embeddings.Register("snapshot probe deploy journal two", [1f, 0, 0.7f]);
+        session.Embeddings.Register("snapshot probe deploy journal three", [1f, 0, 0]);
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal one",
+            ["projectId"] = "grimoire",
+            ["topic"] = "deploy",
+        });
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal two",
+            ["projectId"] = "grimoire",
+            ["topic"] = "deploy",
+        });
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal three",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "probe" },
+        });
+
         return probes;
     }
 

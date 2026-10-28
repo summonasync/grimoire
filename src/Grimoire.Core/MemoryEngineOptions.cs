@@ -10,6 +10,10 @@ public sealed record MemoryEngineOptions
 
     public double DedupSimilarityThreshold { get; init; } = 0.92;
 
+    public double NearTopicSimilarityThreshold { get; init; } = 0.75;
+
+    public int TopicAgreementCount { get; init; } = 2;
+
     public double RelatedSimilarityThreshold { get; init; } = 0.82;
 
     public RecencyHalfLives RecencyHalfLives { get; init; } = new();

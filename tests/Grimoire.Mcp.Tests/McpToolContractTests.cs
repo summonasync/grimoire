@@ -16,6 +16,7 @@ public sealed class McpToolContractTests
         "memory_forget",
         "memory_history",
         "memory_list",
+        "memory_note",
         "memory_persona_get",
         "memory_recall",
         "memory_remember",
@@ -34,6 +35,7 @@ public sealed class McpToolContractTests
         data.Add("memory_restore", ["undo door", "one active truth", "restored=false", "correction trail", "tome", "converges"]);
         data.Add("memory_history", ["replacement lineage", "oldest to newest", "found=false", "read-only", "tome", "120-char"]);
         data.Add("memory_list", ["newest first", "active", "tome"]);
+        data.Add("memory_note", ["topic:", "Journal", "0.5", "nearDuplicates", "replays idempotently", "memory_remember"]);
         data.Add("memory_persona_get", ["identity, tone, preferences, rules", "never filled", "human-curated"]);
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
         data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
@@ -52,6 +54,7 @@ public sealed class McpToolContractTests
         data.Add("memory_restore", ["memoryId", "reason"], ["tome"]);
         data.Add("memory_history", ["memoryId"], ["tome"]);
         data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "since", "until", "actor", "limit", "tome", "fields", "compact"]);
+        data.Add("memory_note", ["content"], ["scope", "projectId", "sessionId", "topic", "tags", "tome"]);
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
@@ -66,6 +69,7 @@ public sealed class McpToolContractTests
         var data = new TheoryData<string, string, string[]>();
         data.Add("memory_remember", "scope", ["Session", "Project", "Global", "Personal"]);
         data.Add("memory_remember", "kind", ["Journal", "Fact"]);
+        data.Add("memory_note", "scope", ["Session", "Project", "Global", "Personal"]);
         data.Add("memory_list", "scope", ["Session", "Project", "Global", "Personal"]);
         data.Add("memory_list", "kind", ["Journal", "Fact"]);
         data.Add("memory_list", "status", ["Active", "Superseded", "Tombstoned"]);
@@ -84,6 +88,9 @@ public sealed class McpToolContractTests
         data.Add("memory_remember", "tags", "array");
         data.Add("memory_remember", "importance", "number");
         data.Add("memory_remember", "supersedes", "string");
+        data.Add("memory_note", "content", "string");
+        data.Add("memory_note", "topic", "string");
+        data.Add("memory_note", "tags", "array");
         data.Add("memory_recall", "query", "string");
         data.Add("memory_recall", "limit", "integer");
         data.Add("memory_recall", "tome", "string");
@@ -116,7 +123,7 @@ public sealed class McpToolContractTests
     }
 
     [Fact]
-    public async Task ExposesExactlyTheTwelveContractedTools()
+    public async Task ExposesExactlyTheThirteenContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 

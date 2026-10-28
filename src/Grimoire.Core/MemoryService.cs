@@ -6,7 +6,8 @@ public sealed class MemoryService(
     IClock clock,
     MemoryEngineOptions? options = null,
     GcOptions? gcOptions = null,
-    IGcStateStore? gcStateStore = null)
+    IGcStateStore? gcStateStore = null,
+    ITopicClassifier? topicClassifier = null)
 {
     private const int DuplicateProbeLimit = 5;
 
@@ -14,11 +15,15 @@ public sealed class MemoryService(
 
     private const int NearSnippetChars = 160;
 
+    private const double NoteImportance = 0.5;
+
     private readonly MemoryEngineOptions _options = options ?? new();
 
     private readonly GcOptions _gcOptions = gcOptions ?? new();
 
     private readonly IGcStateStore? _gcStateStore = gcStateStore;
+
+    private readonly ITopicClassifier? _topicClassifier = topicClassifier;
 
     public async Task<RememberResult> RememberAsync(RememberRequest request, CancellationToken cancellationToken)
     {
@@ -27,22 +32,55 @@ public sealed class MemoryService(
             throw new ArgumentException("Memory content must not be empty.", nameof(request));
         }
 
+        var tome = ResolveTome(request.Tome);
+        var replay = await FindReplayAsync(IdempotencyKey.Compute(request, tome), clock.UtcNow, cancellationToken);
+        if (replay is not null)
+        {
+            return await ReplayAsync(replay, cancellationToken);
+        }
+
+        return await CommitAsync(request, null, cancellationToken);
+    }
+
+    public async Task<RememberResult> NoteAsync(NoteRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Content))
+        {
+            throw new ArgumentException("Note content must not be empty.", nameof(request));
+        }
+
+        var tome = ResolveTome(request.Tome);
+        var replay = await FindReplayAsync(
+            IdempotencyKey.Compute(NoteContract(request, null), tome), clock.UtcNow, cancellationToken);
+        if (replay is not null)
+        {
+            return await ReplayAsync(replay, cancellationToken);
+        }
+
+        var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
+        var topicTag = ITopicClassifier.Normalize(request.Topic)
+            ?? await ClassifyTopicAsync(request, tome, vector, cancellationToken);
+
+        return await CommitAsync(NoteContract(request, topicTag), vector, cancellationToken);
+    }
+
+    private async Task<RememberResult> ReplayAsync(MemoryRecord replay, CancellationToken cancellationToken)
+    {
+        var converged = await ConvergeSupersedesAsync(replay, cancellationToken);
+        return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
+    }
+
+    private async Task<RememberResult> CommitAsync(RememberRequest request, ReadOnlyMemory<float>? vector, CancellationToken cancellationToken)
+    {
         var now = clock.UtcNow;
         var tome = ResolveTome(request.Tome);
         var key = IdempotencyKey.Compute(request, tome);
 
-        var replay = await FindReplayAsync(key, now, cancellationToken);
-        if (replay is not null)
-        {
-            var converged = await ConvergeSupersedesAsync(replay, cancellationToken);
-            return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
-        }
-
         await ValidateSourcesAsync(request, tome, cancellationToken);
         var superseded = await ValidateSupersedesAsync(request, tome, cancellationToken);
 
-        var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
-        var matches = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
+        var embedded = vector ?? await embeddings.EmbedAsync(request.Content, cancellationToken);
+        var matches = await ProbeDuplicatesAsync(request, tome, embedded, cancellationToken);
         var nearMatches = SelectNearMatches(matches, superseded?.Id);
 
         var record = new MemoryRecord
@@ -64,7 +102,7 @@ public sealed class MemoryService(
             IdempotencyKey = key,
         };
 
-        await store.UpsertAsync(record, vector, cancellationToken);
+        await store.UpsertAsync(record, embedded, cancellationToken);
 
         Guid? supersededId;
         try
@@ -628,6 +666,39 @@ public sealed class MemoryService(
         }
 
         return target;
+    }
+
+    private static RememberRequest NoteContract(NoteRequest request, string? topicTag) => new()
+    {
+        Content = request.Content,
+        Scope = request.Scope,
+        Kind = MemoryKind.Journal,
+        Actor = request.Actor,
+        Tome = request.Tome,
+        ProjectId = request.ProjectId,
+        SessionId = request.SessionId,
+        Tags = topicTag is null ? request.Tags : [.. request.Tags, topicTag],
+        Importance = NoteImportance,
+    };
+
+    private async Task<string?> ClassifyTopicAsync(
+        NoteRequest request,
+        string tome,
+        ReadOnlyMemory<float> vector,
+        CancellationToken cancellationToken)
+    {
+        if (_topicClassifier is null)
+        {
+            return null;
+        }
+
+        return await _topicClassifier.ClassifyAsync(
+            vector,
+            tome,
+            request.Scope,
+            request.ProjectId,
+            request.Scope == MemoryScope.Session ? request.SessionId : null,
+            cancellationToken);
     }
 
     private async Task<long> CountIdempotencyConflictsAsync(CancellationToken cancellationToken)

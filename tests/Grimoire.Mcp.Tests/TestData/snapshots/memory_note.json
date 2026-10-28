@@ -1,0 +1,82 @@
+{
+  "contract": {
+    "description": "Zero-ceremony journal write: supply content, the server does the bookkeeping - kind is always Journal, importance is fixed at 0.5. Pass topic to force a topic:<value> stamp; without it the top embedding neighbors vote and two agreeing neighbors at similarity >= 0.75 stamp their shared topic, otherwise the note lands untagged. Scope defaults to 'Project' and resolves projectId from the caller's working directory via the project registry (an unresolved cwd is rejected with the registered aliases); 'Session' keeps a ~24h TTL; 'Global' and 'Personal' live across projects. The response is one payload carrying memoryId, scope, projectId, topicTag and nearDuplicates; an identical retry replays idempotently. For durable curated facts use memory_remember instead.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "content": {
+          "type": "string"
+        },
+        "projectId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "default": "Project",
+          "type": "string"
+        },
+        "sessionId": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topic": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "content"
+      ]
+    },
+    "name": "memory_note",
+    "readOnly": false,
+    "title": "Write a quick note"
+  },
+  "output": {
+    "actor": "string",
+    "createdAt": "string",
+    "idempotentReplay": "boolean",
+    "maintenancePending": "boolean",
+    "memoryId": "string",
+    "nearDuplicates": {
+      "arrayOf": {
+        "memoryId": "string",
+        "similarity": "number",
+        "snippet": "string"
+      }
+    },
+    "projectId": "string",
+    "scope": "string",
+    "supersededExisting": "boolean",
+    "supersededMemoryId": "string",
+    "tags": {
+      "arrayOf": "string"
+    },
+    "tome": "string",
+    "topicTag": "string"
+  }
+}

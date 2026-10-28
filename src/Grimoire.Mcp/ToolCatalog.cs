@@ -17,7 +17,14 @@ internal static class ToolCatalog
         var gcOptions = services.GetService(typeof(GcOptions)) as GcOptions;
         var gcState = services.GetService(typeof(IGcStateStore)) as IGcStateStore;
 
-        var memories = new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
+        var memories = new MemoryService(
+            store,
+            embeddings,
+            clock,
+            engineOptions,
+            gcOptions,
+            gcState,
+            new EmbeddingTopicClassifier(store, engineOptions));
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
@@ -38,6 +45,7 @@ internal static class ToolCatalog
         return
         [
             Build(RememberTool.Name, RememberTool.Title, RememberTool.Description, new RememberTool(memories, actors, projectTags, callerPaths).Remember, readOnly: false, destructive: false, idempotent: false),
+            Build(NoteTool.Name, NoteTool.Title, NoteTool.Description, new NoteTool(memories, actors, projectTags, callerPaths).Note, readOnly: false, destructive: false, idempotent: true),
             Build(RecallTool.Name, RecallTool.Title, RecallTool.Description, new RecallTool(memories, actors, projects, callerPaths).Recall, readOnly: true, destructive: false, idempotent: true),
             Build(ForgetTool.Name, ForgetTool.Title, ForgetTool.Description, new ForgetTool(memories, actors).Forget, readOnly: false, destructive: true, idempotent: true),
             Build(RestoreTool.Name, RestoreTool.Title, RestoreTool.Description, new RestoreTool(corrections, store, actors).Restore, readOnly: false, destructive: false, idempotent: true),
