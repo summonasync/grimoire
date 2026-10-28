@@ -226,6 +226,25 @@ public sealed class DigestToolTests
     }
 
     [Fact]
+    public async Task Digest_FieldsCreatedAt_IsAnAllowedProjectionKey()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("deploy", new float[] { 1, 0, 0 });
+        await SeedAsync(session, "ship gates decision", new float[] { 0, 0, 1 }, tags: new[] { "topic:deploy" });
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "deploy",
+            ["fields"] = new[] { "createdAt" },
+        });
+
+        result.ShouldSucceed();
+        var item = result.Payload().GetProperty("longMemo").GetProperty("items")[0];
+        item.EnumerateObject().Select(property => property.Name).OrderBy(name => name, StringComparer.Ordinal)
+            .ShouldBe(["createdAt", "match", "memoryId"]);
+    }
+
+    [Fact]
     public async Task Digest_HitsBumpAccessStatsOnTheStore()
     {
         await using var session = await McpTestSession.StartAsync();

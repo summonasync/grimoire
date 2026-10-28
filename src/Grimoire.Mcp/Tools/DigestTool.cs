@@ -26,7 +26,7 @@ internal sealed class DigestTool(DigestService digests, MemoryActorProvider acto
     {
         AllowedKeys =
         [
-            "content", "scope", "kind", "tags", "similarity", "tombstoneReason", "truncated", "lastAccessedAt",
+            "content", "scope", "kind", "tags", "createdAt", "similarity", "tombstoneReason", "truncated", "lastAccessedAt",
         ],
         AlwaysOnKeys = ["memoryId", "match"],
         CompactKeys = ["memoryId", "content", "tags", "createdAt"],
