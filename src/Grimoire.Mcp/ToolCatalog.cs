@@ -16,6 +16,8 @@ internal static class ToolCatalog
         var engineOptions = services.GetService(typeof(MemoryEngineOptions)) as MemoryEngineOptions;
         var gcOptions = services.GetService(typeof(GcOptions)) as GcOptions;
         var gcState = services.GetService(typeof(IGcStateStore)) as IGcStateStore;
+        var consolidationOptions = services.GetService(typeof(ConsolidationOptions)) as ConsolidationOptions;
+        var consolidationState = services.GetService(typeof(IConsolidationStateStore)) as IConsolidationStateStore;
 
         var memories = new MemoryService(
             store,
@@ -24,7 +26,9 @@ internal static class ToolCatalog
             engineOptions,
             gcOptions,
             gcState,
-            new EmbeddingTopicClassifier(store, engineOptions));
+            new EmbeddingTopicClassifier(store, engineOptions),
+            consolidationOptions,
+            consolidationState);
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
         var digests = new DigestService(store, embeddings, clock, engineOptions);

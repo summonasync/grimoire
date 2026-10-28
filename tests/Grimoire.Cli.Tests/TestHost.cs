@@ -26,9 +26,10 @@ internal sealed class TestHost : IDisposable
         Embeddings = embeddings ?? new StubEmbeddings(new Dictionary<string, float[]>());
         Clock = new FakeClock();
         GcState = gcState ?? new FakeGcStateStore();
+        ConsolidationState = new FakeConsolidationStateStore();
         ConfigPath = Path.Combine(_directory, "config.json");
         Board = board ?? new FakeBoardProjectSource();
-        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConfigPath, callerPaths, projects, Board);
+        Services = TestServices.Build(Store, Embeddings, Clock, options, db, claims, gcOptions, GcState, ConsolidationState, ConfigPath, callerPaths, projects, Board);
         Output = new StringWriter();
         Env = new CliEnvironment
         {
@@ -49,6 +50,8 @@ internal sealed class TestHost : IDisposable
     public FakeClock Clock { get; }
 
     public FakeGcStateStore GcState { get; }
+
+    public FakeConsolidationStateStore ConsolidationState { get; }
 
     public ServiceProvider Services { get; }
 

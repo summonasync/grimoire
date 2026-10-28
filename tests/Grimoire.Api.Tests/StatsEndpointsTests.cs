@@ -67,6 +67,40 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
     }
 
     [Fact]
+    public async Task Get_CarriesTheConsolidationHeartbeat()
+    {
+        factory.Reset();
+        factory.ConsolidationState.Current = new ConsolidationState
+        {
+            LastAttemptAt = FakeClock.DefaultStart.AddHours(-1),
+            LastSuccessAt = FakeClock.DefaultStart.AddHours(-1),
+            ConsolidatedClusters = 3,
+        };
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var consolidation = body.GetProperty("consolidation");
+        consolidation.GetProperty("stale").GetBoolean().ShouldBeFalse();
+        consolidation.GetProperty("lastSuccessAt").GetDateTimeOffset().ShouldBe(FakeClock.DefaultStart.AddHours(-1));
+        consolidation.GetProperty("consolidatedClusters").GetInt32().ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Get_ReportsAnUnconfiguredConsolidationHeartbeatAsUnknown()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().GetAsync("/api/stats");
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var consolidation = body.GetProperty("consolidation");
+        consolidation.GetProperty("stale").GetBoolean().ShouldBeTrue();
+        consolidation.GetProperty("unknownReason").GetString().ShouldBe("consolidation state file does not exist yet");
+    }
+
+    [Fact]
     public async Task Get_FlagsTheGcHeartbeatStalePastTwiceTheSweepInterval()
     {
         factory.Reset();
@@ -325,7 +359,7 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         body.GetProperty("pendingCompaction").GetInt64().ShouldBe(2);
         body.TryGetProperty("pendingCompactionByTome", out _).ShouldBeFalse();
         body.EnumerateObject().Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal)
-            .ShouldBe(["active", "activeByScope", "byProject", "byTome", "gc", "idempotencyConflicts", "pendingCompaction", "superseded", "tombstoned", "tome", "tomeSource"]);
+            .ShouldBe(["active", "activeByScope", "byProject", "byTome", "consolidation", "gc", "idempotencyConflicts", "pendingCompaction", "superseded", "tombstoned", "tome", "tomeSource"]);
     }
 
     [Fact]

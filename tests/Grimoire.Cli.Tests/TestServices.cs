@@ -24,6 +24,7 @@ internal static class TestServices
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
         IGcStateStore? gcState = null,
+        IConsolidationStateStore? consolidationState = null,
         string? configPath = null,
         ICallerPathProvider? callerPaths = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
@@ -54,13 +55,17 @@ internal static class TestServices
         services.AddSingleton(options ?? TunedOptions());
         services.AddSingleton(gcOptions ?? new GcOptions());
         services.AddSingleton(gcState ?? new FakeGcStateStore());
+        services.AddSingleton(new ConsolidationOptions());
+        services.AddSingleton(consolidationState ?? new FakeConsolidationStateStore());
         services.AddSingleton(sp => new MemoryService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>(),
             sp.GetRequiredService<GcOptions>(),
-            sp.GetRequiredService<IGcStateStore>()));
+            sp.GetRequiredService<IGcStateStore>(),
+            consolidationOptions: sp.GetRequiredService<ConsolidationOptions>(),
+            consolidationStateStore: sp.GetRequiredService<IConsolidationStateStore>()));
         services.AddSingleton(sp => new PersonaService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

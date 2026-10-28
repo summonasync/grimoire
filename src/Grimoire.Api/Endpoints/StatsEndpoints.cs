@@ -50,7 +50,8 @@ internal static class StatsEndpoints
                 stats.IdempotencyConflicts,
                 byTome,
                 await ProjectCountsAsync(memories, identity.ResolvedTome, cancellationToken),
-                stats.Gc)
+                stats.Gc,
+                stats.Consolidation)
             {
                 PendingCompactionByTome = includeTomeCompaction
                     ? await memories.PendingCompactionByTomeAsync(cancellationToken)

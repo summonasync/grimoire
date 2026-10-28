@@ -24,6 +24,7 @@ internal sealed class StatsCommand(CliEnvironment environment)
         environment.Output.WriteLine($"Pending compaction: {stats.PendingCompaction}");
         environment.Output.WriteLine($"Idempotency conflicts: {stats.IdempotencyConflicts}");
         environment.Output.WriteLine($"GC: {GcText(stats.Gc)}");
+        environment.Output.WriteLine($"Consolidation: {ConsolidationText(stats.Consolidation)}");
         environment.Output.WriteLine($"Tome: {identity.Tome} ({SourceText(identity.Source)})");
         environment.Output.WriteLine($"Per tome: {PerTome(stats)}");
         environment.Output.WriteLine($"Per project: {await PerProjectAsync(memories, identity.Tome, cancellationToken)}");
@@ -79,6 +80,12 @@ internal sealed class StatsCommand(CliEnvironment environment)
         : $"last attempt {Timestamp(gc.LastAttemptAt)}, last success {Timestamp(gc.LastSuccessAt)}, " +
           $"removed {FormatCount(gc.RemovedExpired)} expired / {FormatCount(gc.RemovedTombstones)} tombstones, " +
           $"last error: {gc.LastError ?? "none"}, stale: {FormatFlag(gc.Stale)}";
+
+    private static string ConsolidationText(ConsolidationState consolidation) => consolidation.IsUnknown
+        ? $"unknown ({consolidation.UnknownReason}), stale: {FormatFlag(consolidation.Stale)}"
+        : $"last attempt {Timestamp(consolidation.LastAttemptAt)}, last success {Timestamp(consolidation.LastSuccessAt)}, " +
+          $"clusters {FormatCount(consolidation.ConsolidatedClusters)}, " +
+          $"last error: {consolidation.LastError ?? "none"}, stale: {FormatFlag(consolidation.Stale)}";
 
     private static string Timestamp(DateTimeOffset? moment) => moment?.ToString("u") ?? "never";
 

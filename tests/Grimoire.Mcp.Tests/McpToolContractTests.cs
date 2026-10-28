@@ -184,6 +184,11 @@ public sealed class McpToolContractTests
             LastSuccessAt = new DateTimeOffset(2026, 10, 17, 12, 30, 0, TimeSpan.Zero),
             RemovedExpired = 2,
             RemovedTombstones = 1,
+        }), consolidationState: new FakeConsolidationStateStore(new ConsolidationState
+        {
+            LastAttemptAt = new DateTimeOffset(2026, 10, 17, 12, 30, 0, TimeSpan.Zero),
+            LastSuccessAt = new DateTimeOffset(2026, 10, 17, 12, 30, 0, TimeSpan.Zero),
+            ConsolidatedClusters = 2,
         }));
         var results = await ToolSurfaceProbes.RunAsync(session);
 

@@ -25,6 +25,7 @@ public sealed class StatsParityContractTests : IDisposable
         new("PendingCompaction", "Pending compaction: ", "pendingCompaction"),
         new("IdempotencyConflicts", "Idempotency conflicts: ", "idempotencyConflicts"),
         new("Gc", "GC: ", "gc.lastSuccessAt"),
+        new("Consolidation", "Consolidation: ", "consolidation.lastSuccessAt"),
         new("Tome", "Tome: ", "tome"),
         new("TomeSource", "(default)", "tomeSource"),
         new("ByTome", "Per tome: ", "byTome"),
@@ -77,6 +78,12 @@ public sealed class StatsParityContractTests : IDisposable
             LastSuccessAt = Start.AddMinutes(-10),
             RemovedExpired = 2,
             RemovedTombstones = 1,
+        };
+        _host.ConsolidationState.Current = new ConsolidationState
+        {
+            LastAttemptAt = Start.AddMinutes(-10),
+            LastSuccessAt = Start.AddMinutes(-10),
+            ConsolidatedClusters = 3,
         };
     }
 

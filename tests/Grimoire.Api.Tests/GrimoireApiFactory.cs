@@ -57,6 +57,8 @@ public sealed class GrimoireApiFactory : IDisposable
 
     public FakeGcStateStore GcState { get; } = new();
 
+    public FakeConsolidationStateStore ConsolidationState { get; } = new();
+
     public void Reset()
     {
         Store.Clear();
@@ -68,6 +70,7 @@ public sealed class GrimoireApiFactory : IDisposable
         Embeddings.Requests.Clear();
         Embeddings.Failure = null;
         GcState.Reset();
+        ConsolidationState.Reset();
     }
 
     public HttpClient NewClient()
@@ -118,6 +121,8 @@ public sealed class GrimoireApiFactory : IDisposable
         services.AddSingleton<ICallerPathProvider>(new FixedCallerPath(_callerPath ?? DefaultCallerPath));
         services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(60) });
         services.AddSingleton<IGcStateStore>(GcState);
+        services.AddSingleton(new ConsolidationOptions { SweepInterval = TimeSpan.FromMinutes(60) });
+        services.AddSingleton<IConsolidationStateStore>(ConsolidationState);
         if (_engineOptions is not null)
         {
             services.AddSingleton(_engineOptions);
