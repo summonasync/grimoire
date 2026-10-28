@@ -32,6 +32,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
+            ["tags"] = new[] { "probe", "topic:probe" },
         });
 
         await RememberAsync(session, new Dictionary<string, object?>
@@ -50,6 +51,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
+            ["tags"] = new[] { "topic:probe" },
         });
 
         session.Clock.UtcNow = session.Clock.UtcNow.AddHours(1);
@@ -77,6 +79,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Journal",
+            ["tags"] = new[] { "topic:probe" },
         });
 
         var stale = session.Clock.UtcNow.AddDays(-30);
@@ -88,7 +91,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
-            ["tags"] = new[] { "probe" },
+            ["tags"] = new[] { "probe", "topic:probe" },
         });
 
         await Probe(session, probes, "memory_recall", new Dictionary<string, object?>
@@ -164,6 +167,12 @@ internal static class ToolSurfaceProbes
             ["content"] = "snapshot probe deploy journal three",
             ["projectId"] = "grimoire",
             ["tags"] = new[] { "probe" },
+        });
+
+        session.Embeddings.Register("probe", [1f, 0, 0]);
+        await Probe(session, probes, "memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "probe",
         });
 
         return probes;

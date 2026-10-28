@@ -1,0 +1,108 @@
+{
+  "contract": {
+    "description": "Pull everything one tome knows about a topic in a single read - a topic-centric digest from newest down to tombstones. Sections: longMemo (consolidated Facts), recent (fresh Journal entries) and gone (superseded and tombstoned records, the anti-resurrection tail). Topic resolution is deterministic: records tagged topic:<value> union records embedding-similar (>= 0.75) to the topic string; every hit carries match: \"tag\" or \"similar\" and the union deduplicates with tag winning. Sections fill newest-first under char budgets, long entries are truncated and flagged, and sections that do not fit are named in omitted. Digest hits bump access stats like recall does. Compact projection is the default; pass fields to project hits to specific keys instead.",
+    "destructive": false,
+    "idempotent": true,
+    "input": {
+      "parameters": {
+        "compact": {
+          "default": true,
+          "type": "boolean"
+        },
+        "fields": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "limit": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "since": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tome": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topic": {
+          "type": "string"
+        },
+        "until": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "topic"
+      ]
+    },
+    "name": "memory_digest",
+    "readOnly": true,
+    "title": "Digest a topic"
+  },
+  "output": {
+    "gone": {
+      "items": {
+        "arrayOf": {
+          "content": "string",
+          "createdAt": "string",
+          "match": "string",
+          "memoryId": "string",
+          "tags": {
+            "arrayOf": "string"
+          }
+        }
+      },
+      "state": "string"
+    },
+    "longMemo": {
+      "items": {
+        "arrayOf": {
+          "content": "string",
+          "createdAt": "string",
+          "match": "string",
+          "memoryId": "string",
+          "tags": {
+            "arrayOf": "string"
+          }
+        }
+      },
+      "state": "string"
+    },
+    "omitted": {
+      "arrayOf": "unobserved"
+    },
+    "recent": {
+      "items": {
+        "arrayOf": {
+          "content": "string",
+          "createdAt": "string",
+          "match": "string",
+          "memoryId": "string",
+          "tags": {
+            "arrayOf": "string"
+          }
+        }
+      },
+      "state": "string"
+    },
+    "tome": "string",
+    "topic": "string"
+  }
+}

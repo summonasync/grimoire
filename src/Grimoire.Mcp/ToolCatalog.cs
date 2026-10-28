@@ -27,6 +27,7 @@ internal static class ToolCatalog
             new EmbeddingTopicClassifier(store, engineOptions));
         var persona = new PersonaService(store, embeddings, clock);
         var brief = new BriefService(store, persona, clock, engineOptions);
+        var digests = new DigestService(store, embeddings, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
@@ -53,6 +54,7 @@ internal static class ToolCatalog
             Build(ListTool.Name, ListTool.Title, ListTool.Description, new ListTool(memories, actors).List, readOnly: true, destructive: false, idempotent: true),
             Build(PersonaGetTool.Name, PersonaGetTool.Title, PersonaGetTool.Description, new PersonaGetTool(persona, actors).Get, readOnly: true, destructive: false, idempotent: true),
             Build(BriefTool.Name, BriefTool.Title, BriefTool.Description, new BriefTool(brief, actors).Brief, readOnly: true, destructive: false, idempotent: true),
+            Build(DigestTool.Name, DigestTool.Title, DigestTool.Description, new DigestTool(digests, actors).Digest, readOnly: true, destructive: false, idempotent: true),
             Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store, actors).GetCandidates, readOnly: true, destructive: false, idempotent: true),
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),

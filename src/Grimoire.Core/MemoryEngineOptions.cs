@@ -32,5 +32,15 @@ public sealed record MemoryEngineOptions
 
     public int BriefMaxEntryChars { get; init; } = 400;
 
+    public double DigestSimilarityThreshold { get; init; } = 0.75;
+
+    public int DigestRecentCap { get; init; } = 10;
+
+    public int DigestGoneCap { get; init; } = 10;
+
+    public int DigestMaxTotalChars { get; init; } = 6000;
+
+    public int DigestMaxEntryChars { get; init; } = 400;
+
     public int ReindexBatchSize { get; init; } = 64;
 }

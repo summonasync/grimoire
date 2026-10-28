@@ -13,6 +13,7 @@ public sealed class McpToolContractTests
     [
         "memory_brief",
         "memory_compact_candidates",
+        "memory_digest",
         "memory_forget",
         "memory_history",
         "memory_list",
@@ -36,6 +37,7 @@ public sealed class McpToolContractTests
         data.Add("memory_history", ["replacement lineage", "oldest to newest", "found=false", "read-only", "tome", "120-char"]);
         data.Add("memory_list", ["newest first", "active", "tome"]);
         data.Add("memory_note", ["topic:", "Journal", "0.5", "nearDuplicates", "replays idempotently", "memory_remember"]);
+        data.Add("memory_digest", ["longMemo", "recent", "gone", "tag", "similar", "omitted", "truncated", "bump access stats", "compact"]);
         data.Add("memory_persona_get", ["identity, tone, preferences, rules", "never filled", "human-curated"]);
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
         data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
@@ -55,6 +57,7 @@ public sealed class McpToolContractTests
         data.Add("memory_history", ["memoryId"], ["tome"]);
         data.Add("memory_list", [], ["scope", "kind", "status", "projectId", "sessionId", "tags", "since", "until", "actor", "limit", "tome", "fields", "compact"]);
         data.Add("memory_note", ["content"], ["scope", "projectId", "sessionId", "topic", "tags", "tome"]);
+        data.Add("memory_digest", ["topic"], ["tome", "since", "until", "limit", "fields", "compact"]);
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
@@ -91,6 +94,13 @@ public sealed class McpToolContractTests
         data.Add("memory_note", "content", "string");
         data.Add("memory_note", "topic", "string");
         data.Add("memory_note", "tags", "array");
+        data.Add("memory_digest", "topic", "string");
+        data.Add("memory_digest", "tome", "string");
+        data.Add("memory_digest", "since", "string");
+        data.Add("memory_digest", "until", "string");
+        data.Add("memory_digest", "limit", "integer");
+        data.Add("memory_digest", "fields", "array");
+        data.Add("memory_digest", "compact", "boolean");
         data.Add("memory_recall", "query", "string");
         data.Add("memory_recall", "limit", "integer");
         data.Add("memory_recall", "tome", "string");
@@ -123,7 +133,7 @@ public sealed class McpToolContractTests
     }
 
     [Fact]
-    public async Task ExposesExactlyTheThirteenContractedTools()
+    public async Task ExposesExactlyTheFourteenContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 
