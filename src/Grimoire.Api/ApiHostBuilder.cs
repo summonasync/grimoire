@@ -14,6 +14,8 @@ namespace Grimoire.Api;
 
 public static class ApiHostBuilder
 {
+    private static readonly MemoryActor SweepActor = MemoryActor.Agent("grimoire", "consolidator");
+
     public static WebApplication Build(ApiHostOptions options, IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -26,8 +28,11 @@ public static class ApiHostBuilder
         var gcOptions = services.GetService<GcOptions>()
             ?? new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.GcIntervalMinutes) };
         var gcState = services.GetService<IGcStateStore>();
+        var consolidationOptions = services.GetService<ConsolidationOptions>() ?? new ConsolidationOptions();
+        var consolidationState = services.GetService<IConsolidationStateStore>();
         var memories = services.GetService<MemoryService>()
-            ?? new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState);
+            ?? new MemoryService(store, embeddings, clock, engineOptions, gcOptions, gcState,
+                consolidationOptions: consolidationOptions, consolidationStateStore: consolidationState);
         var persona = services.GetService<PersonaService>() ?? new PersonaService(store, embeddings, clock);
 
         var builder = WebApplication.CreateBuilder();
@@ -48,6 +53,11 @@ public static class ApiHostBuilder
             clock,
             TimeSpan.FromMinutes(options.GcIntervalMinutes),
             gcState));
+        builder.Services.AddHostedService(_ => new ConsolidationSweeper(
+            cancellationToken => memories.ConsolidateAsync(SweepActor, cancellationToken),
+            clock,
+            consolidationOptions.SweepInterval,
+            consolidationState));
 
         var tomeResolver = new ApiTomeResolver(
             new TomeResolver(engineOptions),

@@ -10,6 +10,10 @@ public sealed record MemoryEngineOptions
 
     public double DedupSimilarityThreshold { get; init; } = 0.92;
 
+    public double NearTopicSimilarityThreshold { get; init; } = 0.75;
+
+    public int TopicAgreementCount { get; init; } = 2;
+
     public double RelatedSimilarityThreshold { get; init; } = 0.82;
 
     public RecencyHalfLives RecencyHalfLives { get; init; } = new();
@@ -27,6 +31,16 @@ public sealed record MemoryEngineOptions
     public int BriefMaxTotalChars { get; init; } = 8000;
 
     public int BriefMaxEntryChars { get; init; } = 400;
+
+    public double DigestSimilarityThreshold { get; init; } = 0.75;
+
+    public int DigestRecentCap { get; init; } = 10;
+
+    public int DigestGoneCap { get; init; } = 10;
+
+    public int DigestMaxTotalChars { get; init; } = 6000;
+
+    public int DigestMaxEntryChars { get; init; } = 400;
 
     public int ReindexBatchSize { get; init; } = 64;
 }

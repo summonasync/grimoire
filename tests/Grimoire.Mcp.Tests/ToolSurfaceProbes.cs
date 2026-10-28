@@ -32,6 +32,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
+            ["tags"] = new[] { "probe", "topic:probe" },
         });
 
         await RememberAsync(session, new Dictionary<string, object?>
@@ -50,6 +51,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
+            ["tags"] = new[] { "topic:probe" },
         });
 
         session.Clock.UtcNow = session.Clock.UtcNow.AddHours(1);
@@ -77,6 +79,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Journal",
+            ["tags"] = new[] { "topic:probe" },
         });
 
         var stale = session.Clock.UtcNow.AddDays(-30);
@@ -88,7 +91,7 @@ internal static class ToolSurfaceProbes
             ["scope"] = "Project",
             ["projectId"] = "grimoire",
             ["kind"] = "Fact",
-            ["tags"] = new[] { "probe" },
+            ["tags"] = new[] { "probe", "topic:probe" },
         });
 
         await Probe(session, probes, "memory_recall", new Dictionary<string, object?>
@@ -139,6 +142,37 @@ internal static class ToolSurfaceProbes
         await Probe(session, probes, "projects", new Dictionary<string, object?>
         {
             ["action"] = "List",
+        });
+
+        session.Embeddings.Register("snapshot probe deploy journal one", [1f, 0.7f, 0]);
+        session.Embeddings.Register("snapshot probe deploy journal two", [1f, 0, 0.7f]);
+        session.Embeddings.Register("snapshot probe deploy journal three", [1f, 0, 0]);
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal one",
+            ["projectId"] = "grimoire",
+            ["topic"] = "deploy",
+        });
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal two",
+            ["projectId"] = "grimoire",
+            ["topic"] = "deploy",
+        });
+
+        await Probe(session, probes, "memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "snapshot probe deploy journal three",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "probe" },
+        });
+
+        session.Embeddings.Register("probe", [1f, 0, 0]);
+        await Probe(session, probes, "memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "probe",
         });
 
         return probes;

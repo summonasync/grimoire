@@ -85,8 +85,11 @@ internal static class TestMemories
         FakeClock clock,
         MemoryEngineOptions? options = null,
         GcOptions? gcOptions = null,
-        IGcStateStore? gcState = null)
-        => new(store, embeddings, clock, options, gcOptions, gcState);
+        IGcStateStore? gcState = null,
+        ITopicClassifier? topics = null,
+        ConsolidationOptions? consolidationOptions = null,
+        IConsolidationStateStore? consolidationState = null)
+        => new(store, embeddings, clock, options, gcOptions, gcState, topics, consolidationOptions, consolidationState);
 
     public static CorrectionService Corrections(IMemoryStore store, FakeClock clock, MemoryEngineOptions? options = null)
         => new(store, clock, options);

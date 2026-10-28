@@ -6,7 +6,10 @@ public sealed class MemoryService(
     IClock clock,
     MemoryEngineOptions? options = null,
     GcOptions? gcOptions = null,
-    IGcStateStore? gcStateStore = null)
+    IGcStateStore? gcStateStore = null,
+    ITopicClassifier? topicClassifier = null,
+    ConsolidationOptions? consolidationOptions = null,
+    IConsolidationStateStore? consolidationStateStore = null)
 {
     private const int DuplicateProbeLimit = 5;
 
@@ -14,11 +17,25 @@ public sealed class MemoryService(
 
     private const int NearSnippetChars = 160;
 
+    private const double NoteImportance = 0.5;
+
+    private const double ConsolidatedBaseImportance = 0.6;
+
+    private const double ConsolidatedPerSourceImportance = 0.04;
+
     private readonly MemoryEngineOptions _options = options ?? new();
 
     private readonly GcOptions _gcOptions = gcOptions ?? new();
 
     private readonly IGcStateStore? _gcStateStore = gcStateStore;
+
+    private readonly ITopicClassifier? _topicClassifier = topicClassifier;
+
+    private readonly ConsolidationOptions _consolidationOptions = consolidationOptions ?? new();
+
+    private readonly IConsolidationStateStore? _consolidationStateStore = consolidationStateStore;
+
+    private readonly Consolidation.IClusterSummarizer _summarizer = new Consolidation.ExtractiveSummarizer();
 
     public async Task<RememberResult> RememberAsync(RememberRequest request, CancellationToken cancellationToken)
     {
@@ -27,22 +44,55 @@ public sealed class MemoryService(
             throw new ArgumentException("Memory content must not be empty.", nameof(request));
         }
 
+        var tome = ResolveTome(request.Tome);
+        var replay = await FindReplayAsync(IdempotencyKey.Compute(request, tome), clock.UtcNow, cancellationToken);
+        if (replay is not null)
+        {
+            return await ReplayAsync(replay, cancellationToken);
+        }
+
+        return await CommitAsync(request, null, cancellationToken);
+    }
+
+    public async Task<RememberResult> NoteAsync(NoteRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Content))
+        {
+            throw new ArgumentException("Note content must not be empty.", nameof(request));
+        }
+
+        var tome = ResolveTome(request.Tome);
+        var replay = await FindReplayAsync(
+            IdempotencyKey.Compute(NoteContract(request, null), tome), clock.UtcNow, cancellationToken);
+        if (replay is not null)
+        {
+            return await ReplayAsync(replay, cancellationToken);
+        }
+
+        var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
+        var topicTag = ITopicClassifier.Normalize(request.Topic)
+            ?? await ClassifyTopicAsync(request, tome, vector, cancellationToken);
+
+        return await CommitAsync(NoteContract(request, topicTag), vector, cancellationToken);
+    }
+
+    private async Task<RememberResult> ReplayAsync(MemoryRecord replay, CancellationToken cancellationToken)
+    {
+        var converged = await ConvergeSupersedesAsync(replay, cancellationToken);
+        return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
+    }
+
+    private async Task<RememberResult> CommitAsync(RememberRequest request, ReadOnlyMemory<float>? vector, CancellationToken cancellationToken)
+    {
         var now = clock.UtcNow;
         var tome = ResolveTome(request.Tome);
         var key = IdempotencyKey.Compute(request, tome);
 
-        var replay = await FindReplayAsync(key, now, cancellationToken);
-        if (replay is not null)
-        {
-            var converged = await ConvergeSupersedesAsync(replay, cancellationToken);
-            return new RememberResult { Record = replay, IdempotentReplay = true, MaintenancePending = !converged };
-        }
-
         await ValidateSourcesAsync(request, tome, cancellationToken);
         var superseded = await ValidateSupersedesAsync(request, tome, cancellationToken);
 
-        var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
-        var matches = await ProbeDuplicatesAsync(request, tome, vector, cancellationToken);
+        var embedded = vector ?? await embeddings.EmbedAsync(request.Content, cancellationToken);
+        var matches = await ProbeDuplicatesAsync(request, tome, embedded, cancellationToken);
         var nearMatches = SelectNearMatches(matches, superseded?.Id);
 
         var record = new MemoryRecord
@@ -64,7 +114,7 @@ public sealed class MemoryService(
             IdempotencyKey = key,
         };
 
-        await store.UpsertAsync(record, vector, cancellationToken);
+        await store.UpsertAsync(record, embedded, cancellationToken);
 
         Guid? supersededId;
         try
@@ -333,6 +383,7 @@ public sealed class MemoryService(
             ByTome = census.ByTome,
             LastWriteByTome = census.LastWriteByTome,
             Gc = await GcHeartbeatAsync(cancellationToken),
+            Consolidation = await ConsolidationHeartbeatAsync(cancellationToken),
         };
     }
 
@@ -344,6 +395,125 @@ public sealed class MemoryService(
 
         return state with { Stale = state.IsStale(_gcOptions.StalenessThreshold, clock.UtcNow) };
     }
+
+    private async Task<ConsolidationState> ConsolidationHeartbeatAsync(CancellationToken cancellationToken)
+    {
+        var state = _consolidationStateStore is null
+            ? ConsolidationState.Unknown("consolidation state store is not configured")
+            : await _consolidationStateStore.ReadAsync(cancellationToken);
+
+        return state with { Stale = state.IsStale(_consolidationOptions.StalenessThreshold, clock.UtcNow) };
+    }
+
+    public async Task<ConsolidationResult> ConsolidateAsync(MemoryActor actor, CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
+        var journal = await store.ListAsync(new MemoryFilter
+        {
+            Status = MemoryStatus.Active,
+            Scopes = MemoryScopes.LongTerm,
+            Kind = MemoryKind.Journal,
+        }, cancellationToken);
+        var tomes = journal
+            .Select(record => record.Tome)
+            .Distinct()
+            .OrderBy(tome => tome, StringComparer.Ordinal)
+            .ToArray();
+
+        var consolidated = 0;
+        foreach (var tome in tomes)
+        {
+            var plan = CompactionPlanner.Plan(
+                await FetchConsolidationJournalAsync(tome, cancellationToken),
+                now,
+                _options.Compaction with { MinClusterSize = _consolidationOptions.MinConsolidationSize });
+
+            foreach (var group in plan)
+            {
+                await ConsolidateClusterAsync(group.MemoryIds, tome, actor, now, cancellationToken);
+                consolidated++;
+            }
+        }
+
+        return new ConsolidationResult { Clusters = consolidated };
+    }
+
+    private async Task<IReadOnlyList<MemoryPoint>> FetchConsolidationJournalAsync(string tome, CancellationToken cancellationToken)
+    {
+        var journal = await FetchCompactableJournalAsync(tome, cancellationToken);
+
+        return journal
+            .Where(point => !point.Record.Tags.Contains(ConsolidationOptions.Tag))
+            .ToArray();
+    }
+
+    private async Task ConsolidateClusterAsync(
+        IReadOnlyList<Guid> ids,
+        string tome,
+        MemoryActor actor,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var members = new List<MemoryRecord>(ids.Count);
+        foreach (var id in ids)
+        {
+            if (await store.GetAsync(id, cancellationToken) is { } record
+                && record.Status == MemoryStatus.Active
+                && record.Tome == tome)
+            {
+                members.Add(record);
+            }
+        }
+
+        if (members.Count < _consolidationOptions.MinConsolidationSize)
+        {
+            return;
+        }
+
+        var memberIds = members.Select(member => member.Id).ToHashSet();
+        var sources = members
+            .Where(member => member.SupersededBy is not { } successor || !memberIds.Contains(successor))
+            .OrderBy(member => member.CreatedAt)
+            .ThenBy(member => member.Id)
+            .ToList();
+        var topic = Consolidation.ExtractiveSummarizer.MajorityTopic(sources);
+        var fact = await RememberAsync(new RememberRequest
+        {
+            Content = _summarizer.Summarize(sources),
+            Scope = MajorityScope(members),
+            Kind = MemoryKind.Fact,
+            Actor = actor,
+            Tome = tome,
+            ProjectId = MajorityProject(members),
+            Tags = topic is null ? [ConsolidationOptions.Tag] : [ConsolidationOptions.Tag, topic],
+            Importance = Math.Clamp(
+                ConsolidatedBaseImportance + ConsolidatedPerSourceImportance * sources.Count,
+                ConsolidatedBaseImportance,
+                0.9),
+            Sources = [.. sources.Select(member => member.Id)],
+        }, cancellationToken);
+
+        foreach (var source in sources)
+        {
+            await store.UpdateAsync(CorrectionTrail.Append(source with
+            {
+                Tags = [.. source.Tags, ConsolidationOptions.Tag],
+            }, now, actor, CorrectionAction.Patch, $"consolidated into {fact.Record.Id}"), cancellationToken);
+        }
+    }
+
+    private static MemoryScope MajorityScope(IReadOnlyList<MemoryRecord> records) => records
+        .GroupBy(record => record.Scope)
+        .OrderByDescending(group => group.Count())
+        .ThenBy(group => group.Key)
+        .First().Key;
+
+    private static string? MajorityProject(IReadOnlyList<MemoryRecord> records) => records
+        .GroupBy(record => record.ProjectId ?? string.Empty)
+        .OrderByDescending(group => group.Count())
+        .ThenBy(group => group.Key, StringComparer.Ordinal)
+        .Select(group => group.Key)
+        .First() is { Length: > 0 } projectId ? projectId : null;
 
     public async Task<IReadOnlyList<CompactionCandidateGroup>> GetCompactionCandidatesAsync(
         CancellationToken cancellationToken,
@@ -628,6 +798,39 @@ public sealed class MemoryService(
         }
 
         return target;
+    }
+
+    private static RememberRequest NoteContract(NoteRequest request, string? topicTag) => new()
+    {
+        Content = request.Content,
+        Scope = request.Scope,
+        Kind = MemoryKind.Journal,
+        Actor = request.Actor,
+        Tome = request.Tome,
+        ProjectId = request.ProjectId,
+        SessionId = request.SessionId,
+        Tags = topicTag is null ? request.Tags : [.. request.Tags, topicTag],
+        Importance = NoteImportance,
+    };
+
+    private async Task<string?> ClassifyTopicAsync(
+        NoteRequest request,
+        string tome,
+        ReadOnlyMemory<float> vector,
+        CancellationToken cancellationToken)
+    {
+        if (_topicClassifier is null)
+        {
+            return null;
+        }
+
+        return await _topicClassifier.ClassifyAsync(
+            vector,
+            tome,
+            request.Scope,
+            request.ProjectId,
+            request.Scope == MemoryScope.Session ? request.SessionId : null,
+            cancellationToken);
     }
 
     private async Task<long> CountIdempotencyConflictsAsync(CancellationToken cancellationToken)

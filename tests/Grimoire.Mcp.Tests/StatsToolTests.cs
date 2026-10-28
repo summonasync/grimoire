@@ -46,6 +46,27 @@ public sealed class StatsToolTests
     }
 
     [Fact]
+    public async Task Stats_ReportsTheConsolidationHeartbeat()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Consolidation.Current = new ConsolidationState
+        {
+            LastAttemptAt = session.Clock.UtcNow.AddMinutes(-10),
+            LastSuccessAt = session.Clock.UtcNow.AddMinutes(-10),
+            ConsolidatedClusters = 4,
+        };
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var consolidation = result.Payload().GetProperty("consolidation");
+        consolidation.GetProperty("stale").GetBoolean().ShouldBeFalse();
+        consolidation.GetProperty("lastSuccessAt").GetDateTimeOffset().ShouldBe(session.Clock.UtcNow.AddMinutes(-10));
+        consolidation.GetProperty("consolidatedClusters").GetInt32().ShouldBe(4);
+        consolidation.GetProperty("isUnknown").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Stats_FlagsStaleWhenTheHeartbeatIsOlderThanTwiceTheSweepInterval()
     {
         await using var session = await McpTestSession.StartAsync(gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) });

@@ -18,7 +18,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
         IGcStateStore? gcState = null,
         ICallerPathProvider? callerPaths = null,
         IProjectRegistryStore? registryStore = null,
-        IBoardProjectSource? board = null)
+        IBoardProjectSource? board = null,
+        IConsolidationStateStore? consolidationState = null)
     {
         IProjectRegistryStore effectiveRegistryStore = registryStore ?? new FakeProjectRegistryStore();
         _services = new Dictionary<Type, object>
@@ -29,6 +30,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(IActorClaimProvider)] = claims ?? new FakeActorClaimProvider(),
             [typeof(GcOptions)] = gcOptions ?? new GcOptions(),
             [typeof(IGcStateStore)] = gcState ?? new FakeGcStateStore(),
+            [typeof(ConsolidationOptions)] = new ConsolidationOptions(),
+            [typeof(IConsolidationStateStore)] = consolidationState ?? new FakeConsolidationStateStore(),
             [typeof(ICallerPathProvider)] = callerPaths ?? new FakeCallerPathProvider(DefaultCallerPath),
             [typeof(IProjectRegistryStore)] = effectiveRegistryStore,
             [typeof(IProjectRegistry)] = new LiveProjectRegistry(effectiveRegistryStore),

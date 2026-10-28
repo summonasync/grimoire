@@ -19,4 +19,6 @@ public sealed record MemoryStats
     public required IReadOnlyDictionary<string, DateTimeOffset> LastWriteByTome { get; init; }
 
     public required GcState Gc { get; init; }
+
+    public required ConsolidationState Consolidation { get; init; }
 }

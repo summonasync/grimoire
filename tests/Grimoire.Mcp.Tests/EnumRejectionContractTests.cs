@@ -18,6 +18,7 @@ public sealed class EnumRejectionContractTests
         data.Add("memory_recall", "kind", new[] { "Journal", "Fact" }, "fact");
         data.Add("memory_remember", "scope", ScopeTokens, "global");
         data.Add("memory_remember", "kind", new[] { "Journal", "Fact" }, "fact");
+        data.Add("memory_note", "scope", ScopeTokens, "global");
         data.Add("memory_scry", "attribution", new[] { "None", "Light", "Full" }, "light");
         data.Add("memory_brief", "scopes", ScopeTokens, "global");
         data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove", "Sync" }, "list");
@@ -34,6 +35,11 @@ public sealed class EnumRejectionContractTests
             ["scope"] = param == "scope" ? value : "Global",
             ["kind"] = param == "kind" ? value : "Journal",
         },
+        "memory_note" => new Dictionary<string, object?>
+        {
+            ["content"] = "enum rejection contract probe",
+            ["scope"] = param == "scope" ? value : "Global",
+        },
         "memory_brief" => new Dictionary<string, object?> { [param] = new[] { value } },
         _ => new Dictionary<string, object?> { [param] = value },
     };
@@ -48,6 +54,7 @@ public sealed class EnumRejectionContractTests
         data.Add("memory_recall", "kind", new[] { "Journal", "Fact" });
         data.Add("memory_remember", "scope", ScopeTokens);
         data.Add("memory_remember", "kind", new[] { "Journal", "Fact" });
+        data.Add("memory_note", "scope", ScopeTokens);
         data.Add("memory_scry", "attribution", new[] { "None", "Light", "Full" });
         data.Add("memory_brief", "scopes", ScopeTokens);
         data.Add("projects", "action", new[] { "List", "Add", "Update", "Remove", "Sync" });

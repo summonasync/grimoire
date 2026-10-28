@@ -42,6 +42,8 @@ internal static class CliServices
         services.AddSingleton(EngineOptionsMapper.ToEngineOptions(options.Memory, options.DefaultTome));
         services.AddSingleton(new GcOptions { SweepInterval = TimeSpan.FromMinutes(options.Serve.GcIntervalMinutes) });
         services.AddSingleton<IGcStateStore>(new GcStateFileStore());
+        services.AddSingleton(new ConsolidationOptions());
+        services.AddSingleton<IConsolidationStateStore>(new ConsolidationStateFileStore());
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
         services.AddSingleton<IExternalProcess, SystemProcess>();
         services.AddSingleton<ICallerPathProvider, ProcessCallerPathProvider>();
@@ -55,7 +57,9 @@ internal static class CliServices
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>(),
             sp.GetRequiredService<GcOptions>(),
-            sp.GetRequiredService<IGcStateStore>()));
+            sp.GetRequiredService<IGcStateStore>(),
+            consolidationOptions: sp.GetRequiredService<ConsolidationOptions>(),
+            consolidationStateStore: sp.GetRequiredService<IConsolidationStateStore>()));
         services.AddSingleton<PersonaService>(sp => new PersonaService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<IEmbeddingProvider>(),

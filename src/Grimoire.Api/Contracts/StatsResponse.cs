@@ -14,7 +14,8 @@ public sealed record StatsResponse(
     long IdempotencyConflicts,
     IReadOnlyDictionary<string, TomeStatsResponse> ByTome,
     IReadOnlyDictionary<string, int> ByProject,
-    GcState Gc)
+    GcState Gc,
+    ConsolidationState Consolidation)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyDictionary<string, long>? PendingCompactionByTome { get; init; }

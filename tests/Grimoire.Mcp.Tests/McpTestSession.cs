@@ -24,6 +24,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeEmbeddingProvider embeddings,
         FakeClock clock,
         FakeGcStateStore gcState,
+        FakeConsolidationStateStore consolidationState,
         FakeProjectRegistryStore registry,
         McpClient client,
         Channel<JsonRpcMessage> clientToServer,
@@ -35,6 +36,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         Embeddings = embeddings;
         Clock = clock;
         Gc = gcState;
+        Consolidation = consolidationState;
         Registry = registry;
         Client = client;
         _clientToServer = clientToServer;
@@ -50,6 +52,8 @@ internal sealed class McpTestSession : IAsyncDisposable
     public FakeClock Clock { get; }
 
     public FakeGcStateStore Gc { get; }
+
+    public FakeConsolidationStateStore Consolidation { get; }
 
     public FakeProjectRegistryStore Registry { get; }
 
@@ -68,6 +72,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         IActorClaimProvider? claims = null,
         GcOptions? gcOptions = null,
         FakeGcStateStore? gcState = null,
+        FakeConsolidationStateStore? consolidationState = null,
         string? callerPath = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
         FakeProjectRegistryStore? registryStore = null,
@@ -77,12 +82,14 @@ internal sealed class McpTestSession : IAsyncDisposable
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
         var gc = gcState ?? new FakeGcStateStore();
+        var consolidation = consolidationState ?? new FakeConsolidationStateStore();
         var registry = registryStore ?? new FakeProjectRegistryStore(projects ?? DefaultProjects);
         var services = new FakeServiceProvider(
             store, embeddings, clock, engineOptions, claims, gcOptions, gc,
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
-            board);
+            board,
+            consolidation);
         var options = hostOptions ?? new McpHostOptions();
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
@@ -102,7 +109,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         })).WaitAsync(TimeSpan.FromSeconds(15));
 
         return new McpTestSession(
-            store, embeddings, clock, gc, registry, client, clientToServer, serverToClient, serverRun, cancellation);
+            store, embeddings, clock, gc, consolidation, registry, client, clientToServer, serverToClient, serverRun, cancellation);
     }
 
     public async ValueTask DisposeAsync()
