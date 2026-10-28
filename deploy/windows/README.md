@@ -40,7 +40,16 @@ Use the scripts instead:
 `serve-hidden.vbs` runs `grimoire serve` with no window; output lands in
 `%USERPROFILE%\.grimoire\serve.log`. Console: `http://127.0.0.1:4770` (loopback only).
 
+The task fires at logon together with Docker Desktop, so Qdrant is not up yet and the
+first `serve` dies on `actively refused it` (seen 2026-10-28: task result 0, console dead).
+The launcher therefore waits on `serve` and restarts it every 15 s; a run that lived over a
+minute resets the budget, 30 short runs in a row stop it. The task is registered with no
+time limit and runs on battery — the old defaults (72 h, AC only) killed or skipped it.
+
 Gotchas:
+- A task created from an elevated console can only be replaced from an elevated one
+  (`Access is denied` from both `schtasks` and `Register-ScheduledTask`). Run the installer
+  as admin once; the task it writes runs non-elevated anyway.
 - Run `schtasks` from PowerShell or cmd. Git Bash rewrites `/create` into
   `C:/Program Files/Git/create`; if you must, prefix with `MSYS_NO_PATHCONV=1`.
 - `cmd /c` strips the first and last quote when the line starts with a quote and has
