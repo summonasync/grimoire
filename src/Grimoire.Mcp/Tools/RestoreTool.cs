@@ -50,7 +50,7 @@ internal sealed class RestoreTool(CorrectionService corrections, IMemoryStore st
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
-            var result = await corrections.RestoreAsync(id, reason, ct, resolvedTome, actors.GetActor());
+            var result = await corrections.RestoreAsync(id, reason, ct, resolvedTome, await actors.GetActorAsync(ct));
 
             return ToolResults.Success(new RestoreView
             {

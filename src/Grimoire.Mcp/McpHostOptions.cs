@@ -16,7 +16,8 @@ public sealed record McpHostOptions
         "replacement lineage before you trust or overwrite it. When your tome lacks the answer, memory_scry reads " +
         "other tomes anonymously (facts by default, journal opt-in). When memory_stats reports pendingCompaction " +
         "above zero, run the memory_compact_candidates distillation loop. Before asserting anything that might " +
-        "already be on record, check memory_recall first.";
+        "already be on record, check memory_recall first. When your runtime gives you a stable alias, call " +
+        "session_identity_set(alias, vendor) once per session so writes carry it.";
 
     public string ServerName { get; init; } = "grimoire";
 

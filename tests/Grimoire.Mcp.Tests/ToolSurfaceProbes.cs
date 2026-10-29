@@ -175,6 +175,12 @@ internal static class ToolSurfaceProbes
             ["topic"] = "probe",
         });
 
+        await Probe(session, probes, "session_identity_set", new Dictionary<string, object?>
+        {
+            ["alias"] = "probe-alias",
+            ["vendor"] = "probe-vendor",
+        });
+
         return probes;
     }
 

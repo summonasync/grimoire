@@ -137,7 +137,7 @@ internal sealed class RememberTool(
                 Content = content,
                 Scope = scopeValue,
                 Kind = kindEffective,
-                Actor = actors.GetActor(),
+                Actor = await actors.GetActorAsync(ct),
                 Tome = resolvedTome,
                 ProjectId = projectTag.ProjectId,
                 SessionId = sessionId,

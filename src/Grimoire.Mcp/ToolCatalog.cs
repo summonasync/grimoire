@@ -8,7 +8,11 @@ namespace Grimoire.Mcp;
 
 internal static class ToolCatalog
 {
-    public static IReadOnlyList<McpServerTool> CreateTools(McpHostOptions options, IServiceProvider services, ClientInfoHolder clientInfo)
+    public static IReadOnlyList<McpServerTool> CreateTools(
+        McpHostOptions options,
+        IServiceProvider services,
+        ClientInfoHolder clientInfo,
+        SessionIdentityHolder sessionIdentity)
     {
         var store = Require<IMemoryStore>(services);
         var embeddings = Require<IEmbeddingProvider>(services);
@@ -35,6 +39,8 @@ internal static class ToolCatalog
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
+        var identityFile = services.GetService(typeof(IAgentIdentitySource)) as IAgentIdentitySource
+            ?? new UnsetAgentIdentitySource();
         var registryStore = Require<IProjectRegistryStore>(services);
         var projects = new LiveProjectRegistry(registryStore);
         var projectTags = new ProjectTagResolver(projects);
@@ -43,6 +49,8 @@ internal static class ToolCatalog
             options.Actor,
             options.EnvTome,
             options.EnvActor,
+            sessionIdentity,
+            identityFile,
             clientInfo,
             claims,
             new TomeResolver(engineOptions));
@@ -63,6 +71,7 @@ internal static class ToolCatalog
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
             Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
+            Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity).Set, readOnly: false, destructive: false, idempotent: true),
         ];
     }
 

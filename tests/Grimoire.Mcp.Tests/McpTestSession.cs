@@ -76,7 +76,8 @@ internal sealed class McpTestSession : IAsyncDisposable
         string? callerPath = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
         FakeProjectRegistryStore? registryStore = null,
-        FakeBoardProjectSource? board = null)
+        FakeBoardProjectSource? board = null,
+        IAgentIdentitySource? identityFile = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
@@ -89,7 +90,8 @@ internal sealed class McpTestSession : IAsyncDisposable
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
             board,
-            consolidation);
+            consolidation,
+            identityFile);
         var options = hostOptions ?? new McpHostOptions();
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();

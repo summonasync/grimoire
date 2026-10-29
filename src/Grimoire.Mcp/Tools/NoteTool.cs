@@ -96,7 +96,7 @@ internal sealed class NoteTool(
             {
                 Content = content,
                 Scope = scopeEffective,
-                Actor = actors.GetActor(),
+                Actor = await actors.GetActorAsync(ct),
                 Tome = resolvedTome,
                 ProjectId = projectTag.ProjectId,
                 SessionId = sessionId,

@@ -19,7 +19,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
         ICallerPathProvider? callerPaths = null,
         IProjectRegistryStore? registryStore = null,
         IBoardProjectSource? board = null,
-        IConsolidationStateStore? consolidationState = null)
+        IConsolidationStateStore? consolidationState = null,
+        IAgentIdentitySource? identityFile = null)
     {
         IProjectRegistryStore effectiveRegistryStore = registryStore ?? new FakeProjectRegistryStore();
         _services = new Dictionary<Type, object>
@@ -41,6 +42,11 @@ internal sealed class FakeServiceProvider : IServiceProvider
         if (engineOptions is not null)
         {
             _services[typeof(MemoryEngineOptions)] = engineOptions;
+        }
+
+        if (identityFile is not null)
+        {
+            _services[typeof(IAgentIdentitySource)] = identityFile;
         }
     }
 

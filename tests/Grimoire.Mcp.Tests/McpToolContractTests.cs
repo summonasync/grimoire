@@ -25,6 +25,7 @@ public sealed class McpToolContractTests
         "memory_scry",
         "memory_stats",
         "projects",
+        "session_identity_set",
     ];
 
     public static TheoryData<string, string[]> TeachingKeywords()
@@ -44,6 +45,7 @@ public sealed class McpToolContractTests
         data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
         data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);
         data.Add("projects", ["strict-case", "owner config", "kebab-case", "absolute", "whole path list", "never deletes"]);
+        data.Add("session_identity_set", ["actor provenance", "latest pair wins", "never persisted", "dies with the session", "--actor flag"]);
         return data;
     }
 
@@ -64,6 +66,7 @@ public sealed class McpToolContractTests
         data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
         data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
         data.Add("projects", ["action"], ["alias", "boardProjectId", "displayName", "paths"]);
+        data.Add("session_identity_set", ["alias"], ["vendor"]);
         return data;
     }
 
@@ -129,11 +132,13 @@ public sealed class McpToolContractTests
         data.Add("projects", "action", "string");
         data.Add("projects", "alias", "string");
         data.Add("projects", "paths", "array");
+        data.Add("session_identity_set", "alias", "string");
+        data.Add("session_identity_set", "vendor", "string");
         return data;
     }
 
     [Fact]
-    public async Task ExposesExactlyTheFourteenContractedTools()
+    public async Task ExposesExactlyTheFifteenContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 
@@ -338,6 +343,7 @@ public sealed class McpToolContractTests
         instructions.ShouldContain("memory_persona_get");
         instructions.ShouldContain("memory_recall");
         instructions.ShouldContain("memory_remember");
+        instructions.ShouldContain("session_identity_set");
         instructions.ShouldContain("pendingCompaction");
     }
 
