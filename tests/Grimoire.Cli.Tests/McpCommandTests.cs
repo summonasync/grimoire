@@ -48,6 +48,31 @@ public sealed class McpCommandTests
     }
 
     [Fact]
+    public void BuildHostOptions_AnEnvOnlyActor_StaysBelowTheSessionChannel()
+    {
+        var options = McpCommand.BuildHostOptions(
+            ActorResolver.Parse(null),
+            "team-platform",
+            "evgenii+claude");
+
+        options.Actor.ShouldBeNull();
+        options.EnvActor.ShouldBe("evgenii+claude");
+    }
+
+    [Fact]
+    public void BuildHostOptions_TheExplicitFlag_ParsesIntoTheConfiguredActor()
+    {
+        var options = McpCommand.BuildHostOptions(
+            ActorResolver.Parse("junior+claude"),
+            null,
+            "evgenii+claude");
+
+        options.Actor.ShouldNotBeNull();
+        options.Actor!.Value.Alias.ShouldBe("junior");
+        options.Actor.Value.Vendor.ShouldBe("claude");
+    }
+
+    [Fact]
     public void DefaultInstructions_TeachBriefFirstStartupAndTheScryDoor()
     {
         var instructions = McpHostOptions.DefaultInstructions;

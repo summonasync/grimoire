@@ -6,7 +6,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
+internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_brief";
 
@@ -69,6 +69,7 @@ internal sealed class BriefTool(BriefService brief, MemoryActorProvider actors)
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
                 CompactionDue = ToCompactionSection(result.CompactionDue),
+                Warnings = await EmptyTomeWarning.BuildAsync(store, IsEmpty(result), tome, resolvedTome, ct),
             });
         }, cancellationToken);
     }

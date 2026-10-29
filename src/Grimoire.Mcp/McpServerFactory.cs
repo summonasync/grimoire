@@ -9,6 +9,7 @@ internal static class McpServerFactory
     public static McpServer Create(ITransport transport, McpHostOptions options, IServiceProvider services)
     {
         var clientInfo = new ClientInfoHolder();
+        var sessionIdentity = new SessionIdentityHolder();
         var serverOptions = new McpServerOptions
         {
             ServerInfo = new Implementation
@@ -22,7 +23,7 @@ internal static class McpServerFactory
             ToolCollection = new McpServerPrimitiveCollection<McpServerTool>(),
         };
 
-        foreach (var tool in ToolCatalog.CreateTools(options, services, clientInfo))
+        foreach (var tool in ToolCatalog.CreateTools(options, services, clientInfo, sessionIdentity))
         {
             serverOptions.ToolCollection.Add(tool);
         }

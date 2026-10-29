@@ -7,4 +7,6 @@ internal sealed record RecallView
     public required IReadOnlyList<RecallHit> Matches { get; init; }
 
     public required int Count { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

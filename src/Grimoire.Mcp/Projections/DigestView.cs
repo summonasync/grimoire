@@ -13,4 +13,6 @@ internal sealed record DigestView
     public required BriefItemsSection<DigestHitItem> Gone { get; init; }
 
     public required IReadOnlyList<string> Omitted { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

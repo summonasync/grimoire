@@ -34,18 +34,23 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, ex.Code, ex.Message);
             }
 
-            var tome = parsed.Filter.Tome ?? await tomes.ResolveAsync(null, cancellationToken);
+            var requestedTome = parsed.Filter.Tome;
+            var tome = requestedTome ?? await tomes.ResolveAsync(null, cancellationToken);
             var records = await queryRunner.RunAsync(
                 query.Query,
                 parsed with { Filter = parsed.Filter with { Tome = tome } },
                 cancellationToken);
+
+            var warnings = await EmptyTomeWarning.BuildAsync(
+                store, records.Count == 0, requestedTome, tome, cancellationToken);
 
             object response = parsed.ProjectedKeys is { } keys
                 ? new ProjectedMemoryListResponse(
                     tome,
                     records.Count,
                     [.. records.Select(record => MemoryRecordProjection.Project(record, keys))])
-                : new MemoryListResponse(tome, records.Count, records);
+                { Warnings = warnings }
+                : new MemoryListResponse(tome, records.Count, records) { Warnings = warnings };
 
             return Results.Ok(response);
         });
@@ -103,12 +108,13 @@ internal static class MemoryEndpoints
             try
             {
                 var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
+                var actor = await tomes.ResolveActorAsync(cancellationToken);
                 var result = await memories.RememberAsync(new RememberRequest
                 {
                     Content = request.Content,
                     Scope = request.Scope,
                     Kind = request.Kind,
-                    Actor = MemoryActor.Human,
+                    Actor = actor,
                     Tome = tome,
                     ProjectId = projectTag.ProjectId,
                     SessionId = request.SessionId,
@@ -150,7 +156,8 @@ internal static class MemoryEndpoints
 
             try
             {
-                var updated = await editor.EditAsync(id, request, cancellationToken);
+                var actor = await tomes.ResolveActorAsync(cancellationToken);
+                var updated = await editor.EditAsync(id, request, actor, cancellationToken);
                 return updated is null
                     ? ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.")
                     : Results.Ok(updated);
@@ -234,7 +241,8 @@ internal static class MemoryEndpoints
                 return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{tome}'.");
             }
 
-            var result = await corrections.RestoreAsync(id, request.Reason, cancellationToken, tome, MemoryActor.Human);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var result = await corrections.RestoreAsync(id, request.Reason, cancellationToken, tome, actor);
             return result.Record is { } current
                 ? Results.Ok(new RestoreMemoryResponse(current, tome, result.Restored, result.Superseder))
                 : ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");

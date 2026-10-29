@@ -7,6 +7,7 @@ public sealed record EngineSettings(
     double NearDuplicateSimilarityThreshold,
     double DedupSimilarityThreshold,
     double RelatedSimilarityThreshold,
+    double DigestSimilarityThreshold,
     double TombstoneRetentionDays,
     int RecallOversampling,
     RecencyHalfLives RecencyHalfLives,

@@ -27,7 +27,8 @@ internal sealed class ScryCommand(CliEnvironment environment)
 
         var identity = await ActorResolver.ResolveAsync(
             environment, null, null, config.DefaultTome,
-            services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
 
         var targets = tomes.Count > 0
             ? tomes.Distinct().OrderBy(tome => tome, StringComparer.Ordinal).ToArray()

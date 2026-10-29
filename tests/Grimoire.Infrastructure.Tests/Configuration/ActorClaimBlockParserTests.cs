@@ -95,7 +95,7 @@ public sealed class ActorClaimBlockParserTests
     {
         var document = """
             <!-- grimoire:actor:start -->
-            vendor: claude
+            crew: platform
             alias: dan
             some prose line without meaning
             tome: platform-work
@@ -107,6 +107,58 @@ public sealed class ActorClaimBlockParserTests
         claim.ShouldNotBeNull();
         claim.Alias.ShouldBe("dan");
         claim.Tome.ShouldBe("platform-work");
+    }
+
+    [Fact]
+    public void Parse_WithAVendorLine_CarriesItIntoTheClaim()
+    {
+        var document = """
+            <!-- grimoire:actor:start -->
+            alias: dan
+            vendor: claude
+            tome: platform-work
+            <!-- grimoire:actor:end -->
+            """;
+
+        var claim = ActorClaimBlockParser.Parse(document);
+
+        claim.ShouldNotBeNull();
+        claim.Alias.ShouldBe("dan");
+        claim.Vendor.ShouldBe("claude");
+        claim.Tome.ShouldBe("platform-work");
+    }
+
+    [Fact]
+    public void Parse_WithoutAVendorLine_LeavesTheVendorNull()
+    {
+        var document = """
+            <!-- grimoire:actor:start -->
+            alias: dan
+            tome: platform-work
+            <!-- grimoire:actor:end -->
+            """;
+
+        var claim = ActorClaimBlockParser.Parse(document);
+
+        claim.ShouldNotBeNull();
+        claim.Vendor.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Parse_WithAnEmptyVendorLine_TreatsTheVendorAsAbsent()
+    {
+        var document = """
+            <!-- grimoire:actor:start -->
+            alias: dan
+            vendor:
+            <!-- grimoire:actor:end -->
+            """;
+
+        var claim = ActorClaimBlockParser.Parse(document);
+
+        claim.ShouldNotBeNull();
+        claim.Alias.ShouldBe("dan");
+        claim.Vendor.ShouldBeNull();
     }
 
     [Fact]

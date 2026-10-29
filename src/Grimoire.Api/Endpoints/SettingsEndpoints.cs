@@ -16,6 +16,7 @@ internal static class SettingsEndpoints
                 engineOptions.NearDuplicateSimilarityThreshold,
                 engineOptions.DedupSimilarityThreshold,
                 engineOptions.RelatedSimilarityThreshold,
+                engineOptions.DigestSimilarityThreshold,
                 engineOptions.TombstoneRetentionDays,
                 engineOptions.RecallOversampling,
                 engineOptions.RecencyHalfLives,

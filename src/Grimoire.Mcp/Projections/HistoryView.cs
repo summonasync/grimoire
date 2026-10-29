@@ -9,4 +9,6 @@ internal sealed record HistoryView
     public required bool Found { get; init; }
 
     public required IReadOnlyList<HistoryEntryView> Chain { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

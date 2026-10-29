@@ -3,6 +3,7 @@ using Grimoire.Infrastructure.Autostart;
 using Grimoire.Infrastructure.Board;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Embeddings;
+using Grimoire.Infrastructure.Identity;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
@@ -45,6 +46,7 @@ internal static class CliServices
         services.AddSingleton(new ConsolidationOptions());
         services.AddSingleton<IConsolidationStateStore>(new ConsolidationStateFileStore());
         services.AddSingleton<IActorClaimProvider, ActorClaimProvider>();
+        services.AddSingleton<IAgentIdentitySource, AgentIdentityFileReader>();
         services.AddSingleton<IExternalProcess, SystemProcess>();
         services.AddSingleton<ICallerPathProvider, ProcessCallerPathProvider>();
         services.AddSingleton<IConsoleProbe>(sp => new LoopbackConsoleProbe(sp.GetRequiredService<HttpClient>()));

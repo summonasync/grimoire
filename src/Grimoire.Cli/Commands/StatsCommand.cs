@@ -15,7 +15,8 @@ internal sealed class StatsCommand(CliEnvironment environment)
     {
         var identity = await ActorResolver.ResolveAsync(
             environment, null, null, config.DefaultTome,
-            services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
         var memories = services.GetRequiredService<MemoryService>();
         var stats = await memories.StatsAsync(cancellationToken);
         environment.Output.WriteLine($"Active: {stats.Active} ({ScopeBreakdown(stats)})");

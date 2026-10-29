@@ -249,4 +249,35 @@ public sealed class StatsToolTests
             LastAccessedAt = accessed,
         };
     }
+
+
+    [Fact]
+    public async Task Stats_EmptyStoreWithExplicitTome_CarriesTheNoneYetWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>
+        {
+            ["tome"] = "linnovate",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: (none yet)");
+    }
+
+    [Fact]
+    public async Task Stats_KnownExplicitTome_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedStaleJournals(session, (McpTestSession.ClientActor, [1f, 0f, 0f]));
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>
+        {
+            ["tome"] = McpTestSession.ClientActor,
+        });
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

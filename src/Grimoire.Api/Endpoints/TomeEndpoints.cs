@@ -77,7 +77,8 @@ internal static class TomeEndpoints
                     $"{(unknown.Count == 1 ? "Memory" : "Memories")} {listed} do{(unknown.Count == 1 ? "es" : "")} not exist.");
             }
 
-            var result = await memories.RetomeAsync(request.Ids, target, cancellationToken, MemoryActor.Human);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var result = await memories.RetomeAsync(request.Ids, target, cancellationToken, actor);
             return Results.Ok(new RetomeResponse(result.Retomed, target, result.Skipped));
         });
 
@@ -104,7 +105,8 @@ internal static class TomeEndpoints
                     $"Tome '{target}' already has records; renaming would mix histories. Merge into it or pick an unused tome.");
             }
 
-            var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, MemoryActor.Human);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, actor);
             return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed, result.Skipped));
         });
 
@@ -131,7 +133,8 @@ internal static class TomeEndpoints
                     $"Tome '{target}' has no records; there is nothing to merge into. Rename to it instead.");
             }
 
-            var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, MemoryActor.Human);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var result = await memories.RetomeAsync(new MemoryFilter { Tome = source }, target, cancellationToken, actor);
             return Results.Ok(new TomeRetomeResponse(source, target, result.Retomed, result.Skipped));
         });
 
@@ -147,7 +150,8 @@ internal static class TomeEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A tombstone reason is required.");
             }
 
-            var result = await memories.ForgetTomeAsync(source, request.Reason, cancellationToken, MemoryActor.Human);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var result = await memories.ForgetTomeAsync(source, request.Reason, cancellationToken, actor);
             return Results.Ok(new TomeForgetResponse(source, result.Forgotten, result.Skipped));
         });
     }

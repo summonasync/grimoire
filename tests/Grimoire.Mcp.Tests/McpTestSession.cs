@@ -76,7 +76,8 @@ internal sealed class McpTestSession : IAsyncDisposable
         string? callerPath = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
         FakeProjectRegistryStore? registryStore = null,
-        FakeBoardProjectSource? board = null)
+        FakeBoardProjectSource? board = null,
+        IAgentIdentitySource? identityFile = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
@@ -91,6 +92,10 @@ internal sealed class McpTestSession : IAsyncDisposable
             board,
             consolidation);
         var options = hostOptions ?? new McpHostOptions();
+        if (identityFile is not null)
+        {
+            options = options with { IdentityFile = identityFile };
+        }
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
         var serverToClient = Channel.CreateUnbounded<JsonRpcMessage>();

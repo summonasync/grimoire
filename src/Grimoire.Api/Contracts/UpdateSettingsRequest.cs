@@ -10,6 +10,7 @@ public sealed record UpdateSettingsRequest
         "memory.nearDuplicateSimilarityThreshold",
         "memory.dedupSimilarityThreshold",
         "memory.relatedSimilarityThreshold",
+        "memory.digestSimilarityThreshold",
         "memory.tombstoneRetentionDays",
         "memory.recallOversampling",
         "memory.recencyHalfLives",
@@ -23,6 +24,8 @@ public sealed record UpdateSettingsRequest
     public double? DedupSimilarityThreshold { get; init; }
 
     public double? RelatedSimilarityThreshold { get; init; }
+
+    public double? DigestSimilarityThreshold { get; init; }
 
     public double? TombstoneRetentionDays { get; init; }
 

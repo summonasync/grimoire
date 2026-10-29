@@ -382,4 +382,5 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         pending.GetProperty("default").GetInt64().ShouldBe(2);
         pending.GetProperty("gamma").GetInt64().ShouldBe(0);
     }
+
 }

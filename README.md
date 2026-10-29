@@ -127,9 +127,27 @@ Wire an agent to the memory (stdio MCP):
 ```
 
 When a crew of agents shares one memory, give every session its own actor.
-`GRIMOIRE_ACTOR` is `<alias>` or `<alias>+<vendor>`, and each agent gets a
-launcher that sets it before the CLI starts — `Gandalf.cmd` sets
-`GRIMOIRE_ACTOR=Gandalf+claude`, one such wrapper per crew member:
+Every write is stamped with one, resolved through a single chain — first
+match wins:
+
+1. the explicit `--actor` flag,
+2. `session_identity_set(alias, vendor)` — the MCP tool an agent calls once at
+   session start when its runtime hands it a stable alias; the pair lives for
+   the connection only and is never persisted,
+3. the identity file `~/.overmind/identity/parent-<ppid>.json` — the fallback
+   channel: the Overmind adapter writes it when the agent session registers,
+   keyed by the parent PID of the server process; Grimoire is a read-only
+   consumer and skips it silently when the file is absent,
+4. the `GRIMOIRE_ACTOR` environment variable (`<alias>` or `<alias>+<vendor>`),
+5. the claim block in AGENTS.md (`alias:`, optional `vendor:`, `tome:`),
+6. the MCP client name; plain `human` as the last resort.
+
+Do not set `GRIMOIRE_ACTOR` at machine scope (shell profile, system-wide
+environment). A session launched outside the wrapper that was meant to own the
+value then silently writes under that shared actor — exactly how the LUCA
+deployment misattributed a whole crew. Keep `GRIMOIRE_ACTOR` inside the
+per-agent launcher that sets it, one wrapper per crew member — `Gandalf.cmd`
+sets `GRIMOIRE_ACTOR=Gandalf+claude`:
 
 ```bat
 @echo off
@@ -141,10 +159,9 @@ claude
 Set `GRIMOIRE_TOME` too — one kebab-case tome key for the whole crew. Without
 it the tome resolves from each actor's alias and the crew forks into one tome
 per agent; the explicit key keeps every agent in one tome with distinct
-actors. A session started outside its launcher never sees the per-agent
-value: it writes under the shared actor — the machine-level `GRIMOIRE_ACTOR`
-when one is set, the client's default attribution otherwise. Restarting it
-through the launcher fixes attribution for everything written afterwards.
+actors. A session started outside its launcher falls down the chain to the
+shared attribution; restarting it through the launcher (or letting it call
+`session_identity_set`) fixes attribution for everything written afterwards.
 
 ## Distribution
 

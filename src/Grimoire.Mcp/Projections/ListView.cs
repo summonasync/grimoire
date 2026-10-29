@@ -7,4 +7,6 @@ internal sealed record ListView
     public required IReadOnlyList<MemoryListEntry> Memories { get; init; }
 
     public required int Count { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

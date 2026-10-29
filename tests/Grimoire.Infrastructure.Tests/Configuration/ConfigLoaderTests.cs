@@ -37,6 +37,7 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Memory.SessionTtlHours.ShouldBe(24);
         options.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
         options.Memory.RelatedSimilarityThreshold.ShouldBe(0.82);
+        options.Memory.DigestSimilarityThreshold.ShouldBe(0.6);
         options.Memory.RecallForeignProjectFactor.ShouldBe(0.6);
         options.Memory.RecencyHalfLifeDays.Session.ShouldBe(0.5);
         options.Memory.RecencyHalfLifeDays.Project.ShouldBe(30);
@@ -66,6 +67,16 @@ public sealed class ConfigLoaderTests : IDisposable
         options.Qdrant.Endpoint.ShouldBe("http://10.0.0.8:6334");
         options.Qdrant.Collection.ShouldBe("grimoire");
         options.Serve.Port.ShouldBe(5001);
+    }
+
+    [Fact]
+    public void Load_WithDigestSimilarityThreshold_RoundTripsValue()
+    {
+        var path = WriteConfig("""{ "memory": { "digestSimilarityThreshold": 0.55 } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Memory.DigestSimilarityThreshold.ShouldBe(0.55);
     }
 
     [Fact]

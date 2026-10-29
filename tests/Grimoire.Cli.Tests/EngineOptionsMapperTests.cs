@@ -16,6 +16,7 @@ public sealed class EngineOptionsMapperTests
             NearDuplicateSimilarityThreshold = 0.85,
             DedupSimilarityThreshold = 0.8,
             RelatedSimilarityThreshold = 0.75,
+            DigestSimilarityThreshold = 0.7,
             RecallForeignProjectFactor = 0.75,
             TombstoneRetentionDays = 14,
             ReindexBatchSize = 128,
@@ -27,6 +28,7 @@ public sealed class EngineOptionsMapperTests
         options.NearDuplicateSimilarityThreshold.ShouldBe(0.85);
         options.DedupSimilarityThreshold.ShouldBe(0.8);
         options.RelatedSimilarityThreshold.ShouldBe(0.75);
+        options.DigestSimilarityThreshold.ShouldBe(0.7);
         options.RecallForeignProjectFactor.ShouldBe(0.75);
         options.TombstoneRetentionDays.ShouldBe(14);
         options.ReindexBatchSize.ShouldBe(128);

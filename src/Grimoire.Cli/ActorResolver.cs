@@ -10,18 +10,7 @@ internal static class ActorResolver
     public const string EnvironmentVariable = "GRIMOIRE_ACTOR";
 
     public static MemoryActor Resolve(CliEnvironment environment, string? flag) =>
-        TryResolve(environment, flag) ?? MemoryActor.Human;
-
-    public static MemoryActor? TryResolve(CliEnvironment environment, string? flag)
-    {
-        var text = flag ?? environment.Variable(EnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        return Parse(text);
-    }
+        Parse(flag) ?? Parse(environment.Variable(EnvironmentVariable)) ?? MemoryActor.Human;
 
     public static async Task<CliIdentity> ResolveAsync(
         CliEnvironment environment,
@@ -29,6 +18,7 @@ internal static class ActorResolver
         string? tomeFlag,
         string defaultTome,
         IActorClaimProvider claims,
+        IAgentIdentitySource? identityFiles,
         CancellationToken cancellationToken)
     {
         var claim = tomeFlag is null ? await claims.ReadAsync(cancellationToken) : null;
@@ -67,8 +57,9 @@ internal static class ActorResolver
         }
 
         var actor = Parse(actorFlag)
+            ?? identityFiles?.Get()
             ?? Parse(envActor)
-            ?? (claim?.Alias is { } alias ? new MemoryActor?(new MemoryActor(alias, null)) : null)
+            ?? ClaimActor(claim)
             ?? MemoryActor.Human;
 
         return new CliIdentity
@@ -79,7 +70,17 @@ internal static class ActorResolver
         };
     }
 
-    private static MemoryActor? Parse(string? text)
+    private static MemoryActor? ClaimActor(ActorClaim? claim)
+    {
+        if (string.IsNullOrWhiteSpace(claim?.Alias))
+        {
+            return null;
+        }
+
+        return new MemoryActor(claim!.Alias, string.IsNullOrWhiteSpace(claim.Vendor) ? null : claim.Vendor);
+    }
+
+    internal static MemoryActor? Parse(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

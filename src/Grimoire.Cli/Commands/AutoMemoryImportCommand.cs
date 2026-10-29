@@ -43,7 +43,8 @@ internal sealed class AutoMemoryImportCommand(CliEnvironment environment)
 
         var identity = await ActorResolver.ResolveAsync(
             environment, null, invocation.Value("tome"), config.DefaultTome,
-            services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
 
         var (projectTag, projectWarning) = ResolveProjectTag(services, source);
         var summary = await services.GetRequiredService<AutoMemoryImporter>()

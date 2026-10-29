@@ -12,6 +12,7 @@ internal static class EngineOptionsMapper
         NearDuplicateSimilarityThreshold = options.NearDuplicateSimilarityThreshold,
         DedupSimilarityThreshold = options.DedupSimilarityThreshold,
         RelatedSimilarityThreshold = options.RelatedSimilarityThreshold,
+        DigestSimilarityThreshold = options.DigestSimilarityThreshold,
         RecallForeignProjectFactor = options.RecallForeignProjectFactor,
         RecencyHalfLives = new RecencyHalfLives
         {

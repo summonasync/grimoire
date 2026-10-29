@@ -68,7 +68,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
             {
                 var requested = tomes.Select(TomeKey.Normalize).Distinct()
                     .OrderBy(tome => tome, StringComparer.Ordinal).ToArray();
-                var known = await KnownTomeKeysAsync(ct);
+                var known = await KnownTomeKeys.ListAsync(store, ct);
                 var unknown = requested.Where(tome => !known.Contains(tome)).ToArray();
                 if (unknown.Length > 0)
                 {
@@ -119,14 +119,6 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
     {
         var records = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
         return [.. records.Select(record => record.Tome).Distinct().OrderBy(tome => tome, StringComparer.Ordinal)];
-    }
-
-    private async Task<IReadOnlyList<string>> KnownTomeKeysAsync(CancellationToken cancellationToken)
-    {
-        var active = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken);
-        var tombstoned = await store.ListAsync(new MemoryFilter { Status = MemoryStatus.Tombstoned }, cancellationToken);
-        return [.. active.Concat(tombstoned).Select(record => record.Tome).Distinct()
-            .OrderBy(tome => tome, StringComparer.Ordinal)];
     }
 
     private static ToolError UnknownTomeError(string paramName, string[] unknown, IReadOnlyList<string> known)

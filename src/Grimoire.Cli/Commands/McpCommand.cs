@@ -2,6 +2,7 @@ using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Mcp;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Grimoire.Cli.Commands;
 
@@ -14,9 +15,10 @@ internal sealed class McpCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var options = BuildHostOptions(
-            ActorResolver.TryResolve(environment, invocation.Value("actor")),
+            ActorResolver.Parse(invocation.Value("actor")),
             environment.Variable(McpHostOptions.TomeEnvironmentVariable),
-            environment.Variable(ActorResolver.EnvironmentVariable));
+            environment.Variable(ActorResolver.EnvironmentVariable),
+            services.GetService<IAgentIdentitySource>());
         environment.Error.WriteLine($"Grimoire MCP server '{options.ServerName}' v{options.ServerVersion} listening on stdio");
         return await McpHost.RunAsync(options, services, cancellationToken);
     }
@@ -24,12 +26,14 @@ internal sealed class McpCommand(CliEnvironment environment)
     internal static McpHostOptions BuildHostOptions(
         MemoryActor? actor,
         string? envTome = null,
-        string? envActor = null) => new()
+        string? envActor = null,
+        IAgentIdentitySource? identityFile = null) => new()
         {
             ServerVersion = VersionText(),
             Actor = actor,
             EnvTome = envTome,
             EnvActor = envActor,
+            IdentityFile = identityFile,
         };
 
     private static string VersionText() =>

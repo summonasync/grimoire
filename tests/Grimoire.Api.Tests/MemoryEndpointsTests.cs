@@ -424,6 +424,44 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_WithAnIdentityFile_StampsTheFileActorOverHuman()
+    {
+        using var fileFactory = GrimoireApiFactory.Create(
+            identityFiles: new FixedIdentitySource(new MemoryActor("guldan", "claude")));
+        fileFactory.Reset();
+        fileFactory.Embeddings.Vectors["prefers karake over grype"] = [1f, 0f];
+
+        var response = await fileFactory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "prefers karake over grype",
+            scope = "global",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var stored = fileFactory.Store.Records.Single();
+        stored.Actor.ShouldBe(new MemoryActor("guldan", "claude"));
+    }
+
+    [Fact]
+    public async Task Post_WithAnIdentityFileAndEnvActor_TheFileWins()
+    {
+        using var fileFactory = GrimoireApiFactory.Create(
+            envActor: "codex+openai",
+            identityFiles: new FixedIdentitySource(new MemoryActor("guldan", "claude")));
+        fileFactory.Reset();
+        fileFactory.Embeddings.Vectors["prefers karake over grype"] = [1f, 0f];
+
+        var response = await fileFactory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "prefers karake over grype",
+            scope = "global",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        fileFactory.Store.Records.Single().Actor.ShouldBe(new MemoryActor("guldan", "claude"));
+    }
+
+    [Fact]
     public async Task Post_WithGarbageTome_Returns400()
     {
         factory.Reset();
@@ -1501,5 +1539,34 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var body = await ReadFromJsonAsync<JsonElement>(response);
         var error = body.GetProperty("error");
         return (error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
+    }
+
+    [Fact]
+    public async Task List_UnknownTomeWithNoRecords_CarriesTheWarning()
+    {
+        factory.Reset();
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/memories?tome=nonesuch-tome");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("count").GetInt32().ShouldBe(0);
+        body.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: default");
+    }
+
+    [Fact]
+    public async Task List_WithHits_StaysWarningFree()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().GetAsync("/api/memories?tome=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("count").GetInt32().ShouldBe(1);
+        body.TryGetProperty("warnings", out _).ShouldBeFalse();
     }
 }

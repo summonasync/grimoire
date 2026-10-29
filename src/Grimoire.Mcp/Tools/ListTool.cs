@@ -7,7 +7,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class ListTool(MemoryService memories, MemoryActorProvider actors)
+internal sealed class ListTool(MemoryService memories, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_list";
 
@@ -133,6 +133,8 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
             }, ct);
 
             var entries = records.Select(ToEntry).ToArray();
+            var warnings = await EmptyTomeWarning.BuildAsync(store, entries.Length == 0, tome, resolvedTome, ct);
+
             if (projectedKeys is null)
             {
                 return ToolResults.Success(new ListView
@@ -140,6 +142,7 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
                     Tome = resolvedTome,
                     Memories = entries,
                     Count = entries.Length,
+                    Warnings = warnings,
                 });
             }
 
@@ -148,6 +151,7 @@ internal sealed class ListTool(MemoryService memories, MemoryActorProvider actor
                 Tome = resolvedTome,
                 Memories = [.. entries.Select(entry => ProjectEntry(entry, projectedKeys))],
                 Count = entries.Length,
+                Warnings = warnings,
             });
         }, cancellationToken);
     }

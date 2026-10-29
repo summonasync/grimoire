@@ -504,4 +504,84 @@ public sealed class ListToolTests
         "We keep the read path cache-free by contract: every read hits the store and bumps access stats, so the " +
         "popularity signals stay honest. A cached face must bypass the stats bump and say so in its description.",
     ];
+
+
+    [Fact]
+    public async Task List_UnknownTomeWithNoRecords_CarriesTheKnownTomeWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "kept",
+            ["scope"] = "Project",
+            ["projectId"] = "grimoire",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(0);
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: test-client");
+    }
+
+    [Fact]
+    public async Task List_KnownTomeWithNoMatchingRecords_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "kept",
+            ["scope"] = "Global",
+            ["tome"] = "alpha",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["tome"] = "alpha",
+            ["status"] = "Tombstoned",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(0);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task List_WithRecords_KeepsTheResponseWarningFree()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "kept",
+            ["scope"] = "Global",
+            ["tome"] = "alpha",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>
+        {
+            ["tome"] = "alpha",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("count").GetInt32().ShouldBe(1);
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task List_WithoutATomeParam_NeverWarns()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_list", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("count").GetInt32().ShouldBe(0);
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

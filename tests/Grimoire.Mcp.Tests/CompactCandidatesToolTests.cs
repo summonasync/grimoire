@@ -93,4 +93,42 @@ public sealed class CompactCandidatesToolTests
             LastAccessedAt = accessed,
         };
     }
+
+
+    [Fact]
+    public async Task CompactCandidates_UnknownExplicitTome_CarriesTheNoneYetWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_compact_candidates", new Dictionary<string, object?>
+        {
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("groups").GetArrayLength().ShouldBe(0);
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: (none yet)");
+    }
+
+    [Fact]
+    public async Task CompactCandidates_KnownTomeWithoutDueCandidates_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var stale = session.Clock.UtcNow.AddDays(-30);
+        float[] vector = [1f, 0f, 0f];
+        await session.Store.UpsertAsync(
+            Journal(Guid.NewGuid(), "Lone stale journal, no cluster mates", stale), vector, CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_compact_candidates", new Dictionary<string, object?>
+        {
+            ["tome"] = McpTestSession.ClientActor,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("groups").GetArrayLength().ShouldBe(0);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

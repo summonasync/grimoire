@@ -214,4 +214,41 @@ public sealed class HistoryToolTests
         remembered.ShouldSucceed();
         return remembered.Payload().GetProperty("memoryId").GetGuid();
     }
+
+
+    [Fact]
+    public async Task History_UnknownExplicitTome_CarriesTheNoneYetWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_history", new Dictionary<string, object?>
+        {
+            ["memoryId"] = Guid.NewGuid().ToString(),
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("found").GetBoolean().ShouldBeFalse();
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: (none yet)");
+    }
+
+    [Fact]
+    public async Task History_FoundLineageInExplicitTome_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        var id = await RememberAsync(session, "alpha lineage fact", [1f, 0f, 0f], tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_history", new Dictionary<string, object?>
+        {
+            ["memoryId"] = id.ToString(),
+            ["tome"] = "alpha",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("found").GetBoolean().ShouldBeTrue();
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }
