@@ -87,6 +87,30 @@ public sealed class DigestServiceTests
     }
 
     [Fact]
+    public async Task Digest_SimilarityAtExactThreshold_IsIncluded()
+    {
+        SeedFact("boundary deploy fact", [3f, 4f, 0f]);
+
+        var digest = await Service().DigestAsync(Query(), CancellationToken.None);
+
+        digest.LongMemo.ShouldHaveSingleItem();
+        digest.LongMemo[0].Match.ShouldBe(DigestMatch.Similar);
+        digest.LongMemo[0].Similarity!.Value.ShouldBe(0.6);
+    }
+
+    [Fact]
+    public async Task Digest_SimilarityJustBelowThreshold_IsExcluded()
+    {
+        SeedFact("sub-threshold deploy fact", [60f, 81f, 0f]);
+
+        var digest = await Service().DigestAsync(Query(), CancellationToken.None);
+
+        digest.LongMemo.ShouldBeEmpty();
+        digest.Recent.ShouldBeEmpty();
+        digest.Gone.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Digest_TagAndSimilarHitOfSameRecord_DeduplicateWithTagWinning()
     {
         SeedFact("deploy gates stay green", [1f, 0.7f, 0f], tags: ["topic:deploy"]);

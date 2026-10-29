@@ -10,6 +10,8 @@ public sealed record MemoryOptions
 
     public double RelatedSimilarityThreshold { get; init; } = 0.82;
 
+    public double DigestSimilarityThreshold { get; init; } = 0.60;
+
     public double RecallForeignProjectFactor { get; init; } = 0.6;
 
     public RecencyHalfLifeOptions RecencyHalfLifeDays { get; init; } = new();

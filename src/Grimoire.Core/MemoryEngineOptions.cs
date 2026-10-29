@@ -32,7 +32,7 @@ public sealed record MemoryEngineOptions
 
     public int BriefMaxEntryChars { get; init; } = 400;
 
-    public double DigestSimilarityThreshold { get; init; } = 0.75;
+    public double DigestSimilarityThreshold { get; init; } = 0.60;
 
     public int DigestRecentCap { get; init; } = 10;
 

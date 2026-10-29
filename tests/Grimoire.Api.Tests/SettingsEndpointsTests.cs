@@ -23,6 +23,7 @@ public class SettingsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         settings.Memory.SessionTtlHours.ShouldBe(24);
         settings.Memory.DedupSimilarityThreshold.ShouldBe(0.92);
         settings.Memory.RelatedSimilarityThreshold.ShouldBe(0.82);
+        settings.Memory.DigestSimilarityThreshold.ShouldBe(0.6);
         settings.Memory.TombstoneRetentionDays.ShouldBe(30);
         settings.Memory.RecallOversampling.ShouldBe(3);
         settings.Memory.RecencyHalfLives.SessionDays.ShouldBe(0.5);
@@ -36,6 +37,7 @@ public class SettingsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         settings.Persistence.Available.ShouldBeFalse();
         settings.Persistence.Reason.ShouldBe("settings_persistence_not_implemented");
         settings.Editable.ShouldContain("memory.sessionTtlHours");
+        settings.Editable.ShouldContain("memory.digestSimilarityThreshold");
         settings.Editable.ShouldNotContain("memory.brief.maxTotalChars");
         settings.Editable.ShouldNotContain("memory.brief.maxEntryChars");
     }
@@ -76,12 +78,14 @@ public class SettingsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         {
             SessionTtlHours = 5,
             RecallOversampling = 2,
+            DigestSimilarityThreshold = 0.7,
         });
 
         var settings = await configured.NewClient().GetFromJsonAsync<SettingsResponse>("/api/settings", TestJson.Options);
 
         settings!.Memory.SessionTtlHours.ShouldBe(5);
         settings.Memory.RecallOversampling.ShouldBe(2);
+        settings.Memory.DigestSimilarityThreshold.ShouldBe(0.7);
     }
 
     [Fact]
