@@ -418,4 +418,38 @@ public sealed class BriefToolTests
             Rules = "never commit without being asked",
         }, MemoryActor.Human, CancellationToken.None, McpTestSession.ClientActor);
     }
+
+
+    [Fact]
+    public async Task Brief_UnknownExplicitTome_CarriesTheKnownTomeWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "warm the store",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("facts").GetProperty("state").GetString().ShouldBe("Empty");
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: test-client");
+    }
+
+    [Fact]
+    public async Task Brief_WithoutATomeParam_StaysSilentOnAColdStore()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

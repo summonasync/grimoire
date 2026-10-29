@@ -1540,4 +1540,33 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         var error = body.GetProperty("error");
         return (error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
     }
+
+    [Fact]
+    public async Task List_UnknownTomeWithNoRecords_CarriesTheWarning()
+    {
+        factory.Reset();
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().GetAsync("/api/memories?tome=nonesuch-tome");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("count").GetInt32().ShouldBe(0);
+        body.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: default");
+    }
+
+    [Fact]
+    public async Task List_WithHits_StaysWarningFree()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().GetAsync("/api/memories?tome=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("count").GetInt32().ShouldBe(1);
+        body.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

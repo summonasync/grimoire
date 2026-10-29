@@ -6,7 +6,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class DigestTool(DigestService digests, MemoryActorProvider actors)
+internal sealed class DigestTool(DigestService digests, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_digest";
 
@@ -103,16 +103,19 @@ internal sealed class DigestTool(DigestService digests, MemoryActorProvider acto
                 Limit = limit,
             }, ct);
 
+            var isEmpty = result.LongMemo.Count == 0 && result.Recent.Count == 0 && result.Gone.Count == 0;
+            var warnings = await EmptyTomeWarning.BuildAsync(store, isEmpty, tome, resolvedTome, ct);
+
             if (projectedKeys is null)
             {
-                return ToolResults.Success(ToView(result, resolvedTome));
+                return ToolResults.Success(ToView(result, resolvedTome, warnings));
             }
 
-            return ToolResults.Success(ToProjectedView(result, resolvedTome, projectedKeys));
+            return ToolResults.Success(ToProjectedView(result, resolvedTome, projectedKeys, warnings));
         }, cancellationToken);
     }
 
-    private static DigestView ToView(DigestResult result, string tome)
+    private static DigestView ToView(DigestResult result, string tome, IReadOnlyList<string>? warnings)
     {
         return new DigestView
         {
@@ -122,10 +125,15 @@ internal sealed class DigestTool(DigestService digests, MemoryActorProvider acto
             Recent = ToSection(result.RecentState, result.Recent),
             Gone = ToSection(result.GoneState, result.Gone),
             Omitted = [.. result.Omitted.Select(ToSectionName)],
+            Warnings = warnings,
         };
     }
 
-    private static ProjectedDigestView ToProjectedView(DigestResult result, string tome, IReadOnlyList<string> keys)
+    private static ProjectedDigestView ToProjectedView(
+        DigestResult result,
+        string tome,
+        IReadOnlyList<string> keys,
+        IReadOnlyList<string>? warnings)
     {
         return new ProjectedDigestView
         {
@@ -135,6 +143,7 @@ internal sealed class DigestTool(DigestService digests, MemoryActorProvider acto
             Recent = ToProjectedSection(result.RecentState, result.Recent, keys),
             Gone = ToProjectedSection(result.GoneState, result.Gone, keys),
             Omitted = [.. result.Omitted.Select(ToSectionName)],
+            Warnings = warnings,
         };
     }
 

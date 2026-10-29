@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class PersonaGetTool(PersonaService persona, MemoryActorProvider actors)
+internal sealed class PersonaGetTool(PersonaService persona, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_persona_get";
 
@@ -38,7 +38,15 @@ internal sealed class PersonaGetTool(PersonaService persona, MemoryActorProvider
                 Tone = document.Tone,
                 Preferences = document.Preferences,
                 Rules = document.Rules,
+                Warnings = await EmptyTomeWarning.BuildAsync(
+                    store, IsEmpty(document), tome, resolvedTome, ct),
             });
         }, cancellationToken);
     }
+
+    private static bool IsEmpty(PersonaDocument document) =>
+        document.Identity.Length == 0 &&
+        document.Tone.Length == 0 &&
+        document.Preferences.Length == 0 &&
+        document.Rules.Length == 0;
 }

@@ -389,4 +389,118 @@ public sealed class DigestToolTests
         await session.Store.UpsertAsync(record, vector, CancellationToken.None);
         return record;
     }
+
+
+    [Fact]
+    public async Task Digest_UnknownTomeOnEmptyStore_WarnsWithNoneYet()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "deploy",
+            ["tome"] = "linnovate",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(0);
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: (none yet)");
+    }
+
+    [Fact]
+    public async Task Digest_UnknownTomeWithHitsElsewhere_WarnsNamingTheKnownTome()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("LUCA field bug", [1f, 0f, 0f]);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "LUCA field bug",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tags"] = new[] { "topic:luca" },
+            ["tome"] = "inno-crew",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "deploy",
+            ["tome"] = "linnovate",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(0);
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: inno-crew");
+    }
+
+    [Fact]
+    public async Task Digest_HitsInTheRequestedTome_StayWarningFree()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("LUCA field bug", [1f, 0f, 0f]);
+        session.Embeddings.Register("luca", [1f, 0f, 0f]);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "LUCA field bug",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tags"] = new[] { "topic:luca" },
+            ["tome"] = "inno-crew",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "luca",
+            ["tome"] = "inno-crew",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(1);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Digest_KnownTomeWithoutTopicHits_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("LUCA field bug", [1f, 0f, 0f]);
+        session.Embeddings.Register("grocery-list", [0f, 1f, 0f]);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "LUCA field bug",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+            ["tags"] = new[] { "topic:luca" },
+            ["tome"] = "inno-crew",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "grocery list",
+            ["tome"] = "inno-crew",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(0);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Digest_WithoutATomeParam_NeverWarns()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
+        {
+            ["topic"] = "deploy",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

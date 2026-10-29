@@ -25,4 +25,6 @@ internal sealed record StatsView
     public required GcState Gc { get; init; }
 
     public required ConsolidationState Consolidation { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

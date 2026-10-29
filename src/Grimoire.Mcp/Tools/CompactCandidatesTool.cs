@@ -58,6 +58,7 @@ internal sealed class CompactCandidatesTool(MemoryService memories, IMemoryStore
                 Tome = resolvedTome,
                 Groups = views,
                 CandidateCount = views.Sum(group => group.Entries.Count),
+                Warnings = await EmptyTomeWarning.BuildAsync(store, groups.Count == 0, tome, resolvedTome, ct),
             });
         }, cancellationToken);
     }

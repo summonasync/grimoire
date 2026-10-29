@@ -13,4 +13,6 @@ internal sealed record ProjectedDigestView
     public required DigestProjectedSection Gone { get; init; }
 
     public required IReadOnlyList<string> Omitted { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

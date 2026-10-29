@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class StatsTool(MemoryService memories, MemoryActorProvider actors)
+internal sealed class StatsTool(MemoryService memories, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_stats";
 
@@ -36,10 +36,11 @@ internal sealed class StatsTool(MemoryService memories, MemoryActorProvider acto
         return ToolResults.ExecuteAsync(async ct =>
         {
             var stats = await memories.StatsAsync(ct);
+            var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
 
             return ToolResults.Success(new StatsView
             {
-                Tome = await actors.ResolveTomeAsync(tome, ct),
+                Tome = resolvedTome,
                 Active = stats.Active,
                 Superseded = stats.Superseded,
                 Tombstoned = stats.Tombstoned,
@@ -52,6 +53,7 @@ internal sealed class StatsTool(MemoryService memories, MemoryActorProvider acto
                     : null,
                 Gc = stats.Gc,
                 Consolidation = stats.Consolidation,
+                Warnings = await EmptyTomeWarning.BuildAsync(store, stats.ByTome.Count == 0, tome, resolvedTome, ct),
             });
         }, cancellationToken);
     }

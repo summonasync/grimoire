@@ -8,6 +8,7 @@ namespace Grimoire.Mcp.Tools;
 
 internal sealed class RecallTool(
     MemoryService memories,
+    IMemoryStore store,
     MemoryActorProvider actors,
     IProjectRegistry projects,
     ICallerPathProvider callerPaths)
@@ -136,6 +137,8 @@ internal sealed class RecallTool(
                 Limit = limit,
             }, ct);
 
+            var warnings = await EmptyTomeWarning.BuildAsync(store, matches.Count == 0, tome, resolvedTome, ct);
+
             if (projectedKeys is null)
             {
                 return ToolResults.Success(new RecallView
@@ -143,6 +146,7 @@ internal sealed class RecallTool(
                     Tome = resolvedTome,
                     Matches = [.. matches.Select(ToHit)],
                     Count = matches.Count,
+                    Warnings = warnings,
                 });
             }
 
@@ -151,6 +155,7 @@ internal sealed class RecallTool(
                 Tome = resolvedTome,
                 Matches = [.. matches.Select(match => ProjectHit(ToHit(match), projectedKeys))],
                 Count = matches.Count,
+                Warnings = warnings,
             });
         }, cancellationToken);
     }

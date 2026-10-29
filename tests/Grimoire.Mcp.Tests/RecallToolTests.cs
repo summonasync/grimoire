@@ -448,4 +448,86 @@ public sealed class RecallToolTests
         message.ShouldContain("'until'");
         message.ShouldContain("eventually");
     }
+
+
+    [Fact]
+    public async Task Recall_UnknownTomeWithNoHits_CarriesTheKnownTomeWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(0);
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: test-client");
+    }
+
+    [Fact]
+    public async Task Recall_KnownButEmptyTome_StaysSilent()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("journal scratch", VectorA);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "journal scratch",
+            ["scope"] = "Global",
+            ["kind"] = "Journal",
+            ["tome"] = "alpha",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "journal scratch",
+            ["kind"] = "Fact",
+            ["tome"] = "alpha",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(0);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Recall_WithHits_KeepsTheResponseWarningFree()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        session.Embeddings.Register("alpha squad", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad",
+            ["tome"] = McpTestSession.ClientActor,
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("count").GetInt32().ShouldBe(1);
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Recall_WithoutATomeParam_NeverWarns()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("anything", VectorA);
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("count").GetInt32().ShouldBe(0);
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
 }

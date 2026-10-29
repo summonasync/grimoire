@@ -11,4 +11,6 @@ internal sealed record PersonaView
     public string Preferences { get; init; } = string.Empty;
 
     public string Rules { get; init; } = string.Empty;
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

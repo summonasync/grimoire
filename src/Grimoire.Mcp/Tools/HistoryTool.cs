@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class HistoryTool(CorrectionService corrections, MemoryActorProvider actors)
+internal sealed class HistoryTool(CorrectionService corrections, IMemoryStore store, MemoryActorProvider actors)
 {
     public const string Name = "memory_history";
 
@@ -47,6 +47,7 @@ internal sealed class HistoryTool(CorrectionService corrections, MemoryActorProv
                 Tome = resolvedTome,
                 Found = result.Found,
                 Chain = [.. result.Chain.Select(ToEntry)],
+                Warnings = await EmptyTomeWarning.BuildAsync(store, !result.Found, tome, resolvedTome, ct),
             });
         }, cancellationToken);
     }

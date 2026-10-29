@@ -17,4 +17,6 @@ internal sealed record BriefView
     public string? Hint { get; init; }
 
     public BriefCompactionSection? CompactionDue { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }
