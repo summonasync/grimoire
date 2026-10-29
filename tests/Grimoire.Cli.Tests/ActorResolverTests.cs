@@ -60,9 +60,9 @@ public sealed class ActorResolverTests
     }
 
     [Fact]
-    public void TryResolve_Unset_ReturnsNull()
+    public void Parse_Unset_ReturnsNull()
     {
-        ActorResolver.TryResolve(Environment(), null).ShouldBeNull();
+        ActorResolver.Parse(null).ShouldBeNull();
     }
 
     [Theory]

@@ -10,18 +10,7 @@ internal static class ActorResolver
     public const string EnvironmentVariable = "GRIMOIRE_ACTOR";
 
     public static MemoryActor Resolve(CliEnvironment environment, string? flag) =>
-        TryResolve(environment, flag) ?? MemoryActor.Human;
-
-    public static MemoryActor? TryResolve(CliEnvironment environment, string? flag)
-    {
-        var text = flag ?? environment.Variable(EnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        return Parse(text);
-    }
+        Parse(flag) ?? Parse(environment.Variable(EnvironmentVariable)) ?? MemoryActor.Human;
 
     public static async Task<CliIdentity> ResolveAsync(
         CliEnvironment environment,
@@ -91,7 +80,7 @@ internal static class ActorResolver
         return new MemoryActor(claim!.Alias, string.IsNullOrWhiteSpace(claim.Vendor) ? null : claim.Vendor);
     }
 
-    private static MemoryActor? Parse(string? text)
+    internal static MemoryActor? Parse(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

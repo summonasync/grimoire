@@ -15,7 +15,7 @@ internal sealed class McpCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var options = BuildHostOptions(
-            ActorResolver.TryResolve(environment, invocation.Value("actor")),
+            ActorResolver.Parse(invocation.Value("actor")),
             environment.Variable(McpHostOptions.TomeEnvironmentVariable),
             environment.Variable(ActorResolver.EnvironmentVariable),
             services.GetService<IAgentIdentitySource>());
