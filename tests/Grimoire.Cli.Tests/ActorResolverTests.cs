@@ -86,7 +86,7 @@ public sealed class ActorResolverTests
     {
         var identity = await ActorResolver.ResolveAsync(
             Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "dan+claude" }),
-            null, null, "default", new FixedClaimProvider(null), CancellationToken.None);
+            null, null, "default", new FixedClaimProvider(null), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("dan");
         identity.Actor.ShouldBe(new MemoryActor("dan", "claude"));
@@ -102,7 +102,7 @@ public sealed class ActorResolverTests
                 ["GRIMOIRE_TOME"] = "platform-work",
                 [ActorResolver.EnvironmentVariable] = "dan+claude",
             }),
-            null, null, "default", new FixedClaimProvider(null), CancellationToken.None);
+            null, null, "default", new FixedClaimProvider(null), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("platform-work");
         identity.Source.ShouldBe(TomeSource.EnvTome);
@@ -113,7 +113,7 @@ public sealed class ActorResolverTests
     public async Task ResolveAsync_ClaimBindsActorAliasToTome()
     {
         var identity = await ActorResolver.ResolveAsync(
-            Environment(), null, null, "default", new FixedClaimProvider(Claim), CancellationToken.None);
+            Environment(), null, null, "default", new FixedClaimProvider(Claim), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("platform-work");
         identity.Source.ShouldBe(TomeSource.ClaimFile);
@@ -126,7 +126,7 @@ public sealed class ActorResolverTests
     {
         var identity = await ActorResolver.ResolveAsync(
             Environment(), null, null, "default",
-            new FixedClaimProvider(new ActorClaim { Alias = "dan" }), CancellationToken.None);
+            new FixedClaimProvider(new ActorClaim { Alias = "dan" }), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("dan");
         identity.Source.ShouldBe(TomeSource.ClaimFile);
@@ -139,7 +139,7 @@ public sealed class ActorResolverTests
         var claims = new FixedClaimProvider(Claim);
 
         var identity = await ActorResolver.ResolveAsync(
-            Environment(), null, "research", "default", claims, CancellationToken.None);
+            Environment(), null, "research", "default", claims, null, CancellationToken.None);
 
         identity.Tome.ShouldBe("research");
         identity.Source.ShouldBe(TomeSource.ExplicitParam);
@@ -151,7 +151,7 @@ public sealed class ActorResolverTests
     public async Task ResolveAsync_ExplicitActorOverridesClaimAlias()
     {
         var identity = await ActorResolver.ResolveAsync(
-            Environment(), "eve+anthropic", null, "default", new FixedClaimProvider(Claim), CancellationToken.None);
+            Environment(), "eve+anthropic", null, "default", new FixedClaimProvider(Claim), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("platform-work");
         identity.Actor.ShouldBe(new MemoryActor("eve", "anthropic"));
@@ -161,7 +161,7 @@ public sealed class ActorResolverTests
     public async Task ResolveAsync_UnsetFallsBackToDefaultTomeAndHuman()
     {
         var identity = await ActorResolver.ResolveAsync(
-            Environment(), null, null, "team", new FixedClaimProvider(null), CancellationToken.None);
+            Environment(), null, null, "team", new FixedClaimProvider(null), null, CancellationToken.None);
 
         identity.Tome.ShouldBe("team");
         identity.Source.ShouldBe(TomeSource.Default);
@@ -174,7 +174,7 @@ public sealed class ActorResolverTests
     public async Task ResolveAsync_NormalizesTomeCandidates(string candidate, string expected)
     {
         var identity = await ActorResolver.ResolveAsync(
-            Environment(), null, candidate, "default", new FixedClaimProvider(null), CancellationToken.None);
+            Environment(), null, candidate, "default", new FixedClaimProvider(null), null, CancellationToken.None);
 
         identity.Tome.ShouldBe(expected);
     }
@@ -185,7 +185,7 @@ public sealed class ActorResolverTests
     public async Task ResolveAsync_InvalidExplicitTome_ThrowsUsage(string candidate, string origin)
     {
         var failure = await Should.ThrowAsync<UsageException>(() =>
-            ActorResolver.ResolveAsync(Environment(), null, candidate, "default", new FixedClaimProvider(null), CancellationToken.None));
+            ActorResolver.ResolveAsync(Environment(), null, candidate, "default", new FixedClaimProvider(null), null, CancellationToken.None));
 
         failure.Message.ShouldContain(origin);
     }
@@ -197,6 +197,7 @@ public sealed class ActorResolverTests
             ActorResolver.ResolveAsync(
                 Environment(), null, null, "default",
                 new FixedClaimProvider(new ActorClaim { Alias = "dan", Tome = "Not Valid!" }),
+                null,
                 CancellationToken.None));
 
         failure.Message.ShouldContain("AGENTS.md");
@@ -208,6 +209,50 @@ public sealed class ActorResolverTests
         await Should.ThrowAsync<UsageException>(() =>
             ActorResolver.ResolveAsync(
                 Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "+claude" }),
-                null, null, "default", new FixedClaimProvider(null), CancellationToken.None));
+                null, null, "default", new FixedClaimProvider(null), null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TheFlagBeatsTheIdentityFileAndTheEnvironment()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "codex+openai" }),
+            "junior+claude", null, "default", new FixedClaimProvider(null),
+            new FixedIdentitySource(new MemoryActor("file-alias", "file-vendor")), CancellationToken.None);
+
+        identity.Actor.ShouldBe(new MemoryActor("junior", "claude"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TheIdentityFileBeatsTheEnvironmentVariable()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "codex+openai" }),
+            null, null, "default", new FixedClaimProvider(null),
+            new FixedIdentitySource(new MemoryActor("file-alias", "file-vendor")), CancellationToken.None);
+
+        identity.Actor.ShouldBe(new MemoryActor("file-alias", "file-vendor"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_AnAbsentIdentityFile_FallsThroughToTheEnvironment()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(new Dictionary<string, string> { [ActorResolver.EnvironmentVariable] = "codex+openai" }),
+            null, null, "default", new FixedClaimProvider(null),
+            new FixedIdentitySource(null), CancellationToken.None);
+
+        identity.Actor.ShouldBe(new MemoryActor("codex", "openai"));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TheClaimVendorReachesTheActor()
+    {
+        var identity = await ActorResolver.ResolveAsync(
+            Environment(), null, null, "default",
+            new FixedClaimProvider(new ActorClaim { Alias = "dan", Vendor = "claude" }), null,
+            CancellationToken.None);
+
+        identity.Actor.ShouldBe(new MemoryActor("dan", "claude"));
     }
 }

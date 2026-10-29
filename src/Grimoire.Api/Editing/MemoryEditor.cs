@@ -5,7 +5,11 @@ namespace Grimoire.Api.Editing;
 
 public sealed class MemoryEditor(IMemoryStore store, IEmbeddingProvider embeddings, IClock clock)
 {
-    public async Task<MemoryRecord?> EditAsync(Guid id, PatchMemoryRequest patch, CancellationToken cancellationToken)
+    public async Task<MemoryRecord?> EditAsync(
+        Guid id,
+        PatchMemoryRequest patch,
+        MemoryActor actor,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(patch);
 
@@ -42,7 +46,7 @@ public sealed class MemoryEditor(IMemoryStore store, IEmbeddingProvider embeddin
             Tags = patch.Tags ?? record.Tags,
             Importance = patch.Importance is null ? record.Importance : Math.Clamp(patch.Importance.Value, 0, 1),
         };
-        var corrected = CorrectionTrail.Append(updated, clock.UtcNow, MemoryActor.Human, CorrectionAction.Patch, patch.Reason);
+        var corrected = CorrectionTrail.Append(updated, clock.UtcNow, actor, CorrectionAction.Patch, patch.Reason);
 
         if (contentChanged)
         {

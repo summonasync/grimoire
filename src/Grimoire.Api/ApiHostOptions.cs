@@ -1,3 +1,5 @@
+using Grimoire.Core;
+
 namespace Grimoire.Api;
 
 public sealed record ApiHostOptions
@@ -11,6 +13,8 @@ public sealed record ApiHostOptions
     public string? EnvTome { get; init; }
 
     public string? EnvActor { get; init; }
+
+    public IAgentIdentitySource? IdentityFile { get; init; }
 
     // Test-only: keeps configuration-sourced Kestrel endpoints loadable so tests can prove
     // the post-bind loopback guard. Production paths keep the configuration wipe.

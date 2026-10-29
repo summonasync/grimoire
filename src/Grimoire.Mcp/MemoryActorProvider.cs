@@ -45,8 +45,10 @@ internal sealed class MemoryActorProvider(
 
     private async Task<MemoryActor?> ClaimActorAsync(CancellationToken cancellationToken)
     {
-        var alias = (await claims.ReadAsync(cancellationToken))?.Alias;
-        return string.IsNullOrWhiteSpace(alias) ? null : new MemoryActor(alias, null);
+        var claim = await claims.ReadAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(claim?.Alias)
+            ? null
+            : new MemoryActor(claim!.Alias, string.IsNullOrWhiteSpace(claim.Vendor) ? null : claim.Vendor);
     }
 
     private MemoryActor? ClientActor()

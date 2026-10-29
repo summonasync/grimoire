@@ -15,7 +15,8 @@ internal sealed class RememberCommand(CliEnvironment environment)
     {
         var identity = await ActorResolver.ResolveAsync(
             environment, invocation.Value("actor"), invocation.Value("tome"), config.DefaultTome,
-            services.GetRequiredService<IActorClaimProvider>(), cancellationToken);
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
         var scope = CliValues.Scope(invocation.Spec, invocation.Value("scope"), MemoryScope.Project);
         var ttlHours = invocation.Value("ttl") is { } ttlText ? ParseTtlHours(invocation.Spec, scope, ttlText) : (double?)null;
         var projectId = invocation.Value("project");

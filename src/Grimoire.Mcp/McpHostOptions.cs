@@ -31,5 +31,7 @@ public sealed record McpHostOptions
 
     public string? EnvActor { get; init; }
 
+    public IAgentIdentitySource? IdentityFile { get; init; }
+
     public string Instructions { get; init; } = DefaultInstructions;
 }

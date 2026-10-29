@@ -17,6 +17,7 @@ public sealed class GrimoireApiFactory : IDisposable
     private readonly string? _envActor;
     private readonly IReadOnlyList<ProjectAliasRecord>? _projects;
     private readonly string? _callerPath;
+    private readonly IAgentIdentitySource? _identityFiles;
     private ServiceProvider? _ports;
     private WebApplication? _app;
 
@@ -30,7 +31,8 @@ public sealed class GrimoireApiFactory : IDisposable
         string? envTome,
         string? envActor,
         IReadOnlyList<ProjectAliasRecord>? projects,
-        string? callerPath)
+        string? callerPath,
+        IAgentIdentitySource? identityFiles)
     {
         _engineOptions = engineOptions;
         _staticRootPath = staticRootPath;
@@ -38,6 +40,7 @@ public sealed class GrimoireApiFactory : IDisposable
         _envActor = envActor;
         _projects = projects;
         _callerPath = callerPath;
+        _identityFiles = identityFiles;
     }
 
     public static GrimoireApiFactory Create(
@@ -46,8 +49,9 @@ public sealed class GrimoireApiFactory : IDisposable
         string? envTome = null,
         string? envActor = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
-        string? callerPath = null) =>
-        new(engineOptions, staticRootPath, envTome, envActor, projects, callerPath);
+        string? callerPath = null,
+        IAgentIdentitySource? identityFiles = null) =>
+        new(engineOptions, staticRootPath, envTome, envActor, projects, callerPath, identityFiles);
 
     public FakeMemoryStore Store { get; } = new();
 
@@ -101,6 +105,7 @@ public sealed class GrimoireApiFactory : IDisposable
             StaticRootPath = _staticRootPath ?? Path.Combine(Path.GetTempPath(), "grimoire-api-tests", "missing-export"),
             EnvTome = _envTome,
             EnvActor = _envActor,
+            IdentityFile = _identityFiles,
         }, Ports());
         await _app.StartAsync();
         return _app;

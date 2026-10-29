@@ -24,6 +24,7 @@ public static class ActorClaimBlockParser
         }
 
         string? alias = null;
+        string? vendor = null;
         string? tome = null;
         foreach (var rawLine in document[contentStart..end].Split('\n'))
         {
@@ -40,13 +41,19 @@ public static class ActorClaimBlockParser
             {
                 alias = Keep(alias, value);
             }
+            else if (key.Equals("vendor", StringComparison.OrdinalIgnoreCase))
+            {
+                vendor = Keep(vendor, value);
+            }
             else if (key.Equals("tome", StringComparison.OrdinalIgnoreCase))
             {
                 tome = Keep(tome, value);
             }
         }
 
-        return alias is null && tome is null ? null : new ActorClaim { Alias = alias, Tome = tome };
+        return alias is null && tome is null
+            ? null
+            : new ActorClaim { Alias = alias, Vendor = vendor, Tome = tome };
     }
 
     private static string? Keep(string? current, string value) =>

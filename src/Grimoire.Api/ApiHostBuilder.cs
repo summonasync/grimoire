@@ -63,7 +63,8 @@ public static class ApiHostBuilder
             new TomeResolver(engineOptions),
             services.GetService<IActorClaimProvider>(),
             options.EnvTome,
-            options.EnvActor);
+            options.EnvActor,
+            options.IdentityFile);
         builder.Services.AddSingleton(tomeResolver);
 
         var app = builder.Build();

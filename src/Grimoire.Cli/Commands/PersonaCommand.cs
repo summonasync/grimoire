@@ -80,6 +80,7 @@ internal sealed class PersonaCommand(CliEnvironment environment)
             invocation.Value("tome"),
             config.DefaultTome,
             services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(),
             cancellationToken);
 
     private static string Indent(string content) => string.Join(

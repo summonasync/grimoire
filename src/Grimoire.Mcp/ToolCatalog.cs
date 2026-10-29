@@ -39,8 +39,7 @@ internal static class ToolCatalog
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
         var claims = Require<IActorClaimProvider>(services);
-        var identityFile = services.GetService(typeof(IAgentIdentitySource)) as IAgentIdentitySource
-            ?? new UnsetAgentIdentitySource();
+        var identityFile = options.IdentityFile ?? new UnsetAgentIdentitySource();
         var registryStore = Require<IProjectRegistryStore>(services);
         var projects = new LiveProjectRegistry(registryStore);
         var projectTags = new ProjectTagResolver(projects);

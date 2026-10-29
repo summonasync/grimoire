@@ -90,9 +90,12 @@ internal sealed class McpTestSession : IAsyncDisposable
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
             board,
-            consolidation,
-            identityFile);
+            consolidation);
         var options = hostOptions ?? new McpHostOptions();
+        if (identityFile is not null)
+        {
+            options = options with { IdentityFile = identityFile };
+        }
 
         var clientToServer = Channel.CreateUnbounded<JsonRpcMessage>();
         var serverToClient = Channel.CreateUnbounded<JsonRpcMessage>();

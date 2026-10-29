@@ -99,6 +99,17 @@ public sealed class MemoryActorProviderTests
     }
 
     [Fact]
+    public async Task GetActor_TheClaimVendor_ReachesTheActor()
+    {
+        var provider = Provider(
+            claims: new FakeActorClaimProvider(new ActorClaim { Alias = "claim-alias", Vendor = "claim-vendor" }));
+
+        var actor = await provider.GetActorAsync(CancellationToken.None);
+
+        actor.ShouldBe(new MemoryActor("claim-alias", "claim-vendor"));
+    }
+
+    [Fact]
     public async Task GetActor_EveryChannelEmpty_FallsBackToUnknown()
     {
         var provider = Provider();

@@ -29,7 +29,8 @@ internal static class PersonaEndpoints
             }
 
             var resolved = await tomes.ResolveAsync(tome, cancellationToken);
-            var saved = await persona.SetAsync(document, MemoryActor.Human, cancellationToken, resolved);
+            var actor = await tomes.ResolveActorAsync(cancellationToken);
+            var saved = await persona.SetAsync(document, actor, cancellationToken, resolved);
             return Results.Ok(new PersonaWriteResponse(resolved, saved));
         });
     }

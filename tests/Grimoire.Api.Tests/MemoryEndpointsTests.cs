@@ -424,6 +424,44 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Post_WithAnIdentityFile_StampsTheFileActorOverHuman()
+    {
+        using var fileFactory = GrimoireApiFactory.Create(
+            identityFiles: new FixedIdentitySource(new MemoryActor("guldan", "claude")));
+        fileFactory.Reset();
+        fileFactory.Embeddings.Vectors["prefers karake over grype"] = [1f, 0f];
+
+        var response = await fileFactory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "prefers karake over grype",
+            scope = "global",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var stored = fileFactory.Store.Records.Single();
+        stored.Actor.ShouldBe(new MemoryActor("guldan", "claude"));
+    }
+
+    [Fact]
+    public async Task Post_WithAnIdentityFileAndEnvActor_TheFileWins()
+    {
+        using var fileFactory = GrimoireApiFactory.Create(
+            envActor: "codex+openai",
+            identityFiles: new FixedIdentitySource(new MemoryActor("guldan", "claude")));
+        fileFactory.Reset();
+        fileFactory.Embeddings.Vectors["prefers karake over grype"] = [1f, 0f];
+
+        var response = await fileFactory.NewClient().PostAsJsonAsync("/api/memories", new
+        {
+            content = "prefers karake over grype",
+            scope = "global",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        fileFactory.Store.Records.Single().Actor.ShouldBe(new MemoryActor("guldan", "claude"));
+    }
+
+    [Fact]
     public async Task Post_WithGarbageTome_Returns400()
     {
         factory.Reset();

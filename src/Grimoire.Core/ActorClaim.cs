@@ -4,5 +4,7 @@ public sealed record ActorClaim
 {
     public string? Alias { get; init; }
 
+    public string? Vendor { get; init; }
+
     public string? Tome { get; init; }
 }

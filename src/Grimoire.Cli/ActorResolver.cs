@@ -29,6 +29,7 @@ internal static class ActorResolver
         string? tomeFlag,
         string defaultTome,
         IActorClaimProvider claims,
+        IAgentIdentitySource? identityFiles,
         CancellationToken cancellationToken)
     {
         var claim = tomeFlag is null ? await claims.ReadAsync(cancellationToken) : null;
@@ -67,8 +68,9 @@ internal static class ActorResolver
         }
 
         var actor = Parse(actorFlag)
+            ?? identityFiles?.Get()
             ?? Parse(envActor)
-            ?? (claim?.Alias is { } alias ? new MemoryActor?(new MemoryActor(alias, null)) : null)
+            ?? ClaimActor(claim)
             ?? MemoryActor.Human;
 
         return new CliIdentity
@@ -77,6 +79,16 @@ internal static class ActorResolver
             Tome = source == TomeSource.Default ? TomeKey.Normalize(tome) : Normalized(tome, source),
             Source = source,
         };
+    }
+
+    private static MemoryActor? ClaimActor(ActorClaim? claim)
+    {
+        if (string.IsNullOrWhiteSpace(claim?.Alias))
+        {
+            return null;
+        }
+
+        return new MemoryActor(claim!.Alias, string.IsNullOrWhiteSpace(claim.Vendor) ? null : claim.Vendor);
     }
 
     private static MemoryActor? Parse(string? text)
