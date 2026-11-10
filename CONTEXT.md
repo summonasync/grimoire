@@ -18,7 +18,8 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
   descriptions, purge a tome behind a typed confirmation), edit persona, scry across
   tomes, view settings and stats; also runs the background GC sweep.
 - **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
-  a directory), `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
+  a directory), `install` (upsert the managed routing block into agent home memory files),
+  `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
   `stats`, `config`, `projects` (the project registry behind project tags).
 
 The MCP tool surface is frozen by contract snapshots: `tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json`
