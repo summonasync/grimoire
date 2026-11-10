@@ -39,6 +39,7 @@ public class ApiHostBuilderTests
     {
         var services = new ServiceCollection()
             .AddSingleton<IMemoryStore>(new FakeMemoryStore())
+            .AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore())
             .AddSingleton<IEmbeddingProvider>(new FakeEmbeddingProvider())
             .AddSingleton<IClock>(new FakeClock())
             .BuildServiceProvider();
@@ -76,6 +77,7 @@ public class ApiHostBuilderTests
     {
         var services = new ServiceCollection()
             .AddSingleton<IMemoryStore>(new FakeMemoryStore())
+            .AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore())
             .AddSingleton<IEmbeddingProvider>(new FakeEmbeddingProvider())
             .AddSingleton<IClock>(new FakeClock())
             .BuildServiceProvider();
@@ -121,6 +123,7 @@ public class ApiHostBuilderTests
     {
         var services = new ServiceCollection()
             .AddSingleton<IMemoryStore>(new FakeMemoryStore())
+            .AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore())
             .AddSingleton<IEmbeddingProvider>(new FakeEmbeddingProvider())
             .AddSingleton<IClock>(new FakeClock())
             .BuildServiceProvider();

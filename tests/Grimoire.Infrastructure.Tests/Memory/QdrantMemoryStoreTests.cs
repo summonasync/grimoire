@@ -561,6 +561,75 @@ public sealed class QdrantMemoryStoreTests
         await store.ListAsync(new MemoryFilter(), CancellationToken.None);
     }
 
+    [Fact]
+    public async Task DeleteByTome_RemovesEveryStatusInTheTomeAndReturnsPerStatusCounts()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("active", tome: "dev"));
+        await SeedAsync(store, TestMemories.Create("superseded", tome: "dev", status: MemoryStatus.Superseded, supersededBy: Guid.NewGuid()));
+        await SeedAsync(store, TestMemories.Create("tombstoned", tome: "dev", status: MemoryStatus.Tombstoned, tombstoneReason: "gone", tombstonedAt: TestMemories.Moment));
+        await SeedAsync(store, TestMemories.Create("crew member", tome: "crew"));
+
+        var result = await store.DeleteByTomeAsync("dev", CancellationToken.None);
+
+        result.Active.ShouldBe(1);
+        result.Superseded.ShouldBe(1);
+        result.Tombstoned.ShouldBe(1);
+        db.DeletedBatches.ShouldHaveSingleItem();
+        (await store.ListAsync(
+            new MemoryFilter
+            {
+                Tome = "dev",
+                Statuses = [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+            },
+            CancellationToken.None)).ShouldBeEmpty();
+        (await store.ListAsync(new MemoryFilter { Tome = "crew" }, CancellationToken.None)).ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteByTome_UsesAStrictlyPositiveTomeFilterWithoutMustNot()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        await SeedAsync(store, TestMemories.Create("active", tome: "dev"));
+
+        await store.DeleteByTomeAsync("dev", CancellationToken.None);
+
+        var filter = db.ScrolledFilters.ShouldHaveSingleItem();
+        filter.MustNot.ShouldBeEmpty();
+        var condition = filter.Must.ShouldHaveSingleItem();
+        condition.Field.ShouldNotBeNull().Key.ShouldBe(MemoryPayloadFields.Tome);
+        condition.Field.Match.Keyword.ShouldBe("dev");
+        condition.IsEmpty.ShouldBeNull();
+        condition.Filter.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteByTome_WithDefaultTome_NeverDeletesPointsWithoutATomePayload()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var explicitDefault = await SeedAsync(store, TestMemories.Create("explicit default"));
+        var legacy = TestMemories.Create("legacy");
+        var legacyPayload = new Dictionary<string, Value>(MemoryPayloadMapper.ToPayload(legacy));
+        legacyPayload.Remove(MemoryPayloadFields.Tome);
+        db.Seed(legacy.Id, [1f, 0f], legacyPayload);
+        db.Seed(
+            EmbeddingFingerprint.MarkerPointId,
+            new float[4],
+            EmbeddingFingerprint.From("nomic-embed-text", 4).ToPayload());
+
+        var result = await store.DeleteByTomeAsync(TomeKey.DefaultTome, CancellationToken.None);
+
+        result.Active.ShouldBe(1);
+        result.Superseded.ShouldBe(0);
+        result.Tombstoned.ShouldBe(0);
+        db.DeletedBatches.ShouldHaveSingleItem().ShouldBe([explicitDefault.Id]);
+        db.PointIds.ShouldContain(EmbeddingFingerprint.MarkerPointId);
+        db.PointIds.ShouldContain(legacy.Id);
+    }
+
     private static IReadOnlyDictionary<string, Value> WithReindexState(EmbeddingFingerprint fingerprint)
     {
         var payload = new Dictionary<string, Value>(fingerprint.ToPayload())

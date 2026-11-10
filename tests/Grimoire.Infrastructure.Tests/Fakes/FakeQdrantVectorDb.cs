@@ -13,11 +13,15 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public RpcException? Failure { get; set; }
 
+    public RpcException? UpsertFailure { get; set; }
+
     public int CreateCollectionCount { get; private set; }
 
     public int DroppedCount { get; private set; }
 
     public int? CreatedDimensions { get; private set; }
+
+    public bool CreatedWithoutVectors { get; private set; }
 
     public int? CollectionDimensions { get; set; }
 
@@ -89,6 +93,14 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
         return Task.CompletedTask;
     }
 
+    public Task CreateCollectionWithoutVectorsAsync(string collection, CancellationToken cancellationToken)
+    {
+        CreateCollectionCount++;
+        CreatedWithoutVectors = true;
+        CollectionExists = true;
+        return Task.CompletedTask;
+    }
+
     public Task DropCollectionAsync(string collection, CancellationToken cancellationToken)
     {
         DroppedCount++;
@@ -106,6 +118,11 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public Task UpsertAsync(string collection, IReadOnlyList<PointStruct> points, CancellationToken cancellationToken)
     {
+        if (UpsertFailure is { } failure)
+        {
+            return Task.FromException(failure);
+        }
+
         UpsertCount++;
 
         foreach (var point in points)

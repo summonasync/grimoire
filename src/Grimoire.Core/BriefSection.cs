@@ -6,4 +6,5 @@ public enum BriefSection
     Facts,
     Tombstones,
     Journal,
+    Tomes,
 }

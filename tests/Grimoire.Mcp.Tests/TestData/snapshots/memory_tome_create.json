@@ -1,0 +1,31 @@
+{
+  "contract": {
+    "description": "Create a tome manifest so memory_brief's tome table can route agents. Check the tome table first and write to the fitting tome; create only when no tome fits. key is a lowercase kebab-case tome key; description (1..280 chars after trim) must say what belongs there. Hard delete and manifest edit are human-only - no agent verbs exist for them.",
+    "destructive": false,
+    "idempotent": false,
+    "input": {
+      "parameters": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "key"
+      ]
+    },
+    "name": "memory_tome_create",
+    "readOnly": false,
+    "title": "Create a tome manifest"
+  },
+  "output": {
+    "createdAt": "string",
+    "createdBy": "string",
+    "description": "string",
+    "tome": "string",
+    "updatedAt": "string"
+  }
+}

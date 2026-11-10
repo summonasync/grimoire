@@ -91,6 +91,23 @@ public sealed class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public Task<DeleteByTomeResult> DeleteByTomeAsync(string tome, CancellationToken cancellationToken)
+    {
+        var removed = _points.Values.Where(point => point.Record.Tome == tome).ToArray();
+
+        foreach (var point in removed)
+        {
+            _points.Remove(point.Record.Id);
+        }
+
+        return Task.FromResult(new DeleteByTomeResult
+        {
+            Active = removed.Count(point => point.Record.Status == MemoryStatus.Active),
+            Superseded = removed.Count(point => point.Record.Status == MemoryStatus.Superseded),
+            Tombstoned = removed.Count(point => point.Record.Status == MemoryStatus.Tombstoned),
+        });
+    }
+
     public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await Task.Yield();

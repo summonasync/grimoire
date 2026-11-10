@@ -2,13 +2,51 @@ export interface TomeSummary {
   key: string;
   active: number;
   tombstoned: number;
-  lastWriteAt: string;
+  lastWriteAt: string | null;
+  description: string | null;
+  createdBy: string | null;
+  manifest: boolean;
   own: boolean;
 }
 
 export interface TomesResult {
   tome: string;
   tomes: TomeSummary[];
+}
+
+export interface CreateTomeManifestInput {
+  key: string;
+  description: string;
+}
+
+export interface PatchTomeManifestInput {
+  tome: string;
+  description: string;
+}
+
+export interface TomeManifestResult {
+  key: string;
+  description: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TomePurgeInput {
+  tome: string;
+  confirm: string;
+}
+
+export interface TomePurgeCounts {
+  active: number;
+  tombstoned: number;
+  superseded: number;
+}
+
+export interface TomePurgeResult {
+  key: string;
+  purged: TomePurgeCounts;
+  manifestPurged: boolean;
 }
 
 export interface RenameTomeInput {

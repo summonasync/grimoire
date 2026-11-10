@@ -145,6 +145,54 @@ public sealed class QdrantMemoryStore : IMemoryStore
         await GuardAsync(() => _db.DeleteAsync(_collection, ids, cancellationToken));
     }
 
+    public async Task<DeleteByTomeResult> DeleteByTomeAsync(string tome, CancellationToken cancellationToken)
+    {
+        await EnsureReadyAsync(cancellationToken);
+
+        var filter = new Filter();
+        filter.Must.Add(Conditions.MatchKeyword(MemoryPayloadFields.Tome, tome));
+
+        var ids = new List<Guid>();
+        var active = 0;
+        var superseded = 0;
+        var tombstoned = 0;
+        PointId? offset = null;
+
+        do
+        {
+            var page = await GuardAsync(() => _db.ScrollAsync(_collection, filter, ScrollPageSize, offset, withVectors: false, cancellationToken));
+
+            foreach (var point in page.Result)
+            {
+                var id = PointId(point.Id);
+                ids.Add(id);
+
+                switch (MemoryPayloadMapper.ToRecord(id, point.Payload).Status)
+                {
+                    case MemoryStatus.Active:
+                        active++;
+                        break;
+                    case MemoryStatus.Superseded:
+                        superseded++;
+                        break;
+                    case MemoryStatus.Tombstoned:
+                        tombstoned++;
+                        break;
+                }
+            }
+
+            offset = page.NextPageOffset;
+        }
+        while (offset is not null);
+
+        if (ids.Count > 0)
+        {
+            await GuardAsync(() => _db.DeleteAsync(_collection, ids, cancellationToken));
+        }
+
+        return new DeleteByTomeResult { Active = active, Superseded = superseded, Tombstoned = tombstoned };
+    }
+
     public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await EnsureReadyAsync(cancellationToken);

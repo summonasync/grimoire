@@ -3,13 +3,24 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { memoryKeys } from "@/features/memories";
 import { statsKeys } from "@/features/stats";
-import { forgetTome, mergeTome, renameTome, retomeRecords } from "../api";
+import {
+  createTomeManifest,
+  forgetTome,
+  mergeTome,
+  patchTomeManifest,
+  purgeTome,
+  renameTome,
+  retomeRecords,
+} from "../api";
 import { shelfKeys } from "../queries";
 import type {
+  CreateTomeManifestInput,
   ForgetTomeInput,
   MergeTomeInput,
+  PatchTomeManifestInput,
   RenameTomeInput,
   RetomeRecordsInput,
+  TomePurgeInput,
 } from "../types";
 
 function useInvalidateTomeGraph() {
@@ -19,6 +30,32 @@ function useInvalidateTomeGraph() {
     void queryClient.invalidateQueries({ queryKey: memoryKeys.lists() });
     void queryClient.invalidateQueries({ queryKey: statsKeys.all });
   };
+}
+
+export function useCreateTomeManifest() {
+  const invalidate = useInvalidateTomeGraph();
+  return useMutation({
+    mutationFn: (input: CreateTomeManifestInput) => createTomeManifest(input),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function usePatchTomeManifest() {
+  const invalidate = useInvalidateTomeGraph();
+  return useMutation({
+    mutationFn: (input: PatchTomeManifestInput) => patchTomeManifest(input),
+    onSuccess: () => invalidate(),
+    onError: () => invalidate(),
+  });
+}
+
+export function usePurgeTome() {
+  const invalidate = useInvalidateTomeGraph();
+  return useMutation({
+    mutationFn: (input: TomePurgeInput) => purgeTome(input),
+    onSuccess: () => invalidate(),
+    onError: () => invalidate(),
+  });
 }
 
 export function useRenameTome() {

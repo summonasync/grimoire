@@ -40,6 +40,25 @@ public sealed class QdrantVectorDb : IQdrantVectorDb
             null,
             cancellationToken);
 
+    public Task CreateCollectionWithoutVectorsAsync(string collection, CancellationToken cancellationToken) =>
+        _client.CreateCollectionAsync(
+            collection,
+            new VectorParamsMap(),
+            1,
+            1,
+            1,
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            cancellationToken);
+
     public Task DropCollectionAsync(string collection, CancellationToken cancellationToken) =>
         _client.DeleteCollectionAsync(collection, null, cancellationToken);
 

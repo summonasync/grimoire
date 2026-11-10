@@ -66,6 +66,7 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
                 Facts = ToItemsSection(result.FactsState, result.Facts, ToFactItem),
                 Tombstones = ToItemsSection(result.TombstonesState, result.Tombstones, ToTombstoneItem),
                 Journal = ToItemsSection(result.JournalState, result.Journal, ToJournalItem),
+                Tomes = ToTomesSection(result),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
                 CompactionDue = ToCompactionSection(result.CompactionDue),
@@ -175,12 +176,34 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
         };
     }
 
+    private static BriefTomesSection? ToTomesSection(BriefResult result)
+    {
+        if (result.TomesState == BriefSectionState.Empty && result.TomesNote is null)
+        {
+            return null;
+        }
+
+        return new BriefTomesSection
+        {
+            State = result.TomesState,
+            Items = [.. result.Tomes.Select(tome => new BriefTomeItem
+            {
+                Key = tome.Key,
+                Description = tome.Description,
+                CreatedBy = tome.CreatedBy,
+            })],
+            More = result.TomesMore,
+            Note = result.TomesNote,
+        };
+    }
+
     private static string ToSectionName(BriefSection section) => section switch
     {
         BriefSection.Persona => "persona",
         BriefSection.Facts => "facts",
         BriefSection.Tombstones => "tombstones",
         BriefSection.Journal => "journal",
+        BriefSection.Tomes => "tomes",
         _ => throw new ArgumentOutOfRangeException(nameof(section), section, "Unknown brief section."),
     };
 }

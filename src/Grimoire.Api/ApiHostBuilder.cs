@@ -82,7 +82,14 @@ public static class ApiHostBuilder
         app.MapPersonaEndpoints(persona, tomeResolver);
         app.MapSettingsEndpoints(engineOptions, options);
         app.MapStatsEndpoints(memories, tomeResolver);
-        app.MapTomesEndpoints(memories, store, tomeResolver);
+        var manifestStore = services.GetRequiredService<ITomeManifestStore>();
+        app.MapTomesEndpoints(
+            memories,
+            store,
+            tomeResolver,
+            services.GetService<TomeManifestService>() ?? new TomeManifestService(manifestStore, clock),
+            services.GetService<TomePurgeService>() ?? new TomePurgeService(store, manifestStore),
+            clock);
         app.MapGraphEndpoints(store, engineOptions);
         app.MapHealthEndpoints(store, embeddings, clock);
         app.MapVersionEndpoints();

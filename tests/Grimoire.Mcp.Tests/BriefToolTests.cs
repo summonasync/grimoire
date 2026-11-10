@@ -452,4 +452,109 @@ public sealed class BriefToolTests
         result.ShouldSucceed();
         result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task Brief_WithManifests_ListsTheTomeTable()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Manifests.Seed(Manifest("alpha", "alpha squad routing"));
+        session.Manifests.Seed(Manifest("beta", "beta squad routing"));
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var tomes = result.Payload().GetProperty("tomes");
+        tomes.GetProperty("state").GetString().ShouldBe("Populated");
+        var items = tomes.GetProperty("items");
+        items.GetArrayLength().ShouldBe(2);
+        items[0].GetProperty("key").GetString().ShouldBe("alpha");
+        items[0].GetProperty("description").GetString().ShouldBe("alpha squad routing");
+        items[0].GetProperty("createdBy").GetString().ShouldBe("human");
+        tomes.GetProperty("more").GetInt32().ShouldBe(0);
+        tomes.TryGetProperty("note", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_TomeTable_CapsAtSixteenWithMoreOverflow()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        for (var index = 0; index < 18; index++)
+        {
+            session.Manifests.Seed(Manifest($"tome-{index:D2}", "overflow probe"));
+        }
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var tomes = result.Payload().GetProperty("tomes");
+        tomes.GetProperty("items").GetArrayLength().ShouldBe(16);
+        tomes.GetProperty("more").GetInt32().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Brief_WhenTheManifestStoreThrows_CarriesTheNoteAndStillSucceeds()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Manifests.Failure = new InvalidOperationException("qdrant is down");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var tomes = result.Payload().GetProperty("tomes");
+        tomes.GetProperty("note").GetString().ShouldContain("unavailable");
+        tomes.GetProperty("note").GetString().ShouldContain("qdrant is down");
+        tomes.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_WhenTheManifestStoreIsDegraded_CarriesTheNote()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Manifests.DegradationReason = "Tome manifest store is unreachable - manifest data may be stale";
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var tomes = result.Payload().GetProperty("tomes");
+        tomes.GetProperty("note").GetString().ShouldContain("unreachable");
+        tomes.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_WithoutManifests_OmitsTheTomesSection()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("tomes", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_OverBudgetTomeTable_IsNamedInOmitted()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefMaxTotalChars = 5 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        session.Manifests.Seed(Manifest("alpha", "alpha squad routing"));
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("omitted").EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldContain("tomes");
+        payload.GetProperty("tomes").GetProperty("state").GetString().ShouldBe("Omitted");
+        payload.GetProperty("tomes").GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    private static TomeManifest Manifest(string key, string description) => new()
+    {
+        Key = key,
+        Description = description,
+        CreatedBy = "human",
+        CreatedAt = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero),
+        UpdatedAt = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero),
+    };
 }

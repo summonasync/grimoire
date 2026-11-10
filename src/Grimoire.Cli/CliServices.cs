@@ -7,6 +7,7 @@ using Grimoire.Infrastructure.Identity;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
+using Grimoire.Infrastructure.Tomes;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Grimoire.Cli;
@@ -35,6 +36,11 @@ internal static class CliServices
             sp.GetRequiredService<IQdrantVectorDb>(),
             options.Qdrant.Collection,
             options.Embedding));
+        services.AddSingleton<ITomeManifestStore>(sp => new QdrantManifestStore(
+            sp.GetRequiredService<IQdrantVectorDb>(),
+            options.Qdrant));
+        services.AddSingleton<TomeManifestService>();
+        services.AddSingleton<TomePurgeService>();
         services.AddSingleton<HttpClient>(_ => new HttpClient());
         services.AddSingleton<IEmbeddingProvider>(sp => new OllamaEmbeddingProvider(
             sp.GetRequiredService<HttpClient>(),
@@ -69,6 +75,7 @@ internal static class CliServices
         services.AddSingleton<BriefService>(sp => new BriefService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<PersonaService>(),
+            sp.GetRequiredService<ITomeManifestStore>(),
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>()));
         services.AddSingleton<AutoMemoryImporter>();

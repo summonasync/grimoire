@@ -11,11 +11,12 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
 - **MCP server** (`grimoire mcp`, stdio) — the agent-facing surface: `memory_remember`,
   `memory_recall`, `memory_brief`, `memory_scry`, `memory_forget`, `memory_history`,
   `memory_restore`, `memory_list`, `memory_persona_get`, `memory_compact_candidates`,
-  `memory_stats`. Every tool takes a `tome` param; omit it to work in your resolved tome
-  (see Tomes below).
+  `memory_stats`, `memory_tome_create`. Every tool takes a `tome` param; omit it to work
+  in your resolved tome (see Tomes below).
 - **Local web server** (`grimoire serve`, loopback HTTP + static SPA) — the human-facing
-  surface: browse/search/edit memories, edit persona, scry across tomes, view settings and
-  stats; also runs the background GC sweep.
+  surface: browse/search/edit memories, manage the tome shelf (create manifests, edit
+  descriptions, purge a tome behind a typed confirmation), edit persona, scry across
+  tomes, view settings and stats; also runs the background GC sweep.
 - **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
   a directory), `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
   `stats`, `config`, `projects` (the project registry behind project tags).
@@ -70,6 +71,12 @@ a payload. Two orthogonal dimensions:
   is `default`; keys are kebab-case. An agent's tome resolves by chain: explicit param →
   `GRIMOIRE_TOME` → `GRIMOIRE_ACTOR` alias → the AGENTS.md claim block (`grimoire init
   --agent`) → clientInfo actor → configured default.
+- **Manifests name what a tome is for** (ADR-008): a light registry in a separate
+  vector-less Qdrant collection (`grimoire-manifests`) holding `key`, `description`
+  (1..280 chars, the routing hint) and `createdBy`. Agents create a tome via
+  `memory_tome_create` only when nothing on the brief's tome table fits; records without
+  a manifest stay first-class (a tome exists with a manifest or ≥1 record). Manifest
+  failures degrade reads (brief carries a note) and never block memory paths.
 - **Persona** is a first-class structured document in the personal scope of a tome, edited
   by humans (UI/CLI), read by agents via `memory_persona_get`.
 - **Scry is the one cross-tome door** (ADR-007): `memory_scry` reads other tomes at query
@@ -79,7 +86,10 @@ a payload. Two orthogonal dimensions:
 ## Standing rules
 
 - **No silent deletes.** `forget` writes a tombstone (status + reason + timestamp). Hard
-  delete is GC's job only: expired session records and aged tombstones.
+  delete is GC's job only: expired session records and aged tombstones — plus the
+  human-only console purge of a whole tome (records in every status + manifest), gated
+  by a typed confirmation of the tome key (ADR-005 amendment). Agents stay
+  tombstone-only.
 - **Loopback only.** The HTTP face binds `127.0.0.1` — that is the security boundary.
   Never bind a public interface without a new ADR.
 - **Tome isolation.** Writes are tome-bound and never cross tomes; reading another tome you

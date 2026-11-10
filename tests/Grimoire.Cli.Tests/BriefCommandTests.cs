@@ -133,6 +133,77 @@ public sealed class BriefCommandTests : IDisposable
         output.ShouldContain("--tombstone-limit");
     }
 
+    [Fact]
+    public async Task Brief_TomeTable_RendersManifestsWithCreatedBy()
+    {
+        _host.Manifests.Seed(Manifest("alpha", "alpha squad routing"));
+        _host.Manifests.Seed(Manifest("beta", "beta squad routing"));
+
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("tomes:");
+        output.ShouldContain("alpha by human");
+        output.ShouldContain("alpha squad routing");
+        output.ShouldContain("beta by human");
+        output.ShouldContain("beta squad routing");
+        output.ShouldNotContain("(+");
+    }
+
+    [Fact]
+    public async Task Brief_TomeTable_CapsAtSixteenWithMoreOverflow()
+    {
+        for (var index = 0; index < 18; index++)
+        {
+            _host.Manifests.Seed(Manifest($"tome-{index:D2}", "overflow probe"));
+        }
+
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("tome-00 by human");
+        output.ShouldContain("tome-15 by human");
+        output.ShouldNotContain("tome-16 by human");
+        output.ShouldNotContain("tome-17 by human");
+        output.ShouldContain("(+2 more)");
+    }
+
+    [Fact]
+    public async Task Brief_WhenTheManifestStoreThrows_RendersTheNoteAndStillSucceeds()
+    {
+        _host.Manifests.Failure = new InvalidOperationException("qdrant is down");
+
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("unavailable");
+        output.ShouldContain("qdrant is down");
+        output.ShouldNotContain("by human");
+    }
+
+    [Fact]
+    public async Task Brief_WhenTheManifestStoreIsDegraded_RendersTheNote()
+    {
+        _host.Manifests.DegradationReason = "Tome manifest store is unreachable - manifest data may be stale";
+
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("unreachable");
+    }
+
+    private static TomeManifest Manifest(string key, string description) => new()
+    {
+        Key = key,
+        Description = description,
+        CreatedBy = "human",
+        CreatedAt = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero),
+        UpdatedAt = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero),
+    };
+
     private void SeedPersona(string content, string sectionTag) =>
         _host.Store.Add(
             content,

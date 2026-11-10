@@ -3,6 +3,7 @@ namespace Grimoire.Core;
 public sealed class BriefService(
     IMemoryStore store,
     PersonaService persona,
+    ITomeManifestStore manifests,
     IClock clock,
     MemoryEngineOptions? options = null)
 {
@@ -15,6 +16,8 @@ public sealed class BriefService(
     private const int DefaultJournalPerScope = 5;
 
     private const int DefaultTombstoneLimit = 10;
+
+    private const int TomeCap = 16;
 
     private readonly MemoryEngineOptions _options = options ?? new();
 
@@ -57,6 +60,11 @@ public sealed class BriefService(
         var journal = await CollectJournalAsync(query, scopes, tome, cancellationToken);
         var journalState = Fit(BriefSection.Journal, journal.Sum(entry => entry.Content.Length));
 
+        var tomes = await CollectTomesAsync(cancellationToken);
+        var tomesState = tomes.Degraded
+            ? BriefSectionState.Empty
+            : Fit(BriefSection.Tomes, tomes.Items.Sum(row => row.Key.Length + row.Description.Length + row.CreatedBy.Length));
+
         return new BriefResult
         {
             PersonaState = personaState,
@@ -67,6 +75,10 @@ public sealed class BriefService(
             Tombstones = tombstonesState == BriefSectionState.Populated ? tombstones : [],
             JournalState = journalState,
             Journal = journalState == BriefSectionState.Populated ? journal : [],
+            TomesState = tomesState,
+            Tomes = tomesState == BriefSectionState.Populated ? tomes.Items : [],
+            TomesMore = tomesState == BriefSectionState.Populated ? tomes.More : 0,
+            TomesNote = tomes.Degraded ? tomes.Note : null,
             Omitted = omitted,
             CompactionDue = await compactionDue,
         };
@@ -187,6 +199,41 @@ public sealed class BriefService(
             .ThenBy(record => record.Id)
             .Select(CapEntry)
             .ToArray();
+    }
+
+    private async Task<(bool Degraded, string? Note, IReadOnlyList<BriefTome> Items, int More)> CollectTomesAsync(
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TomeManifest> held;
+        try
+        {
+            held = await manifests.ListAsync(cancellationToken);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            return (true, $"tome manifests are unavailable: {failure.Message}", [], 0);
+        }
+
+        if (manifests.DegradationReason is { } reason)
+        {
+            return (true, reason, [], 0);
+        }
+
+        if (held.Count == 0)
+        {
+            return (false, null, [], 0);
+        }
+
+        var ordered = held.OrderBy(manifest => manifest.Key, StringComparer.Ordinal).ToArray();
+        return (false, null, ordered
+            .Take(TomeCap)
+            .Select(manifest => new BriefTome
+            {
+                Key = manifest.Key,
+                Description = manifest.Description,
+                CreatedBy = manifest.CreatedBy,
+            })
+            .ToArray(), Math.Max(0, ordered.Length - TomeCap));
     }
 
     private BriefJournalEntry CapEntry(MemoryRecord record)

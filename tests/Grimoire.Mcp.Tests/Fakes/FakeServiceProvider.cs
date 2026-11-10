@@ -19,7 +19,8 @@ internal sealed class FakeServiceProvider : IServiceProvider
         ICallerPathProvider? callerPaths = null,
         IProjectRegistryStore? registryStore = null,
         IBoardProjectSource? board = null,
-        IConsolidationStateStore? consolidationState = null)
+        IConsolidationStateStore? consolidationState = null,
+        ITomeManifestStore? manifests = null)
     {
         IProjectRegistryStore effectiveRegistryStore = registryStore ?? new FakeProjectRegistryStore();
         _services = new Dictionary<Type, object>
@@ -36,6 +37,7 @@ internal sealed class FakeServiceProvider : IServiceProvider
             [typeof(IProjectRegistryStore)] = effectiveRegistryStore,
             [typeof(IProjectRegistry)] = new LiveProjectRegistry(effectiveRegistryStore),
             [typeof(IBoardProjectSource)] = board ?? new FakeBoardProjectSource(),
+            [typeof(ITomeManifestStore)] = manifests ?? new FakeTomeManifestStore(),
         };
 
         if (engineOptions is not null)

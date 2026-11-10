@@ -26,6 +26,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeGcStateStore gcState,
         FakeConsolidationStateStore consolidationState,
         FakeProjectRegistryStore registry,
+        FakeTomeManifestStore manifests,
         McpClient client,
         Channel<JsonRpcMessage> clientToServer,
         Channel<JsonRpcMessage> serverToClient,
@@ -38,6 +39,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         Gc = gcState;
         Consolidation = consolidationState;
         Registry = registry;
+        Manifests = manifests;
         Client = client;
         _clientToServer = clientToServer;
         _serverToClient = serverToClient;
@@ -56,6 +58,8 @@ internal sealed class McpTestSession : IAsyncDisposable
     public FakeConsolidationStateStore Consolidation { get; }
 
     public FakeProjectRegistryStore Registry { get; }
+
+    public FakeTomeManifestStore Manifests { get; }
 
     public McpClient Client { get; }
 
@@ -77,7 +81,8 @@ internal sealed class McpTestSession : IAsyncDisposable
         IReadOnlyList<ProjectAliasRecord>? projects = null,
         FakeProjectRegistryStore? registryStore = null,
         FakeBoardProjectSource? board = null,
-        IAgentIdentitySource? identityFile = null)
+        IAgentIdentitySource? identityFile = null,
+        FakeTomeManifestStore? manifests = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
@@ -85,12 +90,14 @@ internal sealed class McpTestSession : IAsyncDisposable
         var gc = gcState ?? new FakeGcStateStore();
         var consolidation = consolidationState ?? new FakeConsolidationStateStore();
         var registry = registryStore ?? new FakeProjectRegistryStore(projects ?? DefaultProjects);
+        var manifestsStore = manifests ?? new FakeTomeManifestStore();
         var services = new FakeServiceProvider(
             store, embeddings, clock, engineOptions, claims, gcOptions, gc,
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
             board,
-            consolidation);
+            consolidation,
+            manifestsStore);
         var options = hostOptions ?? new McpHostOptions();
         if (identityFile is not null)
         {
@@ -114,7 +121,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         })).WaitAsync(TimeSpan.FromSeconds(15));
 
         return new McpTestSession(
-            store, embeddings, clock, gc, consolidation, registry, client, clientToServer, serverToClient, serverRun, cancellation);
+            store, embeddings, clock, gc, consolidation, registry, manifestsStore, client, clientToServer, serverToClient, serverRun, cancellation);
     }
 
     public async ValueTask DisposeAsync()

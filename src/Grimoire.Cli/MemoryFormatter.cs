@@ -66,6 +66,23 @@ internal static class MemoryFormatter
                 output.WriteLine("    (truncated)");
             }
         }
+
+        output.WriteLine(Heading("tomes", brief.TomesState));
+        foreach (var tome in brief.Tomes)
+        {
+            output.WriteLine($"  {tome.Key} by {tome.CreatedBy}");
+            WriteLines(output, tome.Description, "    ");
+        }
+
+        if (brief.TomesMore > 0)
+        {
+            output.WriteLine($"  (+{brief.TomesMore} more)");
+        }
+
+        if (brief.TomesNote is { } note)
+        {
+            output.WriteLine($"  ({note})");
+        }
     }
 
     private static string Heading(string name, BriefSectionState state) => state switch

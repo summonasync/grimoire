@@ -56,6 +56,15 @@ public sealed class RecordingVectorDb : IQdrantVectorDb
         return Task.CompletedTask;
     }
 
+    public Task CreateCollectionWithoutVectorsAsync(string collection, CancellationToken cancellationToken)
+    {
+        CreateCollectionCount++;
+        CreatedDimensions = null;
+        CollectionDimensions = null;
+        CollectionExists = true;
+        return Task.CompletedTask;
+    }
+
     public Task DropCollectionAsync(string collection, CancellationToken cancellationToken)
     {
         DroppedCount++;
