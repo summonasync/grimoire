@@ -350,6 +350,8 @@ public sealed class McpToolContractTests
         instructions.ShouldContain("memory_remember");
         instructions.ShouldContain("session_identity_set");
         instructions.ShouldContain("pendingCompaction");
+        instructions.ShouldContain("routing table");
+        instructions.ShouldContain("memory_tome_create");
     }
 
     private static string[] Required(JsonElement schema)
