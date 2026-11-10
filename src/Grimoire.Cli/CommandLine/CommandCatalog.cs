@@ -99,6 +99,12 @@ internal static class CommandCatalog
     private static readonly FlagSpec IncludeTomeCompaction = FlagSpec.Switch(
         "include-tome-compaction", "Add a per-tome pending-compaction census line to the stats output.");
 
+    private static readonly FlagSpec RemoveBlock = FlagSpec.Switch(
+        "remove", "Strip the managed grimoire block from every detected home memory file.");
+
+    private static readonly FlagSpec PrintBlock = FlagSpec.Switch(
+        "print-block", "Write the managed block text to stdout and exit; the kit-sync door.");
+
     private static readonly CommandSpec[] Commands =
     [
         new CommandSpec
@@ -107,6 +113,16 @@ internal static class CommandCatalog
             Summary = "Write the default config when missing, prepare the Qdrant collection, and with --agent claim this directory in AGENTS.md.",
             Syntax = "init",
             Flags = [Agent, ClaimTome],
+        },
+        new CommandSpec
+        {
+            Name = "install",
+            Summary = "Upsert the managed grimoire block into the detected agent home memory files " +
+                      "(~/.claude/CLAUDE.md, ~/.qwen/QWEN.md, ~/.codex/AGENTS.md, ~/.kimi-code/AGENTS.md). " +
+                      "Missing files are skipped, never created. Homes resolve under the user profile, or GRIMOIRE_HOME when set. " +
+                      "On kit-managed machines the OvermindCrewKit mirrors carry the same block, so this verb reports unchanged.",
+            Syntax = "install [--remove | --print-block]",
+            Flags = [RemoveBlock, PrintBlock],
         },
         new CommandSpec
         {

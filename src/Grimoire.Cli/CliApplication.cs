@@ -98,6 +98,7 @@ internal static class CliApplication
         invocation.Spec.Name switch
         {
             "init" => new Commands.InitCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "install" => new Commands.InstallCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "serve" => new Commands.ServeCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "ui" => new Commands.UiCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "mcp" => new Commands.McpCommand(env).RunAsync(invocation, config, services, cancellationToken),
