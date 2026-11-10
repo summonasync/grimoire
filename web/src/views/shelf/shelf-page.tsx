@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { tomesQueryOptions } from "@/features/shelf";
+import { TomeCreateForm, tomesQueryOptions } from "@/features/shelf";
+import { Button } from "@/shared/ui/button";
+import { Panel } from "@/shared/ui/panel";
 import { EmptyState, QueryFailure, Skeleton } from "@/shared/ui/honest";
 import { PageHeader } from "@/shared/ui/page-header";
 import { useTomeFilter } from "@/widgets/app-shell/tome-context";
@@ -10,13 +13,30 @@ import { TomeCard } from "./tome-card";
 export function ShelfPage() {
   const shelf = useQuery(tomesQueryOptions());
   const { tome: picked, setTome } = useTomeFilter();
+  const [creating, setCreating] = useState(false);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Shelf"
         description="Every tome in the vault. Pick one and its memories open right away."
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={creating ? "close" : "plus"}
+            onClick={() => setCreating((current) => !current)}
+          >
+            {creating ? "Cancel" : "New tome"}
+          </Button>
+        }
       />
+
+      {creating && (
+        <Panel title="New tome" icon="book">
+          <TomeCreateForm onDone={() => setCreating(false)} onCancel={() => setCreating(false)} />
+        </Panel>
+      )}
 
       {shelf.error ? (
         <QueryFailure message={shelf.error.message} onRetry={() => void shelf.refetch()} />

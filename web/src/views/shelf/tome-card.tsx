@@ -38,7 +38,7 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
               className="mt-0.5 text-[0.7rem] text-muted"
               title={absoluteTime(summary.lastWriteAt)}
             >
-              wrote {relativeTime(summary.lastWriteAt)}
+              {summary.lastWriteAt ? `wrote ${relativeTime(summary.lastWriteAt)}` : "no records yet"}
             </p>
           </div>
           {summary.own && (
@@ -47,6 +47,21 @@ export function TomeCard({ summary, tomes, picked, onPick, onGone }: TomeCardPro
             </span>
           )}
         </a>
+        {summary.manifest && (summary.description || summary.createdBy) && (
+          <div className="space-y-1.5">
+            {summary.description && (
+              <p className="line-clamp-3 text-xs leading-snug text-muted" title={summary.description}>
+                {summary.description}
+              </p>
+            )}
+            {summary.createdBy && (
+              <p className="flex items-center gap-1.5 text-[0.7rem] text-muted">
+                <Icon name="persona" className="size-3 shrink-0" />
+                created by {summary.createdBy}
+              </p>
+            )}
+          </div>
+        )}
         <div className="mt-auto flex flex-wrap items-center gap-3 border-t border-border pt-2.5 text-xs">
           <span className="flex items-center gap-1.5 tabular-nums">
             <Icon name="memories" className="size-3.5 text-jade" />

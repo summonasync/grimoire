@@ -3,14 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Icon } from "@/shared/ui/icons";
+import { ApiError } from "@/shared/api/client";
 import { useShelfToasts } from "../lib/shelf-toasts";
-import { useForgetTome, useMergeTome, useRenameTome } from "../lib/use-shelf-mutations";
+import {
+  useForgetTome,
+  useMergeTome,
+  usePatchTomeManifest,
+  usePurgeTome,
+  useRenameTome,
+} from "../lib/use-shelf-mutations";
 import type { TomeRetomeResult, TomeSummary } from "../types";
 import { TomeDeleteConfirm } from "./tome-delete-confirm";
+import { TomeDescriptionForm } from "./tome-description-form";
+import { TomeHardDeleteConfirm } from "./tome-hard-delete-confirm";
 import { TomeMergePicker } from "./tome-merge-picker";
 import { TomeRenameForm } from "./tome-rename-form";
 
-type VerbMode = "closed" | "rename" | "merge" | "delete";
+type VerbMode = "closed" | "rename" | "merge" | "description" | "delete" | "purge";
 
 interface TomeCardMenuProps {
   summary: TomeSummary;
@@ -24,6 +33,8 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
   const rename = useRenameTome();
   const merge = useMergeTome();
   const forget = useForgetTome();
+  const patch = usePatchTomeManifest();
+  const purge = usePurgeTome();
   const { push } = useShelfToasts();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -45,6 +56,8 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
     rename.reset();
     merge.reset();
     forget.reset();
+    patch.reset();
+    purge.reset();
     setMenuOpen(false);
     setMode(next);
   };
@@ -74,6 +87,9 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
   };
 
   const skippedNote = (skipped: number) => (skipped > 0 ? `, ${skipped} skipped` : "");
+
+  const alreadyTombstonedNote = (count: number) =>
+    count > 0 ? `, ${count} already tombstoned` : "";
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
@@ -112,13 +128,32 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
                 <Icon name="link" className="size-3.5 text-muted" />
                 Merge into…
               </button>
+              {summary.manifest && (
+                <button
+                  type="button"
+                  onClick={() => pick("description")}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-foreground/5"
+                >
+                  <Icon name="tag" className="size-3.5 text-muted" />
+                  Edit description
+                </button>
+              )}
+              <div aria-hidden className="mx-2 my-1 border-t border-border" />
               <button
                 type="button"
                 onClick={() => pick("delete")}
                 className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-ember transition-colors hover:bg-ember/10"
               >
-                <Icon name="trash" className="size-3.5" />
+                <Icon name="tombstone" className="size-3.5" />
                 Delete tome
+              </button>
+              <button
+                type="button"
+                onClick={() => pick("purge")}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-ember transition-colors hover:bg-ember/10"
+              >
+                <Icon name="trash" className="size-3.5" />
+                Delete permanently
               </button>
             </div>
           </>
@@ -126,7 +161,12 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
       </div>
 
       {mode !== "closed" && (
-        <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-30 rounded-lg border border-border-strong bg-surface-raised p-3 shadow-lg">
+        <div
+          className={cn(
+            "pointer-events-auto absolute inset-x-3 bottom-3 z-30 rounded-lg border bg-surface-raised p-3 shadow-lg",
+            mode === "purge" ? "border-ember/50" : "border-border-strong",
+          )}
+        >
           {mode === "rename" && (
             <TomeRenameForm
               summary={summary}
@@ -176,6 +216,31 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
               }
             />
           )}
+          {mode === "description" && (
+            <TomeDescriptionForm
+              summary={summary}
+              pending={patch.isPending}
+              error={patch.error?.message ?? null}
+              onCancel={close}
+              onSubmit={(description) =>
+                patch.mutate(
+                  { tome: summary.key, description },
+                  {
+                    onSuccess: (manifest) => {
+                      close();
+                      push({ kind: "success", text: `Description of '${manifest.key}' updated.` });
+                    },
+                    onError: (error) => {
+                      push({ kind: "error", text: error.message });
+                      if (error instanceof ApiError && error.status === 404) {
+                        close();
+                      }
+                    },
+                  },
+                )
+              }
+            />
+          )}
           {mode === "delete" && (
             <TomeDeleteConfirm
               summary={summary}
@@ -190,13 +255,42 @@ export function TomeCardMenu({ summary, tomes, onGone }: TomeCardMenuProps) {
                       close();
                       push({
                         kind: "success",
-                        text: `Tombstoned tome '${result.tome}' — ${result.forgotten} records hidden from recall until GC${
-                          result.skipped > 0 ? `, ${result.skipped} already tombstoned` : ""
-                        }.`,
+                        text: `Tombstoned tome '${result.tome}' — ${result.forgotten} records hidden from recall until GC${alreadyTombstonedNote(result.skipped)}.`,
                       });
                       onGone();
                     },
                     onError: (error) => push({ kind: "error", text: error.message }),
+                  },
+                )
+              }
+            />
+          )}
+          {mode === "purge" && (
+            <TomeHardDeleteConfirm
+              summary={summary}
+              pending={purge.isPending}
+              error={purge.error?.message ?? null}
+              onCancel={close}
+              onConfirm={(confirm) =>
+                purge.mutate(
+                  { tome: summary.key, confirm },
+                  {
+                    onSuccess: (result) => {
+                      close();
+                      push({
+                        kind: "success",
+                        text: `Purged '${result.key}' — ${result.purged.active} active, ${result.purged.tombstoned} tombstoned, ${result.purged.superseded} superseded removed${
+                          result.manifestPurged ? ", manifest deleted" : ", manifest left behind"
+                        }.`,
+                      });
+                      onGone();
+                    },
+                    onError: (error) => {
+                      push({ kind: "error", text: error.message });
+                      if (error instanceof ApiError && error.status === 404) {
+                        close();
+                      }
+                    },
                   },
                 )
               }
