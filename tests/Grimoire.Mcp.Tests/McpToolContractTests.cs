@@ -24,6 +24,7 @@ public sealed class McpToolContractTests
         "memory_restore",
         "memory_scry",
         "memory_stats",
+        "memory_tome_create",
         "projects",
         "session_identity_set",
     ];
@@ -43,6 +44,7 @@ public sealed class McpToolContractTests
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
         data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
         data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
+        data.Add("memory_tome_create", ["tome table", "create only when no tome fits", "kebab-case", "280", "human-only"]);
         data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);
         data.Add("projects", ["strict-case", "owner config", "kebab-case", "absolute", "whole path list", "never deletes"]);
         data.Add("session_identity_set", ["actor provenance", "latest pair wins", "never persisted", "dies with the session", "--actor flag"]);
@@ -64,6 +66,7 @@ public sealed class McpToolContractTests
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
         data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
+        data.Add("memory_tome_create", ["key", "description"], []);
         data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
         data.Add("projects", ["action"], ["alias", "boardProjectId", "displayName", "paths"]);
         data.Add("session_identity_set", ["alias"], ["vendor"]);
@@ -121,6 +124,8 @@ public sealed class McpToolContractTests
         data.Add("memory_brief", "scopes", "array");
         data.Add("memory_brief", "factsPerScope", "integer");
         data.Add("memory_scry", "query", "string");
+        data.Add("memory_tome_create", "key", "string");
+        data.Add("memory_tome_create", "description", "string");
         data.Add("memory_stats", "includeTomeCompaction", "boolean");
         data.Add("memory_scry", "tomes", "array");
         data.Add("memory_scry", "includeJournal", "boolean");
@@ -138,7 +143,7 @@ public sealed class McpToolContractTests
     }
 
     [Fact]
-    public async Task ExposesExactlyTheFifteenContractedTools()
+    public async Task ExposesExactlyTheSixteenContractedTools()
     {
         await using var session = await McpTestSession.StartAsync();
 

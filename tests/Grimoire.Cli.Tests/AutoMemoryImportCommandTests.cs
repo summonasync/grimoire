@@ -153,7 +153,8 @@ public sealed class AutoMemoryImportCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task UnregisteredSource_WarnsAndImportsWithoutProjectTag()    {
+    public async Task UnregisteredSource_WarnsAndImportsWithoutProjectTag()
+    {
         WriteFile("a.md", "coffee brewing notes");
 
         var code = await _host.RunAsync("auto-memory", "import", "--source", _source);

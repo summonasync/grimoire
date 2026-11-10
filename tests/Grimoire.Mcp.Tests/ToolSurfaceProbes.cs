@@ -181,6 +181,12 @@ internal static class ToolSurfaceProbes
             ["vendor"] = "probe-vendor",
         });
 
+        await Probe(session, probes, "memory_tome_create", new Dictionary<string, object?>
+        {
+            ["key"] = "probe-tome",
+            ["description"] = "snapshot probe tome manifests",
+        });
+
         return probes;
     }
 

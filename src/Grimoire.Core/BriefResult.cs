@@ -18,6 +18,14 @@ public sealed record BriefResult
 
     public required IReadOnlyList<BriefJournalEntry> Journal { get; init; }
 
+    public required BriefSectionState TomesState { get; init; }
+
+    public required IReadOnlyList<BriefTome> Tomes { get; init; }
+
+    public int TomesMore { get; init; }
+
+    public string? TomesNote { get; init; }
+
     public required IReadOnlyList<BriefSection> Omitted { get; init; }
 
     public BriefCompactionDue? CompactionDue { get; init; }

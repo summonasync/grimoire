@@ -34,7 +34,9 @@ internal static class ToolCatalog
             consolidationOptions,
             consolidationState);
         var persona = new PersonaService(store, embeddings, clock);
-        var brief = new BriefService(store, persona, clock, engineOptions);
+        var manifestStore = Require<ITomeManifestStore>(services);
+        var manifests = new TomeManifestService(manifestStore, clock);
+        var brief = new BriefService(store, persona, manifestStore, clock, engineOptions);
         var digests = new DigestService(store, embeddings, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
@@ -70,6 +72,7 @@ internal static class ToolCatalog
             Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, store, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
             Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
+            Build(TomeCreateTool.Name, TomeCreateTool.Title, TomeCreateTool.Description, new TomeCreateTool(manifests, actors).Create, readOnly: false, destructive: false, idempotent: false),
             Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity).Set, readOnly: false, destructive: false, idempotent: true),
         ];
     }

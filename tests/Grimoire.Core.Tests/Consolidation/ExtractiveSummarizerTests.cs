@@ -108,15 +108,15 @@ public sealed class ExtractiveSummarizerTests
         DateTimeOffset? created = null,
         Guid? id = null,
         IReadOnlyList<string>? tags = null) => new()
-    {
-        Id = id ?? Guid.NewGuid(),
-        Content = content,
-        Scope = MemoryScope.Project,
-        Kind = MemoryKind.Journal,
-        Actor = TestMemories.Agent,
-        Tome = TomeKey.DefaultTome,
-        Tags = tags ?? [],
-        CreatedAt = created ?? FakeClock.DefaultStart,
-        LastAccessedAt = created ?? FakeClock.DefaultStart,
-    };
+        {
+            Id = id ?? Guid.NewGuid(),
+            Content = content,
+            Scope = MemoryScope.Project,
+            Kind = MemoryKind.Journal,
+            Actor = TestMemories.Agent,
+            Tome = TomeKey.DefaultTome,
+            Tags = tags ?? [],
+            CreatedAt = created ?? FakeClock.DefaultStart,
+            LastAccessedAt = created ?? FakeClock.DefaultStart,
+        };
 }

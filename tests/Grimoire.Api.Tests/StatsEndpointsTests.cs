@@ -303,7 +303,8 @@ public class StatsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
                 tome: "alpha",
                 status: MemoryStatus.Tombstoned,
                 tombstoneReason: "gone",
-                tombstonedAt: FakeClock.DefaultStart) with { ProjectId = "overmind" },
+                tombstonedAt: FakeClock.DefaultStart) with
+            { ProjectId = "overmind" },
             [1f, 0f]);
 
         var response = await factory.NewClient().GetAsync("/api/stats?tome=alpha");

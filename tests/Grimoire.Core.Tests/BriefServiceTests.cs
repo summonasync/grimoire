@@ -325,7 +325,7 @@ public sealed class BriefServiceTests
     }
 
     private BriefService Service(MemoryEngineOptions? options = null) =>
-        new(_store, new PersonaService(_store, _embeddings, _clock), _clock, options);
+        new(_store, new PersonaService(_store, _embeddings, _clock), new FakeTomeManifestStore(), _clock, options);
 
     private static BriefQuery Query(
         string? tome = null,

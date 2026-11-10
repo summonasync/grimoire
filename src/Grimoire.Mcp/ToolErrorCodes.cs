@@ -4,6 +4,12 @@ internal static class ToolErrorCodes
 {
     public const string InvalidRequest = "invalid_request";
 
+    public const string InvalidTome = "invalid_tome";
+
+    public const string InvalidDescription = "invalid_description";
+
+    public const string TomeManifestExists = "tome_manifest_exists";
+
     public const string ProjectIdRequired = "project_id_required";
 
     public const string ProjectIdUnknown = "project_id_unknown";

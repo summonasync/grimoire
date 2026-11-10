@@ -74,6 +74,7 @@ internal static class TestServices
         services.AddSingleton(sp => new BriefService(
             sp.GetRequiredService<IMemoryStore>(),
             sp.GetRequiredService<PersonaService>(),
+            sp.GetRequiredService<ITomeManifestStore>(),
             sp.GetRequiredService<IClock>(),
             sp.GetRequiredService<MemoryEngineOptions>()));
         services.AddSingleton<AutoMemoryImporter>();
