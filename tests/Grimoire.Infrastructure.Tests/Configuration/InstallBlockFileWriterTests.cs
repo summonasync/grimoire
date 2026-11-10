@@ -1,4 +1,5 @@
 using System.Text;
+using Grimoire.Infrastructure.Configuration;
 using Shouldly;
 using Xunit;
 
@@ -95,6 +96,20 @@ public sealed class InstallBlockFileWriterTests : IDisposable
         InstallBlockFileWriter.Upsert(path, InstallBlock.Text).ShouldBe(InstallBlockOutcome.Updated);
 
         File.ReadAllBytes(path)[0].ShouldNotBe((byte)0xEF);
+    }
+
+    [Fact]
+    public void Upsert_PreservesTheUtf16LeBom()
+    {
+        var path = PathOf("claude.md");
+        File.WriteAllBytes(path, Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("intro\n")).ToArray());
+
+        InstallBlockFileWriter.Upsert(path, InstallBlock.Text).ShouldBe(InstallBlockOutcome.Updated);
+
+        var bytes = File.ReadAllBytes(path);
+        bytes[0].ShouldBe((byte)0xFF);
+        bytes[1].ShouldBe((byte)0xFE);
+        Encoding.Unicode.GetString(bytes[2..]).ShouldBe($"intro\n\n{InstallBlock.Text}\n");
     }
 
     [Fact]

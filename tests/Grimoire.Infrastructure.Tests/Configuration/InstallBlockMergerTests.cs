@@ -1,3 +1,4 @@
+using Grimoire.Infrastructure.Configuration;
 using Shouldly;
 using Xunit;
 

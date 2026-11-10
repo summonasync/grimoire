@@ -94,7 +94,9 @@ public static class InstallBlockFileWriter
         var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            File.WriteAllBytes(tempPath, encoding.GetBytes(text));
+            var body = encoding.GetBytes(text);
+            var preamble = encoding.GetPreamble();
+            File.WriteAllBytes(tempPath, preamble.Length == 0 ? body : [.. preamble, .. body]);
             File.Move(tempPath, path, overwrite: true);
         }
         finally
