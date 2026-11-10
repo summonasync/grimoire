@@ -84,6 +84,23 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.CompletedTask;
     }
 
+    public Task<DeleteByTomeResult> DeleteByTomeAsync(string tome, CancellationToken cancellationToken)
+    {
+        var removed = _points.Values.Where(point => point.Record.Tome == tome).Select(point => point.Record).ToArray();
+
+        foreach (var record in removed)
+        {
+            _points.Remove(record.Id);
+        }
+
+        return Task.FromResult(new DeleteByTomeResult
+        {
+            Active = removed.Count(record => record.Status == MemoryStatus.Active),
+            Superseded = removed.Count(record => record.Status == MemoryStatus.Superseded),
+            Tombstoned = removed.Count(record => record.Status == MemoryStatus.Tombstoned),
+        });
+    }
+
     public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await Task.Yield();

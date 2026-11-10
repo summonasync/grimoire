@@ -19,6 +19,8 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public List<IReadOnlyList<Guid>> Deleted { get; } = [];
 
+    public List<string> DeletedByTome { get; } = [];
+
     public Exception? UpdateFailure { get; set; }
 
     public Exception? ListFailure { get; set; }
@@ -149,6 +151,24 @@ public sealed class RecordingMemoryStore : IMemoryStore
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task<DeleteByTomeResult> DeleteByTomeAsync(string tome, CancellationToken cancellationToken)
+    {
+        DeletedByTome.Add(tome);
+        var removed = _points.Values.Where(point => point.Record.Tome == tome).ToArray();
+
+        foreach (var point in removed)
+        {
+            _points.Remove(point.Record.Id);
+        }
+
+        return Task.FromResult(new DeleteByTomeResult
+        {
+            Active = removed.Count(point => point.Record.Status == MemoryStatus.Active),
+            Superseded = removed.Count(point => point.Record.Status == MemoryStatus.Superseded),
+            Tombstoned = removed.Count(point => point.Record.Status == MemoryStatus.Tombstoned),
+        });
     }
 
     public async IAsyncEnumerable<MemoryPoint> EnumerateAllAsync([EnumeratorCancellation] CancellationToken cancellationToken)

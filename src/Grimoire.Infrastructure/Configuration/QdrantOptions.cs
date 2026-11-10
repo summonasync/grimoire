@@ -7,4 +7,8 @@ public sealed record QdrantOptions
     public string? ApiKey { get; init; }
 
     public string Collection { get; init; } = "grimoire";
+
+    public string? ManifestCollection { get; init; }
+
+    public string ManifestCollectionOrDefault => ManifestCollection ?? $"{Collection}-manifests";
 }

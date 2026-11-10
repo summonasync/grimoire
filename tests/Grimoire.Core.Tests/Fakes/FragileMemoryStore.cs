@@ -59,6 +59,11 @@ public sealed class FragileMemoryStore(IMemoryStore inner) : IMemoryStore
         return inner.DeleteAsync(ids, cancellationToken);
     }
 
+    public Task<DeleteByTomeResult> DeleteByTomeAsync(string tome, CancellationToken cancellationToken)
+    {
+        return inner.DeleteByTomeAsync(tome, cancellationToken);
+    }
+
     public IAsyncEnumerable<MemoryPoint> EnumerateAllAsync(CancellationToken cancellationToken) =>
         inner.EnumerateAllAsync(cancellationToken);
 
