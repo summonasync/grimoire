@@ -15,8 +15,8 @@ namespace Grimoire.Infrastructure.Tomes;
 /// cannot be reached, <see cref="GetAsync"/> returns null and <see cref="ListAsync"/>
 /// returns empty while <see cref="DegradationReason"/> carries the honest reason — memory
 /// paths never depend on this store. Manifest writes surface failures as
-/// UpstreamUnavailableException; a collection dropped mid-session resets boot so the next
-/// call re-ensures it.
+/// UpstreamUnavailableException; a collection dropped mid-session resets boot only on the
+/// next write, so reads stay degraded until a write re-ensures the collection.
 /// </summary>
 public sealed class QdrantManifestStore : ITomeManifestStore
 {

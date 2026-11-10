@@ -8,6 +8,8 @@ public sealed class FakeTomeManifestStore : ITomeManifestStore
 
     public Exception? Failure { get; set; }
 
+    public string? DegradationReason { get; set; }
+
     public IReadOnlyCollection<TomeManifest> Manifests => _manifests.Values;
 
     public void Seed(TomeManifest manifest) => _manifests[manifest.Key] = manifest;
@@ -22,6 +24,11 @@ public sealed class FakeTomeManifestStore : ITomeManifestStore
 
     public Task<TomeManifest?> GetAsync(string key, CancellationToken cancellationToken)
     {
+        if (DegradationReason is not null)
+        {
+            return Task.FromResult<TomeManifest?>(null);
+        }
+
         ThrowIfConfigured();
         CallLog.Add($"manifest:get:{key}");
         return Task.FromResult(_manifests.TryGetValue(key, out var manifest) ? manifest : null);
@@ -51,6 +58,11 @@ public sealed class FakeTomeManifestStore : ITomeManifestStore
 
     public Task<IReadOnlyList<TomeManifest>> ListAsync(CancellationToken cancellationToken)
     {
+        if (DegradationReason is not null)
+        {
+            return Task.FromResult<IReadOnlyList<TomeManifest>>([]);
+        }
+
         ThrowIfConfigured();
         IReadOnlyList<TomeManifest> manifests = [.. _manifests.Values.OrderBy(manifest => manifest.Key)];
         return Task.FromResult(manifests);

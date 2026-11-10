@@ -418,6 +418,466 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         (await ReadError(response)).code.ShouldBe("invalid_tome");
     }
 
+    [Fact]
+    public async Task Get_UnionIncludesManifestOnlyTomesWithNullCensusFields()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("home note", [1f, 0f]);
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "env",
+            Description = "machine and infra notes",
+            CreatedBy = "coder+ai",
+            CreatedAt = FakeClock.DefaultStart.AddDays(-3),
+            UpdatedAt = FakeClock.DefaultStart.AddDays(-1),
+        });
+
+        var response = await factory.NewClient().GetAsync("/api/tomes");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var tomes = body.GetProperty("tomes");
+        tomes.EnumerateArray().Select(tome => tome.GetProperty("key").GetString())
+            .ShouldBe(["alpha", "default", "env"]);
+        var env = tomes.EnumerateArray().Single(tome => tome.GetProperty("key").GetString() == "env");
+        env.GetProperty("active").GetInt64().ShouldBe(0);
+        env.GetProperty("tombstoned").GetInt64().ShouldBe(0);
+        env.GetProperty("lastWriteAt").ValueKind.ShouldBe(JsonValueKind.Null);
+        env.GetProperty("description").GetString().ShouldBe("machine and infra notes");
+        env.GetProperty("createdBy").GetString().ShouldBe("coder+ai");
+        env.GetProperty("manifest").GetBoolean().ShouldBeTrue();
+        env.GetProperty("own").GetBoolean().ShouldBeFalse();
+        var alpha = tomes.EnumerateArray().Single(tome => tome.GetProperty("key").GetString() == "alpha");
+        alpha.GetProperty("manifest").GetBoolean().ShouldBeFalse();
+        alpha.GetProperty("description").ValueKind.ShouldBe(JsonValueKind.Null);
+        alpha.GetProperty("createdBy").ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("tomes").EnumerateArray()
+            .Single(tome => tome.GetProperty("key").GetString() == "default")
+            .GetProperty("own").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Post_Create_ReturnsTheFreshManifestWithHumanActor()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes", new { key = "env", description = "machine notes" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("key").GetString().ShouldBe("env");
+        body.GetProperty("description").GetString().ShouldBe("machine notes");
+        body.GetProperty("createdBy").GetString().ShouldBe("human");
+        body.GetProperty("createdAt").GetDateTimeOffset().ShouldBe(factory.Clock.UtcNow);
+        body.GetProperty("updatedAt").GetDateTimeOffset().ShouldBe(factory.Clock.UtcNow);
+        factory.Manifests.Manifests.Single().Key.ShouldBe("env");
+    }
+
+    [Fact]
+    public async Task Post_Create_OnAnExistingManifest_Returns409TomeManifestExists()
+    {
+        factory.Reset();
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "env",
+            Description = "original",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes", new { key = "env", description = "second attempt" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var error = await ReadError(response);
+        error.code.ShouldBe("tome_manifest_exists");
+        error.message.ShouldContain("env");
+        factory.Manifests.Manifests.Single().Description.ShouldBe("original");
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Not Valid!!")]
+    public async Task Post_Create_WithAnInvalidKey_Returns400InvalidTome(string key)
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes", new { key, description = "machine notes" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_tome");
+        error.message.ShouldContain("key");
+        error.message.ShouldContain(key);
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_Create_WithAnEmptyDescription_Returns400InvalidDescription()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes", new { key = "env", description = "   " });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_description");
+        error.message.ShouldContain("description");
+        error.message.ShouldContain("1..280");
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_Create_WithAnOverLongDescription_Returns400InvalidDescription()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient()
+            .PostAsJsonAsync("/api/tomes", new { key = "env", description = new string('x', 300) });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_description");
+        error.message.ShouldContain("1..280");
+        error.message.ShouldContain("300");
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Patch_UpdatesTheDescriptionAndPreservesProvenance()
+    {
+        factory.Reset();
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "env",
+            Description = "before",
+            CreatedBy = "coder+ai",
+            CreatedAt = FakeClock.DefaultStart.AddDays(-5),
+            UpdatedAt = FakeClock.DefaultStart.AddDays(-5),
+        });
+        factory.Clock.Advance(TimeSpan.FromDays(1));
+
+        var response = await factory.NewClient()
+            .PatchAsJsonAsync("/api/tomes/env/manifest", new { description = "rewritten" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("key").GetString().ShouldBe("env");
+        body.GetProperty("description").GetString().ShouldBe("rewritten");
+        body.GetProperty("createdBy").GetString().ShouldBe("coder+ai");
+        body.GetProperty("createdAt").GetDateTimeOffset().ShouldBe(FakeClock.DefaultStart.AddDays(-5));
+        body.GetProperty("updatedAt").GetDateTimeOffset().ShouldBe(factory.Clock.UtcNow);
+        factory.Manifests.Manifests.Single().Description.ShouldBe("rewritten");
+    }
+
+    [Fact]
+    public async Task Patch_OnAMissingManifest_Returns404TomeManifestNotFound()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient()
+            .PatchAsJsonAsync("/api/tomes/alpha/manifest", new { description = "rewritten" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var error = await ReadError(response);
+        error.code.ShouldBe("tome_manifest_not_found");
+        error.message.ShouldContain("alpha");
+    }
+
+    [Fact]
+    public async Task Patch_WithAnOverLongDescription_Returns400InvalidDescriptionAndLeavesTheManifestUntouched()
+    {
+        factory.Reset();
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "env",
+            Description = "before",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+
+        var response = await factory.NewClient()
+            .PatchAsJsonAsync("/api/tomes/env/manifest", new { description = new string('x', 280) + "!" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_description");
+        factory.Manifests.Manifests.Single().Description.ShouldBe("before");
+    }
+
+    [Fact]
+    public async Task Patch_WhenTheManifestStoreIsDegraded_Returns503UpstreamUnavailable()
+    {
+        factory.Reset();
+        factory.Manifests.DegradationReason = "Tome manifest store is unreachable — simulated outage.";
+
+        var response = await factory.NewClient()
+            .PatchAsJsonAsync("/api/tomes/env/manifest", new { description = "rewritten" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var error = await ReadError(response);
+        error.code.ShouldBe("upstream_unavailable");
+        error.message.ShouldContain("unreachable");
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Delete_WithAWrongConfirm_Returns400ConfirmMismatchWithoutDeletingAnything()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "alpha buried",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+        var censusBefore = await (await factory.NewClient().GetAsync("/api/tomes"))
+            .Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var recordCountBefore = factory.Store.Records.Count;
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/alpha?confirm=nope");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("confirm_mismatch");
+        error.message.ShouldContain("alpha");
+        factory.Store.Records.Count.ShouldBe(recordCountBefore);
+        factory.Manifests.Manifests.ShouldNotBeEmpty();
+
+        var censusAfter = await (await factory.NewClient().GetAsync("/api/tomes"))
+            .Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        censusAfter.GetProperty("tomes").EnumerateArray()
+            .Select(tome => (tome.GetProperty("key").GetString(), tome.GetProperty("active").GetInt64()))
+            .ShouldBe(censusBefore.GetProperty("tomes").EnumerateArray()
+                .Select(tome => (tome.GetProperty("key").GetString(), tome.GetProperty("active").GetInt64())));
+    }
+
+    [Fact]
+    public async Task Delete_PurgesRecordsInAllStatusesAndTheManifestWithPerStatusCounts()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "alpha buried",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Store.Seed(
+            "alpha stale",
+            [1f, 0f],
+            tome: "alpha",
+            status: MemoryStatus.Superseded,
+            supersededBy: Guid.NewGuid());
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/alpha?confirm=alpha");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("key").GetString().ShouldBe("alpha");
+        body.GetProperty("manifestPurged").GetBoolean().ShouldBeTrue();
+        var purged = body.GetProperty("purged");
+        purged.GetProperty("active").GetInt32().ShouldBe(2);
+        purged.GetProperty("tombstoned").GetInt32().ShouldBe(1);
+        purged.GetProperty("superseded").GetInt32().ShouldBe(1);
+        factory.Store.Records.ShouldBeEmpty();
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Delete_OnAPartiallyPurgedTome_ConvergesWithZeroCounts()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+        factory.Manifests.DeleteFailure = new InvalidOperationException("manifest collection is down");
+
+        var first = await factory.NewClient().DeleteAsync("/api/tomes/alpha?confirm=alpha");
+
+        first.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        firstBody.GetProperty("purged").GetProperty("active").GetInt32().ShouldBe(1);
+        firstBody.GetProperty("manifestPurged").GetBoolean().ShouldBeFalse();
+        factory.Store.Records.ShouldBeEmpty();
+        factory.Manifests.Manifests.ShouldNotBeEmpty();
+
+        factory.Manifests.DeleteFailure = null;
+        var second = await factory.NewClient().DeleteAsync("/api/tomes/alpha?confirm=alpha");
+
+        second.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        secondBody.GetProperty("purged").GetProperty("active").GetInt32().ShouldBe(0);
+        secondBody.GetProperty("purged").GetProperty("tombstoned").GetInt32().ShouldBe(0);
+        secondBody.GetProperty("purged").GetProperty("superseded").GetInt32().ShouldBe(0);
+        secondBody.GetProperty("manifestPurged").GetBoolean().ShouldBeTrue();
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Delete_OnAnUnknownTome_Returns404WithoutTouchingAnything()
+    {
+        factory.Reset();
+        factory.Store.Seed("home note", [1f, 0f]);
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/ghost?confirm=ghost");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await ReadError(response)).code.ShouldBe("not_found");
+        factory.Store.Records.Single().Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public async Task Post_Rename_MovesTheManifestPreservingCreatedByAndCreatedAt()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha");
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "coder+ai",
+            CreatedAt = FakeClock.DefaultStart.AddDays(-5),
+            UpdatedAt = FakeClock.DefaultStart.AddDays(-5),
+        });
+        factory.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("manifestMoved").GetBoolean().ShouldBeTrue();
+        body.GetProperty("manifestDeleted").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        var moved = factory.Manifests.Manifests.Single();
+        moved.Key.ShouldBe("gamma");
+        moved.Description.ShouldBe("alpha journal");
+        moved.CreatedBy.ShouldBe("coder+ai");
+        moved.CreatedAt.ShouldBe(FakeClock.DefaultStart.AddDays(-5));
+        moved.UpdatedAt.ShouldBe(factory.Clock.UtcNow);
+        factory.Store.Records.ShouldAllBe(record => record.Tome == "gamma");
+    }
+
+    [Fact]
+    public async Task Post_Rename_WithoutASourceManifest_ReportsManifestMovedTrue()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "gamma" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("manifestMoved").GetBoolean().ShouldBeTrue();
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_Rename_WithAManifestOnTheTarget_Returns409TomeManifestExistsWithoutMoving()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "beta",
+            Description = "beta journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var error = await ReadError(response);
+        error.code.ShouldBe("tome_manifest_exists");
+        error.message.ShouldContain("beta");
+        factory.Store.Records.Single().Tome.ShouldBe("alpha");
+        factory.Manifests.Manifests.Single().Key.ShouldBe("beta");
+    }
+
+    [Fact]
+    public async Task Post_Merge_DeletesTheSourceManifestAndKeepsTheTargetManifest()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("alpha two", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("beta note", [1f, 0f], tome: "beta");
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "beta",
+            Description = "beta journal",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("manifestDeleted").GetBoolean().ShouldBeTrue();
+        body.GetProperty("manifestMoved").ValueKind.ShouldBe(JsonValueKind.Null);
+        factory.Manifests.Manifests.Single().Key.ShouldBe("beta");
+        factory.Store.Records.ShouldAllBe(record => record.Tome == "beta");
+    }
+
+    [Fact]
+    public async Task Post_Merge_WithoutASourceManifest_ReportsManifestDeletedTrue()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed("beta note", [1f, 0f], tome: "beta");
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("manifestDeleted").GetBoolean().ShouldBeTrue();
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
     private static async Task<(string code, string message)> ReadError(HttpResponseMessage response)
     {
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);

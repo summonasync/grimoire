@@ -55,6 +55,8 @@ public sealed class GrimoireApiFactory : IDisposable
 
     public FakeMemoryStore Store { get; } = new();
 
+    public FakeTomeManifestStore Manifests { get; } = new();
+
     public FakeEmbeddingProvider Embeddings { get; } = new();
 
     public FakeClock Clock { get; } = new();
@@ -71,6 +73,7 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.GetCount = 0;
         Store.OnGetAsync = null;
         Store.OnFetchAsync = null;
+        Manifests.Clear();
         Embeddings.Requests.Clear();
         Embeddings.Failure = null;
         GcState.Reset();
@@ -120,6 +123,7 @@ public sealed class GrimoireApiFactory : IDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<IMemoryStore>(Store);
+        services.AddSingleton<ITomeManifestStore>(Manifests);
         services.AddSingleton<IEmbeddingProvider>(Embeddings);
         services.AddSingleton<IClock>(Clock);
         services.AddSingleton<IProjectRegistry>(new ProjectRegistry(_projects ?? []));

@@ -13,6 +13,7 @@ public class ApiHostTests
     {
         var services = new ServiceCollection()
             .AddSingleton<IMemoryStore>(new FakeMemoryStore())
+            .AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore())
             .AddSingleton<IEmbeddingProvider>(new FakeEmbeddingProvider())
             .AddSingleton<IClock>(new FakeClock())
             .BuildServiceProvider();

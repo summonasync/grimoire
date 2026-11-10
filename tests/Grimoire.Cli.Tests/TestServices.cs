@@ -48,6 +48,7 @@ internal static class TestServices
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<MemoryEngineOptions>().ReindexBatchSize));
         services.AddSingleton<IMemoryStore>(store);
+        services.AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore());
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());

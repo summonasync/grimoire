@@ -211,6 +211,7 @@ public sealed class StatsParityContractTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddSingleton<IMemoryStore>(_host.Store);
+        services.AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore());
         services.AddSingleton<IEmbeddingProvider>(_host.Embeddings);
         services.AddSingleton<IClock>(_host.Clock);
         services.AddSingleton<IGcStateStore>(_host.GcState);

@@ -4,6 +4,43 @@ public sealed class TomeManifestService(ITomeManifestStore store, IClock clock)
 {
     public const int MaxDescriptionLength = 280;
 
+    public string? DegradationReason => store.DegradationReason;
+
+    public async Task<bool> MoveAsync(string sourceKey, string targetKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var source = NormalizeKey(sourceKey);
+            var target = NormalizeKey(targetKey);
+            var held = await store.GetAsync(source, cancellationToken);
+            if (held is null)
+            {
+                return store.DegradationReason is null;
+            }
+
+            await store.DeleteAsync(source, cancellationToken);
+            await store.CreateAsync(held with { Key = target, UpdatedAt = clock.UtcNow }, cancellationToken);
+            return true;
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> DeleteAsync(string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await store.DeleteAsync(NormalizeKey(key), cancellationToken);
+            return true;
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
     public async Task<TomeManifestWriteResult> CreateAsync(
         string key,
         string description,

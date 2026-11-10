@@ -194,6 +194,8 @@ public sealed class TomePurgeServiceTests
 
     private sealed class LoggingManifestStore(ITomeManifestStore inner, List<string> log) : ITomeManifestStore
     {
+        public string? DegradationReason => inner.DegradationReason;
+
         public async Task CreateAsync(TomeManifest manifest, CancellationToken cancellationToken)
         {
             await inner.CreateAsync(manifest, cancellationToken);

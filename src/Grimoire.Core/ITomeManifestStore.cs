@@ -2,6 +2,8 @@ namespace Grimoire.Core;
 
 public interface ITomeManifestStore
 {
+    string? DegradationReason { get; }
+
     Task CreateAsync(TomeManifest manifest, CancellationToken cancellationToken);
 
     Task<TomeManifest?> GetAsync(string key, CancellationToken cancellationToken);
