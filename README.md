@@ -39,7 +39,7 @@ One binary, three faces:
 
 **Status**: the MVP plus honest-writes, startup-brief and the tome model are
 landed and acceptance-verified end to end — all three faces (CLI, MCP stdio,
-loopback web console) round-trip against a live Qdrant + Ollama, 1556 tests
+loopback web console) round-trip against a live Qdrant + Ollama, 1860 tests
 green. Live work tracking happens on the Overmind board; this README
 describes the shipped shape plus the frozen contracts.
 
@@ -215,6 +215,17 @@ clientInfo, falling back to the `default` tome. Isolation is the rule;
 `memory_scry` is the one deliberate cross-tome read — facts by default,
 journal opt-in, session never, anonymous by default.
 
+A tome can carry a **manifest** (ADR-008) — a `description` naming what
+belongs there, plus `createdBy` provenance, stored in a separate
+vector-less Qdrant collection. The manifest is the routing hint: agents
+read the tome table in `memory_brief`, write to the fitting tome, and call
+`memory_tome_create` only when no existing tome fits. A tome exists once it
+has a manifest or at least one record; records without a manifest stay
+first-class. The human owns the destructive door: the console's tome purge
+removes all records (tombstones included) plus the manifest behind a typed
+confirmation of the exact tome key — no undo. Agents never hard-delete;
+`memory_forget` tombstones.
+
 Recall is a hybrid score — similarity alone is not memory:
 
 ```
@@ -237,7 +248,8 @@ Standing rules, enforced from day one:
 
 - **No silent deletes.** `forget` writes a tombstone (status + reason +
   timestamp); only the GC hard-deletes — expired session records and aged
-  tombstones.
+  tombstones. The one extra hard-delete door is the human's: the console
+  tome purge, gated by a typed confirmation (ADR-005 amendment).
 - **Every write carries provenance** — agent alias+vendor, or `human`.
 - **Project writes carry a registered projectId.** scope=`project` is
   rejected at the write door unless the projectId names an entry of the
@@ -273,6 +285,7 @@ Standing rules, enforced from day one:
 | `memory_remember` | write a memory (journal vs fact routing, scope choice); Project scope demands a registered projectId or auto-tags one from the working directory |
 | `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
 | `memory_stats` | counts, `pendingCompaction`, provider health |
+| `memory_tome_create` | open a new tome when nothing fits — the description is the routing hint other agents read in the brief's tome table |
 
 Tool descriptions are the extraction substitute — they are pinned by
 wire-level contract tests.
@@ -315,9 +328,10 @@ Grimoire.sln
 
 Dependency direction: `Core ← Infrastructure / Mcp / Api ← Cli`. `Mcp` and
 `Api` never reference each other. Decisions live in
-[TECHNICAL-SOLUTIONS.md](TECHNICAL-SOLUTIONS.md) (ADR-001..007) — including
+[TECHNICAL-SOLUTIONS.md](TECHNICAL-SOLUTIONS.md) (ADR-001..008) — including
 the tome tenant model (ADR-007): persona-isolated tomes with one deliberate
-cross-tome read, `memory_scry`.
+cross-tome read, `memory_scry`, and the manifest shelf they are routed by
+(ADR-008).
 
 ---
 

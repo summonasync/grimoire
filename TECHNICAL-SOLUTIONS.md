@@ -112,6 +112,18 @@ Consequences:
 + One uniform point schema; the UI renders kinds differently; full auditability.
 − The payload schema is a contract from day one: additive-only evolution.
 
+Amendment — 2026-11-10 (feature 041-tome-manifests-hard-delete): the "hard delete is
+GC's job only" rule gains one exception. GC stays the only *automatic* hard deleter
+(expired session records, aged tombstones); a second hard-delete door opens for the
+human alone: the console's tome purge (`DELETE /api/tomes/{key}?confirm=<key>`, SPA card
+menu) removes a tome's records in every status plus its manifest, and refuses without a
+typed `confirm` equal to the tome key. Agents keep tombstone-only discipline — no MCP or
+CLI verb exposes the purge, and destructive paths filter the tome positively
+(`tome=key`), never with `must_not` (a negative filter would swallow the embedding
+fingerprint marker and brick the store). The typed confirmation exists because a hard
+delete has no undo: tombstones die with the tome, `memory_restore` has nothing to
+restore from.
+
 ## ADR-006: Product name "Grimoire" — 2026-10-17
 
 Status: Accepted (user decision, naming tournament final ballot)
@@ -189,3 +201,54 @@ the deliberate cross-tome read surface (`memory_scry`: facts by default, journal
 session never, anonymous by default with `light`/`full` attribution opt-in). Decision text
 above keeps Book/Universe wording as history; everywhere live the Tome/Scry names are
 canonical.
+
+## ADR-008: Tome manifests — a shelf registry next to the field — 2026-11-10
+
+Status: Accepted (user decision in-session, feature 041-tome-manifests-hard-delete)
+
+Context: ADR-007 made a tome a payload field with no registry — first-class enough to
+partition memory, but mute: nothing records what a tome is *for*, so an agent routing a
+write must guess from the key alone. The owner asked for tomes by specialty (dev, env,
+social, meta) that agents can create when nothing fits and the human can hard-delete
+with an extra confirmation (ADR-005 amendment). Routing hints need metadata attached to
+the tome, and that metadata must survive the three-face concurrency story.
+
+Decision: a **manifest** — light metadata about a tome, not a record in it: `key`
+(kebab-case, ≤64), `description` (1..280 chars, the routing hint agents read),
+`createdBy`, `createdAt`, `updatedAt`. Manifests live in their own Qdrant collection
+`<collection>-manifests` (default `grimoire-manifests`) with **no vectors** — point id is
+the deterministic UUIDv5 of the key (idempotent upserts, stable deletes), payload holds
+the fields, payload index on `key`. Existence rule (updates ADR-007's field-only model):
+a tome exists iff it has a manifest **or** ≥1 record — records without a manifest (every
+existing tome, incl. `crew`) stay first-class and surface with `description: null`.
+Doors: agents create via `memory_tome_create` (409 on an existing manifest, alias
+provenance); the human creates/patches via `POST /api/tomes` /
+`PATCH /api/tomes/{key}/manifest` and purges via `DELETE /api/tomes/{key}?confirm=<key>`
+(typed confirmation, ADR-005 amendment). `memory_brief` gains a `tomes` section — the
+manifest list is the routing table agents consult before writing or creating. The main
+memory collection is untouched: additive-only (ADR-005 payload contract), no must-exclude
+filters anywhere, and a manifest-store failure degrades reads (brief carries a note)
+without ever blocking memory read/write. Seed manifests `dev`/`env`/`social`/`meta` land
+through the REST door, actor `human`.
+
+Alternatives considered:
+- Payload discriminator in the main memory collection (`record_type` field) — lost:
+  every memory query path gains must-exclude filters and the additive payload contract
+  takes collision risk, for zero gain over a second collection.
+- Config file (~/.grimoire) for the registry — lost: three faces writing one JSON file
+  races (no per-point atomicity), and it breaks ADR-001's "all faces are independent
+  clients of Qdrant".
+- Embedding auto-routing (a write lands in the tome whose manifest text it resembles) —
+  lost: nondeterministic routing contradicts ADR-003's explicit-write core, and a
+  mis-routed memory lands silently. Semantic tome discovery remains a separate decision.
+
+Consequences:
++ The shelf becomes self-describing: brief's `tomes` section and `GET /api/tomes` show
+  key + description + `createdBy`, so agents route instead of guessing.
++ No vectors, no fingerprint contract, no re-embed on reindex — a reindex touches only
+  the memory collection.
+− Two collections with no cross-collection transaction: the purge runs ordered (records
+  first, manifest second), reports `manifestPurged` honestly on partial failure, and a
+  re-run converges (idempotent).
+− Adoption caveat: manifest-only tomes are visible to the new faces only — an installed
+  pre-041 binary's shelf does not render them until that binary is upgraded.
