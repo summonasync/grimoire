@@ -72,12 +72,13 @@ internal static class TomeEndpoints
                     TomeParam.InvalidMessage("key", request.Key));
             }
 
-            if (ManifestParam.DescriptionError(request.Description) is { } descriptionError)
+            var description = request.Description ?? string.Empty;
+            if (ManifestParam.DescriptionError(description) is { } descriptionError)
             {
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_description", descriptionError);
             }
 
-            var result = await manifests.CreateAsync(key, request.Description, MemoryActor.Human, cancellationToken);
+            var result = await manifests.CreateAsync(key, description, MemoryActor.Human, cancellationToken);
             return result.Outcome == TomeManifestOutcome.Created
                 ? Results.Ok(ManifestPayload(result.Manifest!))
                 : ApiResponses.Error(
@@ -93,12 +94,13 @@ internal static class TomeEndpoints
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_tome", TomeParam.InvalidMessage("tome", key));
             }
 
-            if (ManifestParam.DescriptionError(request.Description) is { } descriptionError)
+            var description = request.Description ?? string.Empty;
+            if (ManifestParam.DescriptionError(description) is { } descriptionError)
             {
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_description", descriptionError);
             }
 
-            var result = await manifests.UpdateAsync(target, request.Description, MemoryActor.Human, cancellationToken);
+            var result = await manifests.UpdateAsync(target, description, MemoryActor.Human, cancellationToken);
             if (result.Outcome == TomeManifestOutcome.Updated)
             {
                 return Results.Ok(ManifestPayload(result.Manifest!));

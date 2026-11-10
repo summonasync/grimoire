@@ -4,9 +4,9 @@ namespace Grimoire.Api.Tomes;
 
 internal static class ManifestParam
 {
-    public static string? DescriptionError(string value)
+    public static string? DescriptionError(string? value)
     {
-        var trimmed = value.Trim();
+        var trimmed = value?.Trim() ?? string.Empty;
 
         if (trimmed.Length == 0)
         {

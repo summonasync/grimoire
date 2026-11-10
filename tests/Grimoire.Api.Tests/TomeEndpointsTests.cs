@@ -458,6 +458,43 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
     }
 
     [Fact]
+    public async Task Get_WhileTheManifestStoreIsDegraded_RendersCensusOnlyEntries()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "alpha journal",
+            CreatedBy = "coder+ai",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+        factory.Manifests.Seed(new TomeManifest
+        {
+            Key = "env",
+            Description = "machine and infra notes",
+            CreatedBy = "human",
+            CreatedAt = FakeClock.DefaultStart,
+            UpdatedAt = FakeClock.DefaultStart,
+        });
+        factory.Manifests.DegradationReason = "Tome manifest store is unreachable — simulated outage.";
+
+        var response = await factory.NewClient().GetAsync("/api/tomes");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        var tomes = body.GetProperty("tomes");
+        tomes.EnumerateArray().Select(tome => tome.GetProperty("key").GetString())
+            .ShouldBe(["alpha"]);
+        var alpha = tomes.EnumerateArray().Single(tome => tome.GetProperty("key").GetString() == "alpha");
+        alpha.GetProperty("active").GetInt64().ShouldBe(1);
+        alpha.GetProperty("manifest").GetBoolean().ShouldBeFalse();
+        alpha.GetProperty("description").ValueKind.ShouldBe(JsonValueKind.Null);
+        alpha.GetProperty("createdBy").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task Post_Create_ReturnsTheFreshManifestWithHumanActor()
     {
         factory.Reset();
@@ -545,6 +582,35 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         error.code.ShouldBe("invalid_description");
         error.message.ShouldContain("1..280");
         error.message.ShouldContain("300");
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_Create_WithAMissingDescriptionProperty_Returns400InvalidDescription()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes", new { key = "env" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_description");
+        error.message.ShouldContain("description");
+        error.message.ShouldContain("1..280");
+        factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Post_Create_WithAMissingKeyProperty_Returns400InvalidTome()
+    {
+        factory.Reset();
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes", new { description = "machine notes" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ReadError(response);
+        error.code.ShouldBe("invalid_tome");
+        error.message.ShouldContain("key");
         factory.Manifests.Manifests.ShouldBeEmpty();
     }
 
@@ -757,6 +823,23 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await ReadError(response)).code.ShouldBe("not_found");
         factory.Store.Records.Single().Tome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
+    public async Task Delete_WhenTheManifestStoreIsDegraded_Returns503UpstreamUnavailableWithoutDeletingAnything()
+    {
+        factory.Reset();
+        factory.Store.Seed("home note", [1f, 0f]);
+        factory.Manifests.DegradationReason = "Tome manifest store is unreachable — simulated outage.";
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/ghost?confirm=ghost");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        var error = await ReadError(response);
+        error.code.ShouldBe("upstream_unavailable");
+        error.message.ShouldContain("unreachable");
+        factory.Store.Records.Single().Content.ShouldBe("home note");
+        factory.Manifests.Manifests.ShouldBeEmpty();
     }
 
     [Fact]
