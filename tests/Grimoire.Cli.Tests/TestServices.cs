@@ -28,7 +28,8 @@ internal static class TestServices
         string? configPath = null,
         ICallerPathProvider? callerPaths = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
-        FakeBoardProjectSource? board = null)
+        FakeBoardProjectSource? board = null,
+        FakeTomeManifestStore? manifests = null)
     {
         var vectorDb = db ?? new RecordingVectorDb();
         var services = new ServiceCollection();
@@ -48,7 +49,7 @@ internal static class TestServices
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<MemoryEngineOptions>().ReindexBatchSize));
         services.AddSingleton<IMemoryStore>(store);
-        services.AddSingleton<ITomeManifestStore>(new FakeTomeManifestStore());
+        services.AddSingleton<ITomeManifestStore>(manifests ?? new FakeTomeManifestStore());
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());
