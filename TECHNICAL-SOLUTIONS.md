@@ -51,6 +51,11 @@ Consequences:
 − Qdrant becomes a required service (docker compose shipped in `deploy/`); a fully embedded
   mode does not exist in v1.
 
+Amendment — 2026-11-10 (feature 041-tome-manifests-hard-delete): "one collection" became
+two — a second, vector-less Qdrant collection `<Collection>-manifests` (default
+`grimoire-manifests`) holds the tome-manifest registry; Qdrant remains the sole store, full
+decision in ADR-008.
+
 ## ADR-003: Explicit write model — 2026-10-17
 
 Status: Accepted (user decision in-session)
