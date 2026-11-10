@@ -39,7 +39,7 @@ One binary, three faces:
 
 **Status**: the MVP plus honest-writes, startup-brief and the tome model are
 landed and acceptance-verified end to end — all three faces (CLI, MCP stdio,
-loopback web console) round-trip against a live Qdrant + Ollama, 1860 tests
+loopback web console) round-trip against a live Qdrant + Ollama, 1889 tests
 green. Live work tracking happens on the Overmind board; this README
 describes the shipped shape plus the frozen contracts.
 
@@ -163,6 +163,34 @@ actors. A session started outside its launcher falls down the chain to the
 shared attribution; restarting it through the launcher (or letting it call
 `session_identity_set`) fixes attribution for everything written afterwards.
 
+### Teaching agents the memory
+
+An agent that never learns about the memory never calls it. `grimoire install`
+stamps a short managed block — what the memory is, `memory_brief` at session
+start, write-as-you-go, and the tome routing table — into every agent home
+memory file it finds on this machine:
+
+```bash
+grimoire install            # upsert the block into ~/.claude/CLAUDE.md,
+                            # ~/.qwen/QWEN.md, ~/.codex/AGENTS.md,
+                            # ~/.kimi-code/AGENTS.md
+grimoire install --print-block   # print the block without touching any file
+grimoire install --remove        # strip the block, leave the rest alone
+```
+
+The block lives between `<!-- grimoire:begin -->` and `<!-- grimoire:end -->`
+markers: rerunning the verb replaces the marked range in place (so your own
+prose around it stays untouched), appends to files without it, and reports one
+outcome line per file — `created`, `updated`, `unchanged`, `removed` or
+`skipped (not found)`. Missing files are skipped, never created; a file is
+detected only when it already exists, and homes resolve under the user profile
+or `GRIMOIRE_HOME` when set (the flag the test rigs and sandboxes use).
+
+Kit coexistence: on machines where the OvermindCrewKit mirrors already carry
+the same block, the verb is idempotent — reruns report `unchanged`, and
+`--remove` followed by the kit's own deploy restores the same text. The kit
+owns its copies; this verb only manages what it stamped.
+
 ## Distribution
 
 The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs
@@ -174,7 +202,7 @@ this repo:
 ```bash
 dotnet pack src/Grimoire.Cli -c Release -o build/packages
 dotnet tool install -g Grimoire --add-source build/packages --no-cache
-grimoire --version    # -> grimoire 0.2.0
+grimoire --version    # -> grimoire 0.8.0
 ```
 
 `-g` lands `grimoire` on PATH (`~/.dotnet/tools` on Linux/macOS,

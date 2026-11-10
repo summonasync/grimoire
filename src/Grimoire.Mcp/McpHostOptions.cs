@@ -17,7 +17,9 @@ public sealed record McpHostOptions
         "other tomes anonymously (facts by default, journal opt-in). When memory_stats reports pendingCompaction " +
         "above zero, run the memory_compact_candidates distillation loop. Before asserting anything that might " +
         "already be on record, check memory_recall first. When your runtime gives you a stable alias, call " +
-        "session_identity_set(alias, vendor) once per session so writes carry it.";
+        "session_identity_set(alias, vendor) once per session so writes carry it. The brief's `tomes` section is " +
+        "the routing table: write each memory to the tome whose description fits. When no existing tome fits, " +
+        "memory_tome_create(key, description) creates one, and the description must say what belongs there.";
 
     public string ServerName { get; init; } = "grimoire";
 

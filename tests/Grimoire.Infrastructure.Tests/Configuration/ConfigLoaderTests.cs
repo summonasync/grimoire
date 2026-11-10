@@ -51,6 +51,16 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_GrimoireHomeVariable_IsNotTreatedAsAConfigOverride()
+    {
+        var environment = new Dictionary<string, string> { ["GRIMOIRE_HOME"] = "/tmp/some-home" };
+
+        var options = new ConfigLoader(MissingPath(), environment).Load();
+
+        options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
+    }
+
+    [Fact]
     public void Load_WithPartialFile_MergesOverDefaults()
     {
         var path = WriteConfig("""

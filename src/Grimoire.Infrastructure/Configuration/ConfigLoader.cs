@@ -21,9 +21,9 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
 
     private const string EnvironmentPrefix = "GRIMOIRE_";
 
-    // Reserved for the faces (actor and tome resolution); never a configuration property.
+    // Reserved for the faces (actor, tome, install home root); never a configuration property.
     private static readonly IReadOnlySet<string> ReservedVariables = new HashSet<string>(
-        ["GRIMOIRE_ACTOR", "GRIMOIRE_TOME"], StringComparer.OrdinalIgnoreCase);
+        ["GRIMOIRE_ACTOR", "GRIMOIRE_TOME", "GRIMOIRE_HOME"], StringComparer.OrdinalIgnoreCase);
 
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
