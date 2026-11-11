@@ -19,6 +19,8 @@ public class FakeMemoryStore : IMemoryStore
 
     public Action<MemoryFilter>? OnFetchAsync { get; set; }
 
+    public Action<MemoryFilter>? OnCountAsync { get; set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public IReadOnlyDictionary<Guid, float[]> Vectors =>
@@ -86,6 +88,7 @@ public class FakeMemoryStore : IMemoryStore
 
     public virtual Task<long> CountAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        OnCountAsync?.Invoke(filter);
         return Task.FromResult((long)Matching(filter).Count());
     }
 

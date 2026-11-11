@@ -168,6 +168,36 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         factory.Store.Records.Single(record => record.Content == "beta note").Tome.ShouldBe("beta");
     }
 
+    [Fact]
+    public async Task Post_Rename_OntoATombstonedOnlyTome_Returns409TomeExists()
+    {
+        factory.Reset();
+        factory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "beta buried",
+            [1f, 0f],
+            tome: "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        var collisionCounts = new List<MemoryFilter>();
+        factory.Store.OnCountAsync = collisionCounts.Add;
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/rename", new { to = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await ReadError(response)).code.ShouldBe("tome_exists");
+        factory.Store.Records.Single(record => record.Content == "alpha note").Tome.ShouldBe("alpha");
+        var buried = factory.Store.Records.Single(record => record.Content == "beta buried");
+        buried.Tome.ShouldBe("beta");
+        buried.Status.ShouldBe(MemoryStatus.Tombstoned);
+
+        factory.Store.OnCountAsync = null;
+        var collision = collisionCounts.ShouldHaveSingleItem();
+        collision.Tome.ShouldBe("beta");
+        collision.Statuses.ShouldBe([MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned]);
+    }
+
     [Theory]
     [InlineData(" ")]
     [InlineData("Not Valid!!")]
@@ -249,6 +279,37 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await ReadError(response)).code.ShouldBe("not_found");
         factory.Store.Records.Single().Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Post_Merge_IntoATombstonedOnlyTome_MovesSourceRecordsIn()
+    {
+        factory.Reset();
+        var first = factory.Store.Seed("alpha one", [1f, 0f], tome: "alpha");
+        factory.Store.Seed(
+            "beta buried",
+            [1f, 0f],
+            tome: "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        factory.Clock.Advance(TimeSpan.FromMinutes(2));
+        var existenceCounts = new List<MemoryFilter>();
+        factory.Store.OnCountAsync = existenceCounts.Add;
+
+        var response = await factory.NewClient().PostAsJsonAsync("/api/tomes/alpha/merge", new { into = "beta" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("retomed").GetInt32().ShouldBe(1);
+        factory.Store.Records.Single(record => record.Id == first.Id).Tome.ShouldBe("beta");
+        var buried = factory.Store.Records.Single(record => record.Content == "beta buried");
+        buried.Tome.ShouldBe("beta");
+        buried.Status.ShouldBe(MemoryStatus.Tombstoned);
+
+        factory.Store.OnCountAsync = null;
+        var existence = existenceCounts.Single(filter => filter.Tome == "beta");
+        existence.Statuses.ShouldBe([MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned]);
     }
 
     [Theory]
@@ -735,6 +796,25 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
     }
 
     [Fact]
+    public async Task Delete_WithAWrongConfirm_OnATombstonedOnlyTome_Returns400WithoutDeletingAnything()
+    {
+        factory.Reset();
+        factory.Store.Seed(
+            "beta buried",
+            [1f, 0f],
+            tome: "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/beta?confirm=nope");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("confirm_mismatch");
+        factory.Store.Records.Single().Content.ShouldBe("beta buried");
+    }
+
+    [Fact]
     public async Task Delete_PurgesRecordsInAllStatusesAndTheManifestWithPerStatusCounts()
     {
         factory.Reset();
@@ -774,6 +854,45 @@ public class TomeEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
         purged.GetProperty("superseded").GetInt32().ShouldBe(1);
         factory.Store.Records.ShouldBeEmpty();
         factory.Manifests.Manifests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Delete_PurgesATombstonedOnlyTome_AndDropsItFromTheCensus()
+    {
+        factory.Reset();
+        factory.Store.Seed("home note", [1f, 0f]);
+        factory.Store.Seed(
+            "beta buried",
+            [1f, 0f],
+            tome: "beta",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "gone",
+            tombstonedAt: FakeClock.DefaultStart);
+        var guardCounts = new List<MemoryFilter>();
+        factory.Store.OnCountAsync = guardCounts.Add;
+
+        var response = await factory.NewClient().DeleteAsync("/api/tomes/beta?confirm=beta");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("key").GetString().ShouldBe("beta");
+        body.GetProperty("manifestPurged").GetBoolean().ShouldBeTrue();
+        factory.Manifests.Manifests.ShouldBeEmpty();
+        var purged = body.GetProperty("purged");
+        purged.GetProperty("active").GetInt32().ShouldBe(0);
+        purged.GetProperty("tombstoned").GetInt32().ShouldBe(1);
+        purged.GetProperty("superseded").GetInt32().ShouldBe(0);
+        factory.Store.Records.Single().Content.ShouldBe("home note");
+
+        factory.Store.OnCountAsync = null;
+        var guard = guardCounts.ShouldHaveSingleItem();
+        guard.Tome.ShouldBe("beta");
+        guard.Statuses.ShouldBe([MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned]);
+
+        var census = await (await factory.NewClient().GetAsync("/api/tomes"))
+            .Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        census.GetProperty("tomes").EnumerateArray()
+            .ShouldNotContain(tome => tome.GetProperty("key").GetString() == "beta");
     }
 
     [Fact]

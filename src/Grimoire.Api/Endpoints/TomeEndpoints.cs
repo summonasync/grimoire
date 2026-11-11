@@ -133,7 +133,7 @@ internal static class TomeEndpoints
             }
 
             var manifestHeld = await manifests.GetAsync(target, cancellationToken);
-            var recordCount = await store.CountAsync(new MemoryFilter { Tome = target }, cancellationToken);
+            var recordCount = await store.CountAsync(TomeRecords(target), cancellationToken);
             if (manifestHeld is null && recordCount == 0)
             {
                 if (manifests.DegradationReason is { } reason)
@@ -210,7 +210,7 @@ internal static class TomeEndpoints
                     TomeParam.InvalidMessage("to", request.To));
             }
 
-            if (await store.CountAsync(new MemoryFilter { Tome = target }, cancellationToken) > 0)
+            if (await store.CountAsync(TomeRecords(target), cancellationToken) > 0)
             {
                 return ApiResponses.Error(
                     HttpStatusCode.Conflict,
@@ -247,7 +247,7 @@ internal static class TomeEndpoints
                     TomeParam.InvalidMessage("into", request.Into));
             }
 
-            if (await store.CountAsync(new MemoryFilter { Tome = target }, cancellationToken) == 0)
+            if (await store.CountAsync(TomeRecords(target), cancellationToken) == 0)
             {
                 return ApiResponses.Error(
                     HttpStatusCode.NotFound,
@@ -281,4 +281,7 @@ internal static class TomeEndpoints
 
     private static TomeManifestResponse ManifestPayload(TomeManifest manifest) =>
         new(manifest.Key, manifest.Description, manifest.CreatedBy, manifest.CreatedAt, manifest.UpdatedAt);
+
+    private static MemoryFilter TomeRecords(string tome) =>
+        new() { Tome = tome, Statuses = [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned] };
 }
