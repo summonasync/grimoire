@@ -19,6 +19,8 @@ public class FakeMemoryStore : IMemoryStore
 
     public Action<MemoryFilter>? OnFetchAsync { get; set; }
 
+    public Action<MemoryFilter>? OnListAsync { get; set; }
+
     public Action<MemoryFilter>? OnCountAsync { get; set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
@@ -58,6 +60,7 @@ public class FakeMemoryStore : IMemoryStore
 
     public virtual Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
+        OnListAsync?.Invoke(filter);
         IReadOnlyList<MemoryRecord> records = Matching(filter).Select(point => point.Record).ToList();
         return Task.FromResult(records);
     }

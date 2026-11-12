@@ -42,7 +42,9 @@ public sealed class AgentActivityProjection(IMemoryStore store, IClock clock)
     private async Task<AgentActivityResponse> BuildAsync(int windowDays, CancellationToken cancellationToken)
     {
         var cutoff = clock.UtcNow.AddDays(-windowDays);
-        var records = await store.ListAsync(new MemoryFilter { CreatedAfter = cutoff }, cancellationToken);
+        var records = await store.ListAsync(
+            new MemoryFilter { CreatedAfter = cutoff, Statuses = MemoryStatuses.All },
+            cancellationToken);
         var activity = new Dictionary<MemoryActor, (int Count, DateTimeOffset Last)>();
 
         foreach (var record in records)

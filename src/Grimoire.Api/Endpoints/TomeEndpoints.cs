@@ -283,5 +283,5 @@ internal static class TomeEndpoints
         new(manifest.Key, manifest.Description, manifest.CreatedBy, manifest.CreatedAt, manifest.UpdatedAt);
 
     private static MemoryFilter TomeRecords(string tome) =>
-        new() { Tome = tome, Statuses = [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned] };
+        new() { Tome = tome, Statuses = MemoryStatuses.All };
 }

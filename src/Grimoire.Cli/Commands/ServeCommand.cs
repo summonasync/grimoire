@@ -27,7 +27,17 @@ internal sealed class ServeCommand(CliEnvironment environment)
             environment.Variable(ActorResolver.EnvironmentVariable),
             services.GetService<IAgentIdentitySource>());
         environment.Output.WriteLine($"Serving http://127.0.0.1:{options.Port} (static root: {options.StaticRootPath})");
+        // The Api host logs the same verdict structurally; this line is the operator's copy of it.
+        WriteStampWarning(environment.Output, SpaStampVerifier.Read(options.StaticRootPath));
         return await ApiHost.RunAsync(options, services, cancellationToken);
+    }
+
+    internal static void WriteStampWarning(TextWriter output, SpaStampVerdict verdict)
+    {
+        if (verdict.WarningLine is { } warning)
+        {
+            output.WriteLine($"Warning: {warning}");
+        }
     }
 
     internal static ApiHostOptions BuildHostOptions(

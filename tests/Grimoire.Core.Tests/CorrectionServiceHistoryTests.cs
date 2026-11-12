@@ -116,6 +116,22 @@ public sealed class CorrectionServiceHistoryTests
         history.Chain.Select(entry => entry.Status).ShouldBe([MemoryStatus.Active, MemoryStatus.Tombstoned]);
     }
 
+    [Fact]
+    public async Task History_FetchFilterAsksForEveryStatus()
+    {
+        var chain = SeedChain();
+
+        var lists = new List<MemoryFilter>();
+        _store.OnListAsync = lists.Add;
+
+        var history = await _service.HistoryAsync(chain[^1].Id, CancellationToken.None);
+
+        history.Chain.Count.ShouldBe(3);
+        lists.ShouldHaveSingleItem();
+        lists[0].Status.ShouldBeNull();
+        lists[0].Statuses.SequenceEqual(MemoryStatuses.All).ShouldBeTrue();
+    }
+
     private MemoryRecord[] SeedChain()
     {
         var newest = TestMemories.Create("deploy moved to monday", [1f, 0f, 0f], created: FakeClock.DefaultStart.AddHours(2));

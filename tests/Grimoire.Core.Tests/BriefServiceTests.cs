@@ -514,10 +514,16 @@ public sealed class BriefServiceTests
         SeedDailyNote(store, "friday note", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
         SeedIn(store, "plain journal note", created: Utc(2026, 11, 9, 4));
 
+        var captured = new List<MemoryFilter>();
+        store.OnListAsync = captured.Add;
+
         var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
             .BriefAsync(Query(daily: true), CancellationToken.None);
 
-        var dailyFilters = store.ListedFilters
+        // the hook fires at the top of ListAsync, so capture order is call order, exactly as the old
+        // per-call list was; window bounds are what separate the daily reads from the persona read,
+        // which also arrives carrying a tag
+        var dailyFilters = captured
             .Where(filter => filter.CreatedAfter is not null || filter.CreatedBefore is not null)
             .ToArray();
         dailyFilters.Length.ShouldBe(4);

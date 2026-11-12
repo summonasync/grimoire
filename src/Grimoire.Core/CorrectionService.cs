@@ -61,7 +61,9 @@ public sealed class CorrectionService(IMemoryStore store, IClock clock, MemoryEn
 
     public async Task<HistoryResult> HistoryAsync(Guid id, CancellationToken cancellationToken, string? tome = null)
     {
-        var records = await store.ListAsync(new MemoryFilter { Tome = ResolveTome(tome) }, cancellationToken);
+        var records = await store.ListAsync(
+            new MemoryFilter { Tome = ResolveTome(tome), Statuses = MemoryStatuses.All },
+            cancellationToken);
         var byId = records.ToDictionary(record => record.Id);
 
         if (!byId.TryGetValue(id, out var target))
