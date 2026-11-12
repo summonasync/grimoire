@@ -51,7 +51,7 @@ public sealed class StoreFilterCaptureTests
     }
 
     [Fact]
-    public async Task Count_HookSeesAFailingFilterShapeThatActiveOnlyReadWouldPass()
+    public async Task Count_HookCapturesTheFilterHandedToTheFake()
     {
         MemoryFilter? captured = null;
         _store.OnCountAsync = filter => captured = filter;

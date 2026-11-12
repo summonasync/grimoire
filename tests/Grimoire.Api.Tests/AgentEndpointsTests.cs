@@ -113,10 +113,10 @@ public class AgentEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         await factory.NewClient().GetAsync("/api/agents");
 
         factory.Store.OnListAsync = null;
-        lists.ShouldContain(filter =>
-            filter.CreatedAfter != null
-            && filter.Status == null
-            && filter.Statuses.SequenceEqual(MemoryStatuses.All));
+        lists.ShouldHaveSingleItem();
+        lists[0].CreatedAfter.ShouldNotBeNull();
+        lists[0].Status.ShouldBeNull();
+        lists[0].Statuses.SequenceEqual(MemoryStatuses.All).ShouldBeTrue();
     }
 
     private static TimeSpan CacheTtlEpsilon => TimeSpan.FromSeconds(31);

@@ -73,6 +73,8 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.GetCount = 0;
         Store.OnGetAsync = null;
         Store.OnFetchAsync = null;
+        Store.OnListAsync = null;
+        Store.OnCountAsync = null;
         Manifests.Clear();
         Embeddings.Requests.Clear();
         Embeddings.Failure = null;
