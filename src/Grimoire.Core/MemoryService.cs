@@ -247,7 +247,7 @@ public sealed class MemoryService(
             Status = MemoryStatus.Active,
             Limit = null,
         };
-        var total = await store.CountAsync(filter with { Status = null }, cancellationToken);
+        var total = await store.CountAsync(filter with { Status = null, Statuses = MemoryStatuses.All }, cancellationToken);
         var records = await store.ListAsync(filter, cancellationToken);
 
         var now = clock.UtcNow;
@@ -287,7 +287,7 @@ public sealed class MemoryService(
             Status = MemoryStatus.Active,
             Limit = null,
         };
-        var total = await store.CountAsync(scoped with { Status = null }, cancellationToken);
+        var total = await store.CountAsync(scoped with { Status = null, Statuses = MemoryStatuses.All }, cancellationToken);
         var records = await store.ListAsync(scoped, cancellationToken);
 
         var result = await RewriteTomeAsync(records, target, actor, cancellationToken);

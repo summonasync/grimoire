@@ -231,6 +231,37 @@ without one need the runtime or the self-contained release binary instead.
 External installers (Overmind's assisted install) spawn exactly these
 commands and then probe `grimoire --version`.
 
+The console UI does not ride the package: `grimoire serve` reads the static
+export off disk — `~/.grimoire/web`, or `--web-root <dir>` for anywhere else —
+so packing only the CLI ships a web face built for the previous release. The
+export step, from the repo root:
+
+```bash
+(cd web && npm ci && npm run build)   # postbuild emits web/out/grimoire-web.json
+rsync -a --delete web/out/ ~/.grimoire/web/
+```
+
+`npm run build` exports the SPA and `web/scripts/emit-web-stamp.mjs` stamps the
+export with `productVersion` (read from `Directory.Build.props`, the single
+version truth), `webSha` and `builtAt`. `serve` compares that stamp against the
+running binary at boot and prints what it found. Both branches, verbatim from a
+boot of this branch's binary:
+
+```
+Warning: Deployed SPA export reports version 0.1.0 while this binary is 0.8.0; the served UI was built for a different release. Rebuild web/ and redeploy the export.
+Warning: Deployed SPA export version is unknown (grimoire-web.json is absent); it was never compared against this binary (0.8.0).
+```
+
+The first is a mismatch and names both versions; the second is the
+absent-or-unreadable branch, which says unknown and never claims stale — there
+was nothing to measure. Either way the host still serves the UI; the point is
+that a skipped deploy has stopped being silent.
+
+Release record: the `audits/release-<ver>-<date>.md` audit (precedent
+`audits/release-0.8.0-2026-11-10.md`) must name the deployed stamp's
+`productVersion` — the value `cat ~/.grimoire/web/grimoire-web.json` answers
+after the copy. An audit without that line is an incomplete release.
+
 Windows: a hidden-console launcher, a logon task and the config edits a fresh box
 needed live in [`deploy/windows/`](deploy/windows/README.md) (`grimoire ui` is
 Linux-only today).

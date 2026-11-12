@@ -7,9 +7,6 @@ public static class MemoryQueryParser
     public const int DefaultLimit = 50;
     public const int MaxLimit = 500;
 
-    private static readonly IReadOnlyList<MemoryStatus> AllStatuses =
-        [MemoryStatus.Active, MemoryStatus.Superseded, MemoryStatus.Tombstoned];
-
     public static ParsedMemoryQuery Parse(MemoryListQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -56,7 +53,7 @@ public static class MemoryQueryParser
         var trimmed = raw.Trim();
         if (trimmed.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
-            return AllStatuses;
+            return MemoryStatuses.All;
         }
 
         var requested = new HashSet<MemoryStatus>();
@@ -72,7 +69,7 @@ public static class MemoryQueryParser
             requested.Add(status);
         }
 
-        return [.. AllStatuses.Where(requested.Contains)];
+        return [.. MemoryStatuses.All.Where(requested.Contains)];
     }
 
     private static IReadOnlyList<MemoryScope> ParseScopes(string? raw)

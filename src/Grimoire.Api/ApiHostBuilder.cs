@@ -9,6 +9,8 @@ using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace Grimoire.Api;
 
@@ -36,6 +38,10 @@ public static class ApiHostBuilder
         var persona = services.GetService<PersonaService>() ?? new PersonaService(store, embeddings, clock);
 
         var builder = WebApplication.CreateBuilder();
+        // serve writes two logging stacks into the same stdout: the Cli's Serilog console sink and
+        // this host's. The stamp verdict reaches the operator through the Cli line, so the Api copy
+        // stays a record for other providers and stops rendering a second time here.
+        builder.Logging.AddFilter<ConsoleLoggerProvider>(nameof(SpaHosting), LogLevel.None);
         // Kestrel loads endpoint configuration (env vars, appsettings) additively on top of
         // code-level Listen; clearing the sources keeps ApiHostOptions the only bind authority.
         if (!options.DisableConfigSourceClear)
