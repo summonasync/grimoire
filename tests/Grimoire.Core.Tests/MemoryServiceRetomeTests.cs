@@ -93,6 +93,23 @@ public sealed class MemoryServiceRetomeTests
     }
 
     [Fact]
+    public async Task Retome_ByFilter_BuriedTome_MovesNothingAndReportsTheWholeTailAsSkipped()
+    {
+        var superseded = Seed(tome: "alpha", status: MemoryStatus.Superseded);
+        var buried = Seed(tome: "alpha", status: MemoryStatus.Tombstoned, tombstoneReason: "stale", tombstonedAt: _clock.UtcNow);
+
+        var result = await _service.RetomeAsync(
+            new MemoryFilter { Tome = "alpha" },
+            "gamma",
+            CancellationToken.None);
+
+        result.Retomed.ShouldBe(0);
+        result.Skipped.ShouldBe(2);
+        _store.Records.Single(record => record.Id == superseded.Id).Tome.ShouldBe("alpha");
+        _store.Records.Single(record => record.Id == buried.Id).Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
     public async Task Retome_ByFilter_CountFilterAsksForEveryStatus()
     {
         Seed(tome: "alpha", status: MemoryStatus.Superseded);
