@@ -182,6 +182,48 @@ public sealed class MemoryServiceForgetTomeTests
         result.Skipped.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task ForgetTome_SkippedTailCoversSupersededAndTombstoned()
+    {
+        Seed(tome: "alpha");
+        Seed(tome: "alpha", status: MemoryStatus.Superseded, supersededBy: Guid.NewGuid());
+        Seed(tome: "alpha", status: MemoryStatus.Tombstoned, tombstoneReason: "stale", tombstonedAt: _clock.UtcNow);
+
+        var result = await _service.ForgetTomeAsync("alpha", "tome retired", CancellationToken.None, TestMemories.Agent);
+
+        result.Forgotten.ShouldBe(1);
+        result.Skipped.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task ForgetTome_BuriedTome_ReportsTheWholeTailAsSkippedWithoutWrites()
+    {
+        Seed(tome: "alpha", status: MemoryStatus.Superseded, supersededBy: Guid.NewGuid());
+        Seed(tome: "alpha", status: MemoryStatus.Tombstoned, tombstoneReason: "stale", tombstonedAt: _clock.UtcNow);
+
+        var result = await _service.ForgetTomeAsync("alpha", "tome retired", CancellationToken.None);
+
+        result.Forgotten.ShouldBe(0);
+        result.Skipped.ShouldBe(2);
+        _store.UpdateCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ForgetTome_CountFilterAsksForEveryStatus()
+    {
+        Seed(tome: "alpha", status: MemoryStatus.Superseded, supersededBy: Guid.NewGuid());
+
+        var counts = new List<MemoryFilter>();
+        _store.OnCountAsync = counts.Add;
+
+        await _service.ForgetTomeAsync("alpha", "tome retired", CancellationToken.None);
+
+        counts.ShouldContain(filter =>
+            filter.Status == null
+            && filter.Statuses.SequenceEqual(MemoryStatuses.All)
+            && filter.Tome == "alpha");
+    }
+
     private MemoryRecord Seed(
         string? tome = null,
         MemoryStatus status = MemoryStatus.Active,

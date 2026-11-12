@@ -101,5 +101,23 @@ public class AgentEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gri
         fresh.GetProperty("agents")[0].GetProperty("alias").GetString().ShouldBe("late-bot");
     }
 
+    [Fact]
+    public async Task Get_ActivityReadAsksForEveryStatus()
+    {
+        factory.Reset();
+        factory.Clock.Advance(CacheTtlEpsilon);
+
+        var lists = new List<MemoryFilter>();
+        factory.Store.OnListAsync = lists.Add;
+
+        await factory.NewClient().GetAsync("/api/agents");
+
+        factory.Store.OnListAsync = null;
+        lists.ShouldHaveSingleItem();
+        lists[0].CreatedAfter.ShouldNotBeNull();
+        lists[0].Status.ShouldBeNull();
+        lists[0].Statuses.SequenceEqual(MemoryStatuses.All).ShouldBeTrue();
+    }
+
     private static TimeSpan CacheTtlEpsilon => TimeSpan.FromSeconds(31);
 }
