@@ -15,22 +15,16 @@ public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock cloc
         };
     }
 
-    public static TimeZoneInfo ResolveZone(string? timeZoneId)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-        {
-            return TimeZoneInfo.Utc;
-        }
+    public static TimeZoneInfo ResolveZone(string? timeZoneId) =>
+        ResolveSystemZone(string.IsNullOrWhiteSpace(timeZoneId) ? TimeZoneInfo.Local.Id : timeZoneId);
 
+    private static TimeZoneInfo ResolveSystemZone(string timeZoneId)
+    {
         try
         {
             return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         }
-        catch (TimeZoneNotFoundException)
-        {
-            return TimeZoneInfo.Utc;
-        }
-        catch (InvalidTimeZoneException)
+        catch (Exception failure) when (failure is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
             return TimeZoneInfo.Utc;
         }

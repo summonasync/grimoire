@@ -1,3 +1,4 @@
+using System.Globalization;
 using Grimoire.Core.Tests.Fakes;
 using Shouldly;
 using Xunit;
@@ -116,15 +117,93 @@ public sealed class DailyWindowResolverTests
     [Theory]
     [InlineData("Not/AZone")]
     [InlineData("Mars/Olympus_Mons")]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData(null)]
-    public void ResolveZone_UnknownOrBlankId_FallsBackToUtcWithoutThrowing(string? timeZoneId)
+    public void ResolveZone_UnknownId_FallsBackToUtcWithoutThrowing(string timeZoneId)
     {
         var zone = DailyWindowResolver.ResolveZone(timeZoneId);
 
         zone.ShouldBeSameAs(TimeZoneInfo.Utc);
-        zone.BaseUtcOffset.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveZone_MissingId_DefaultsToTheMachineLocalZone(string? timeZoneId)
+    {
+        var zone = DailyWindowResolver.ResolveZone(timeZoneId);
+        var machineLocal = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id);
+
+        zone.Id.ShouldBe(machineLocal.Id);
+        zone.BaseUtcOffset.ShouldBe(machineLocal.BaseUtcOffset);
+
+        if (machineLocal.Id != "UTC")
+        {
+            zone.ShouldNotBeSameAs(TimeZoneInfo.Utc);
+        }
+    }
+
+    [Fact]
+    public void Resolve_OptionsWithoutZone_BuildWindowsOfTheLocallyDerivedZone()
+    {
+        var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
+        var expected = PlanAt(now, TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id));
+
+        var plan = Resolver(now, new MemoryEngineOptions()).Resolve();
+
+        plan.Today.ShouldBe(expected.Today);
+        plan.LastWorkingDayCandidates.ShouldBe(expected.LastWorkingDayCandidates);
+        plan.Today.CreatedAfter.Offset.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public void Resolve_OptionsWithExplicitZone_WinOverTheMachineDefault()
+    {
+        var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
+        var kyiv = DailyWindowResolver.ResolveZone("Europe/Kyiv");
+        var expected = PlanAt(now, kyiv);
+        var machineDefault = PlanAt(now, DailyWindowResolver.ResolveZone(null));
+
+        var plan = Resolver(now, new MemoryEngineOptions { DailyTimeZone = "Europe/Kyiv" }).Resolve();
+
+        plan.Today.ShouldBe(expected.Today);
+        if (expected.Today.CreatedAfter != machineDefault.Today.CreatedAfter)
+        {
+            plan.Today.CreatedAfter.ShouldNotBe(machineDefault.Today.CreatedAfter);
+        }
+    }
+
+    [Theory]
+    [InlineData("2026-03-29T12:00:00Z", "2026-03-29", 23, "2026-03-28T22:00:00Z", "2026-03-29T21:00:00Z")]
+    [InlineData("2026-10-25T12:00:00Z", "2026-10-25", 25, "2026-10-24T21:00:00Z", "2026-10-25T22:00:00Z")]
+    public void Resolve_KyivTransitionDay_WindowAndNeighboursFollowTheClockShift(
+        string nowIso,
+        string dayIso,
+        int windowHours,
+        string afterIso,
+        string beforeIso)
+    {
+        var zone = DailyWindowResolver.ResolveZone("Europe/Kyiv");
+        zone.Id.ShouldBe("Europe/Kyiv");
+
+        var plan = PlanAt(DateTimeOffset.Parse(nowIso, CultureInfo.InvariantCulture), zone);
+        var previousDay = plan.LastWorkingDayCandidates[0];
+
+        plan.Today.Day.ShouldBe(DateOnly.ParseExact(dayIso, "yyyy-MM-dd", CultureInfo.InvariantCulture));
+        plan.Today.CreatedAfter.ShouldBe(DateTimeOffset.Parse(afterIso, CultureInfo.InvariantCulture));
+        plan.Today.CreatedBefore.ShouldBe(DateTimeOffset.Parse(beforeIso, CultureInfo.InvariantCulture));
+        (plan.Today.CreatedBefore - plan.Today.CreatedAfter).TotalHours.ShouldBe(windowHours);
+        (previousDay.CreatedBefore - previousDay.CreatedAfter).TotalHours.ShouldBe(24);
+        plan.Today.CreatedAfter.ShouldBe(previousDay.CreatedBefore);
+
+        var windows = new[] { plan.Today }.Concat(plan.LastWorkingDayCandidates).ToList();
+        windows.ShouldAllBe(window => window.CreatedBefore > window.CreatedAfter);
+        windows.ShouldAllBe(window => window.CreatedAfter.Offset == TimeSpan.Zero
+            && window.CreatedBefore.Offset == TimeSpan.Zero);
+
+        for (var index = 0; index < windows.Count - 1; index++)
+        {
+            windows[index].CreatedAfter.ShouldBe(windows[index + 1].CreatedBefore);
+        }
     }
 
     [Fact]
@@ -147,6 +226,8 @@ public sealed class DailyWindowResolverTests
         plan.Today.Day.ShouldBe(new DateOnly(2026, 11, 12));
         plan.Today.CreatedAfter.ShouldBe(new DateTimeOffset(2026, 11, 12, 0, 0, 0, TimeSpan.Zero));
         plan.Today.CreatedBefore.ShouldBe(new DateTimeOffset(2026, 11, 13, 0, 0, 0, TimeSpan.Zero));
+        plan.Today.CreatedAfter.Offset.ShouldBe(TimeSpan.Zero);
+        plan.Today.CreatedBefore.Offset.ShouldBe(TimeSpan.Zero);
     }
 
     [Fact]
@@ -182,11 +263,11 @@ public sealed class DailyWindowResolverTests
 
     private static bool Holds(DailyWindow window, MemoryRecord note) =>
         new MemoryFilter
-            {
-                CreatedAfter = window.CreatedAfter,
-                CreatedBefore = window.CreatedBefore,
-            }
-            .Matches(note);
+        {
+            CreatedAfter = window.CreatedAfter,
+            CreatedBefore = window.CreatedBefore,
+        }
+        .Matches(note);
 
     private static DailyWindow? FirstCandidateHolding(DailyWindowPlan plan, params MemoryRecord[] notes) =>
         plan.LastWorkingDayCandidates.FirstOrDefault(window => notes.Any(note => Holds(window, note)));
