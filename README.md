@@ -339,16 +339,22 @@ wire-level contract tests.
 ## Configuration
 
 `~/.grimoire/config.json`, every key overridable via
-`GRIMOIRE_<SECTION>__<PROP>`:
+`GRIMOIRE_<SECTION>__<PROP>`; a root-level key such as `defaultTome` overrides
+as `GRIMOIRE_DEFAULTTOME`:
 
 | Section | Keys (defaults) |
 |---|---|
+| *(root)* | `defaultTome` (`default`) |
 | `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
 | `embedding` | `provider` (`ollama`), `model` (`qwen3-embedding`), `endpoint` (`http://localhost:11434`), `dimensions` (1024) |
-| `memory` | `defaultTome` (`default`), `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
+| `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 
 Unknown keys are rejected — typos in a hand-edited file fail loudly.
+`grimoire config set` addresses `section.property` pairs, so a root-level key
+like `defaultTome` is edited directly in the file. That key is also the tome
+the CLI `report` reads: `GRIMOIRE_TOME` steers the MCP and web faces and the
+`--tome` flag chain of the verbs that have it, and `report` has no such flag.
 
 ## Development
 
