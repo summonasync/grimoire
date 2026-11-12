@@ -1,15 +1,20 @@
 using Grimoire.Api.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
 
 namespace Grimoire.Api;
 
 internal static class SpaHosting
 {
-    public static void UseSpaFrontend(this WebApplication app, ApiHostOptions options)
+    public static SpaStampVerdict UseSpaFrontend(this WebApplication app, ApiHostOptions options)
     {
         var root = Path.GetFullPath(options.StaticRootPath);
+        var stamp = SpaStampVerifier.Read(root);
+        ReportStamp(app, stamp, root);
+
         var exportExists = Directory.Exists(root);
         if (exportExists)
         {
@@ -17,6 +22,21 @@ internal static class SpaHosting
         }
 
         app.MapFallback(context => ServeFallbackAsync(context, root, exportExists));
+
+        return stamp;
+    }
+
+    private static void ReportStamp(WebApplication app, SpaStampVerdict stamp, string root)
+    {
+        if (stamp.WarningLine is not { } warning)
+        {
+            return;
+        }
+
+        app.Services.GetService<ILoggerFactory>()?
+            .CreateLogger(nameof(SpaHosting))
+            .LogWarning("Deployed SPA release stamp {State} export={ExportVersion} binary={BinaryVersion} cause={Cause} root={StaticRoot}: {Warning}",
+                stamp.State, stamp.ExportVersion, stamp.BinaryVersion, stamp.Cause, root, warning);
     }
 
     private static async Task ServeFallbackAsync(HttpContext context, string root, bool exportExists)
