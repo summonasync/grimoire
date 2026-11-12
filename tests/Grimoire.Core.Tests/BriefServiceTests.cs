@@ -440,7 +440,7 @@ public sealed class BriefServiceTests
     }
 
     [Fact]
-    public async Task Brief_DailyFlag_OverBudgetTailIsCountedInDailyMore()
+    public async Task Brief_DailyFlag_OverBudgetTailIsCountedInDailyMoreAndNamedInOmitted()
     {
         var store = new FakeMemoryStore();
         for (var index = 0; index < 4; index++)
@@ -455,7 +455,26 @@ public sealed class BriefServiceTests
         brief.DailyGroups.ShouldHaveSingleItem();
         brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(
             [new string('a', 40), new string('b', 40)]);
+        brief.DailyGroups.SelectMany(group => group.Entries).ShouldAllBe(entry => !entry.Truncated);
         brief.DailyMore.ShouldBe(2);
+        brief.Omitted.ShouldBe([BriefSection.Daily]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_CaseVariantsOfOneAliasCollapseIntoOneGroup()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "radim older note", Utc(2026, 11, 9, 4), "Radim", "claude");
+        SeedDailyNote(store, "radim newer note", Utc(2026, 11, 9, 5), "radim", "qwen");
+        SeedDailyNote(store, "zulin one note", Utc(2026, 11, 9, 6), "Zulin", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyGroups.Count.ShouldBe(2);
+        brief.DailyGroups.Select(group => group.Actor).ToList().ShouldBe(["Radim", "Zulin"]);
+        brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList()
+            .ShouldBe(["radim older note", "radim newer note"]);
     }
 
     [Fact]
@@ -463,16 +482,27 @@ public sealed class BriefServiceTests
     {
         var store = new FakeMemoryStore();
         SeedIn(store, new string('f', 50), kind: MemoryKind.Fact);
-        SeedDailyNote(store, new string('d', 200), Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedIn(store, new string('j', 30), created: Utc(2026, 11, 9, 4));
+        SeedDailyNote(store, new string('d', 400), Utc(2026, 11, 9, 5), "medivh", "claude");
+        _manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "the alpha tome",
+            CreatedBy = "medivh",
+            CreatedAt = Utc(2026, 11, 1, 9),
+            UpdatedAt = Utc(2026, 11, 1, 9),
+        });
 
-        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions() with { BriefMaxTotalChars = 10 })
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions() with { BriefMaxTotalChars = 200 })
             .BriefAsync(Query(daily: true), CancellationToken.None);
 
-        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
-        brief.Omitted.ShouldBe([BriefSection.Facts]);
-        brief.JournalState.ShouldBe(BriefSectionState.Empty);
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.JournalState.ShouldBe(BriefSectionState.Populated);
+        brief.TomesState.ShouldBe(BriefSectionState.Populated);
         brief.DailyState.ShouldBe(BriefSectionState.Populated);
-        brief.DailyGroups.SelectMany(group => group.Entries).Single().Content.Length.ShouldBe(200);
+        brief.Omitted.ShouldBeEmpty();
+        brief.Journal.Select(entry => entry.Content).ToList().ShouldBe([new string('j', 30)]);
+        brief.DailyGroups.SelectMany(group => group.Entries).Single().Content.Length.ShouldBe(400);
         brief.DailyMore.ShouldBe(0);
     }
 
@@ -575,31 +605,38 @@ public sealed class BriefServiceTests
     }
 
     [Fact]
-    public async Task Brief_DailyFlag_WithoutZoneUsesTheMachineLocalDayBoundary()
+    public async Task Brief_DailyFlag_WithoutZoneTheEmittedDayIsTheHostZoneCalendarDay()
     {
         var now = new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero);
-        var defaultPlan = new DailyWindowResolver(new MemoryEngineOptions(), new FakeClock(now)).Resolve();
+        var hostDay = LocalDayOf(now, TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id));
+        var utcDay = LocalDayOf(now, TimeZoneInfo.Utc);
         var store = new FakeMemoryStore();
-        SeedDailyNote(store, "just after local midnight", defaultPlan.Today.CreatedAfter.AddMinutes(30), "medivh", "claude");
+        SeedDailyNote(store, "thirty minutes before the clock", now.AddMinutes(-30), "medivh", "claude");
 
         var brief = await ServiceAt(now, store, new MemoryEngineOptions())
             .BriefAsync(Query(daily: true), CancellationToken.None);
 
         brief.DailyGroups.ShouldHaveSingleItem();
         brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.Today);
-        brief.DailyGroups[0].Day.ShouldBe(defaultPlan.Today.Day);
-        if (DailyWindowResolver.ResolveZone(null).Id != "UTC")
+        brief.DailyGroups[0].Day.ShouldBe(hostDay, "the day boundary must come from the zone the resolver reports for an unset key, never from a hardcoded UTC day");
+
+        // Only a host whose zone moves the calendar day can distinguish the two routes; on a
+        // UTC-local host the values coincide and this half of the claim is unfalsifiable by
+        // construction, so it is asserted as a gate rather than skipped silently.
+        if (hostDay != utcDay)
         {
-            brief.DailyGroups[0].Day.ShouldNotBe(new DateOnly(now.Year, now.Month, now.Day));
+            brief.DailyGroups[0].Day.ShouldNotBe(utcDay);
         }
     }
 
     [Fact]
-    public async Task Brief_DailyFlag_ExplicitZoneWinsOverTheMachineDefault()
+    public async Task Brief_DailyFlag_ExplicitZoneOverridesTheHostDefault()
     {
         var now = new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero);
+        var hostDay = LocalDayOf(now, TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id));
+        var utcDay = LocalDayOf(now, TimeZoneInfo.Utc);
         var store = new FakeMemoryStore();
-        SeedDailyNote(store, "boundary note", new DateTimeOffset(2026, 11, 12, 21, 30, 0, TimeSpan.Zero), "medivh", "claude");
+        SeedDailyNote(store, "thirty minutes before the clock", now.AddMinutes(-30), "medivh", "claude");
 
         var pinned = await ServiceAt(now, store, new MemoryEngineOptions { DailyTimeZone = "UTC" })
             .BriefAsync(Query(daily: true), CancellationToken.None);
@@ -607,10 +644,10 @@ public sealed class BriefServiceTests
             .BriefAsync(Query(daily: true), CancellationToken.None);
 
         pinned.DailyGroups.ShouldHaveSingleItem();
-        pinned.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 12));
+        pinned.DailyGroups[0].Day.ShouldBe(utcDay);
         defaulted.DailyGroups.ShouldHaveSingleItem();
-        defaulted.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 13));
-        if (DailyWindowResolver.ResolveZone(null).Id != "UTC")
+        defaulted.DailyGroups[0].Day.ShouldBe(hostDay);
+        if (hostDay != utcDay)
         {
             defaulted.DailyGroups[0].Day.ShouldNotBe(pinned.DailyGroups[0].Day);
         }
@@ -621,7 +658,8 @@ public sealed class BriefServiceTests
     {
         SeedSnapshotFixture(_store, _manifests);
 
-        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+        var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" })
+            .BriefAsync(Query(), CancellationToken.None);
 
         Sha256Hex(CanonicalPayload(brief)).ShouldBe("2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
     }
@@ -631,7 +669,7 @@ public sealed class BriefServiceTests
     {
         SeedSnapshotFixture(_store, _manifests);
 
-        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 120 })
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 120, DailyTimeZone = "Europe/Moscow" })
             .BriefAsync(Query(), CancellationToken.None);
 
         brief.Omitted.ShouldNotBeEmpty();
@@ -657,6 +695,12 @@ public sealed class BriefServiceTests
 
     private static DateTimeOffset MoscowMidnightUtc(DateOnly day) =>
         new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(3)).ToUniversalTime();
+
+    private static DateOnly LocalDayOf(DateTimeOffset instant, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(instant, zone);
+        return new DateOnly(local.Year, local.Month, local.Day);
+    }
 
     private static void SeedDailyNote(
         FakeMemoryStore store,

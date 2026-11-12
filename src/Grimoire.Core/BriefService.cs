@@ -70,7 +70,7 @@ public sealed class BriefService(
             dailyMore = daily.More;
             dailyFound = daily.Found;
 
-            if (daily.Truncated)
+            if (daily.Truncated || daily.More > 0)
             {
                 omitted.Add(BriefSection.Daily);
             }
@@ -242,8 +242,8 @@ public sealed class BriefService(
             var ordered = bucket.Records
                 .OrderBy(record => record.CreatedAt)
                 .ThenBy(record => record.Id)
-                .GroupBy(record => record.Actor.Alias)
-                .OrderBy(group => group.Key, StringComparer.Ordinal);
+                .GroupBy(record => record.Actor.Alias, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase);
 
             foreach (var byActor in ordered)
             {
