@@ -163,12 +163,14 @@ public sealed class DailyWindowResolverTests
     {
         var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
         var options = new MemoryEngineOptions { DailyTimeZone = "Europe/Kyiv" };
-        var kyiv = DailyWindowResolver.ResolveZone(options.DailyTimeZone).Zone;
+        var resolved = DailyWindowResolver.ResolveZone(options.DailyTimeZone);
+        var kyiv = resolved.Zone;
         var expected = PlanAt(now, kyiv);
         var machineDefault = PlanAt(now, DailyWindowResolver.ResolveZone(null).Zone);
 
         var plan = Resolver(now, options).Resolve(kyiv);
 
+        resolved.Source.ShouldBe(DailyZoneSource.Configured);
         plan.Today.ShouldBe(expected.Today);
         if (expected.Today.CreatedAfter != machineDefault.Today.CreatedAfter)
         {
