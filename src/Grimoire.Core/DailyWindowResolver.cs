@@ -2,8 +2,6 @@ namespace Grimoire.Core;
 
 public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock clock)
 {
-    public DailyWindowPlan Resolve() => Resolve(ResolveZone(options.DailyTimeZone).Zone);
-
     public DailyWindowPlan Resolve(TimeZoneInfo zone)
     {
         var today = LocalDay(clock.UtcNow, zone);

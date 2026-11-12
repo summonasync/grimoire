@@ -146,10 +146,13 @@ public sealed class DailyWindowResolverTests
     public void Resolve_OptionsWithoutZone_BuildWindowsOfTheLocallyDerivedZone()
     {
         var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
+        var options = new MemoryEngineOptions();
         var expected = PlanAt(now, TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id));
 
-        var plan = Resolver(now, new MemoryEngineOptions()).Resolve();
+        var zone = DailyWindowResolver.ResolveZone(options.DailyTimeZone);
+        var plan = Resolver(now, options).Resolve(zone.Zone);
 
+        zone.Source.ShouldBe(DailyZoneSource.MachineLocal);
         plan.Today.ShouldBe(expected.Today);
         plan.LastWorkingDayCandidates.ShouldBe(expected.LastWorkingDayCandidates);
         plan.Today.CreatedAfter.Offset.ShouldBe(TimeSpan.Zero);
@@ -159,11 +162,12 @@ public sealed class DailyWindowResolverTests
     public void Resolve_OptionsWithExplicitZone_WinOverTheMachineDefault()
     {
         var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
-        var kyiv = DailyWindowResolver.ResolveZone("Europe/Kyiv").Zone;
+        var options = new MemoryEngineOptions { DailyTimeZone = "Europe/Kyiv" };
+        var kyiv = DailyWindowResolver.ResolveZone(options.DailyTimeZone).Zone;
         var expected = PlanAt(now, kyiv);
         var machineDefault = PlanAt(now, DailyWindowResolver.ResolveZone(null).Zone);
 
-        var plan = Resolver(now, new MemoryEngineOptions { DailyTimeZone = "Europe/Kyiv" }).Resolve();
+        var plan = Resolver(now, options).Resolve(kyiv);
 
         plan.Today.ShouldBe(expected.Today);
         if (expected.Today.CreatedAfter != machineDefault.Today.CreatedAfter)
@@ -253,12 +257,14 @@ public sealed class DailyWindowResolverTests
     [Fact]
     public void Resolve_OptionsCarryingGarbageZone_BuildsUtcDayWindows()
     {
-        var resolver = Resolver(
-            new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero),
-            new MemoryEngineOptions { DailyTimeZone = "Not/AZone" });
+        var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
+        var options = new MemoryEngineOptions { DailyTimeZone = "Not/AZone" };
+        var zone = DailyWindowResolver.ResolveZone(options.DailyTimeZone);
 
-        var plan = resolver.Resolve();
+        var plan = Resolver(now, options).Resolve(zone.Zone);
 
+        zone.Source.ShouldBe(DailyZoneSource.UtcFallback);
+        zone.Zone.ShouldBeSameAs(TimeZoneInfo.Utc);
         plan.Today.Day.ShouldBe(new DateOnly(2026, 11, 12));
         plan.Today.CreatedAfter.ShouldBe(new DateTimeOffset(2026, 11, 12, 0, 0, 0, TimeSpan.Zero));
         plan.Today.CreatedBefore.ShouldBe(new DateTimeOffset(2026, 11, 13, 0, 0, 0, TimeSpan.Zero));
@@ -269,11 +275,10 @@ public sealed class DailyWindowResolverTests
     [Fact]
     public void Resolve_OptionsCarryingMoscowZone_BuildsThatZonesLocalDay()
     {
-        var resolver = Resolver(
-            new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero),
-            new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" });
+        var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
+        var options = new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" };
 
-        var plan = resolver.Resolve();
+        var plan = Resolver(now, options).Resolve(DailyWindowResolver.ResolveZone(options.DailyTimeZone).Zone);
 
         plan.Today.CreatedAfter.ShouldBe(new DateTimeOffset(2026, 11, 11, 21, 0, 0, TimeSpan.Zero));
         plan.Today.CreatedBefore.ShouldBe(new DateTimeOffset(2026, 11, 12, 21, 0, 0, TimeSpan.Zero));
