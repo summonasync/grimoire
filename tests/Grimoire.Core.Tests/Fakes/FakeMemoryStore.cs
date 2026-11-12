@@ -14,6 +14,8 @@ public sealed class FakeMemoryStore : IMemoryStore
 
     public int ListCallCount { get; private set; }
 
+    public List<MemoryFilter> ListedFilters { get; } = [];
+
     public int SearchCallCount { get; private set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
@@ -47,6 +49,7 @@ public sealed class FakeMemoryStore : IMemoryStore
     public Task<IReadOnlyList<MemoryRecord>> ListAsync(MemoryFilter filter, CancellationToken cancellationToken)
     {
         ListCallCount++;
+        ListedFilters.Add(filter);
         IReadOnlyList<MemoryRecord> records = Matching(filter).Select(point => point.Record).ToList();
         return Task.FromResult(records);
     }

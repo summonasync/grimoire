@@ -1,4 +1,8 @@
 using Grimoire.Core.Tests.Fakes;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Shouldly;
 using Xunit;
 
@@ -16,6 +20,8 @@ public sealed class BriefServiceTests
     private readonly FakeClock _clock = new();
 
     private readonly FakeEmbeddingProvider _embeddings = new(Vectors);
+
+    private readonly FakeTomeManifestStore _manifests = new();
 
     [Fact]
     public async Task Brief_EmptyStore_ReturnsExplicitEmptyStates()
@@ -339,8 +345,384 @@ public sealed class BriefServiceTests
         beta.Journal.Select(entry => entry.Content).ShouldBe(["shared journal"]);
     }
 
+    [Fact]
+    public async Task Brief_DailyFlag_FourActorsEightNotesProduceFourGroupsOldestFirst()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "medivh pushed the brief", Utc(2026, 11, 8, 22), "medivh", "claude");
+        SeedDailyNote(store, "medivh opened the board", Utc(2026, 11, 9, 5), "medivh", "qwen");
+        SeedDailyNote(store, "medivh closed the gate", Utc(2026, 11, 9, 6, 30), "medivh", "claude");
+        SeedDailyNote(store, "thrall wired serilog", Utc(2026, 11, 9, 4), "thrall", "codex");
+        SeedDailyNote(store, "thrall fixed the port", Utc(2026, 11, 9, 5, 30), "thrall", "codex");
+        SeedDailyNote(store, "kelthuzad reviewed t1", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+        SeedDailyNote(store, "kelthuzad logged ac", Utc(2026, 11, 6, 9), "kelthuzad", "claude");
+        SeedDailyNote(store, "dagget slept", Utc(2026, 11, 6, 10), "dagget", "qwen");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+        brief.DailyMore.ShouldBe(0);
+        brief.DailyGroups.Select(group => group.Entries.Count).Sum().ShouldBe(8);
+        brief.DailyGroups
+            .Select(group => (group.Bucket, group.Actor))
+            .ToList()
+            .ShouldBe(
+            [
+                (BriefDailyBucket.LastWorkingDay, "dagget"),
+                (BriefDailyBucket.LastWorkingDay, "kelthuzad"),
+                (BriefDailyBucket.Today, "medivh"),
+                (BriefDailyBucket.Today, "thrall"),
+            ]);
+        brief.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 6));
+        brief.DailyGroups[2].Day.ShouldBe(new DateOnly(2026, 11, 9));
+        brief.DailyGroups[2].Entries.Select(entry => entry.Content).ToList().ShouldBe(
+            ["medivh pushed the brief", "medivh opened the board", "medivh closed the gate"]);
+        brief.DailyGroups[3].Entries.Select(entry => entry.Content).ToList().ShouldBe(
+            ["thrall wired serilog", "thrall fixed the port"]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NoRecordIdAppearsInBothDailyAndJournal()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "daily overlapping note", Utc(2026, 11, 9, 6), "medivh", "claude");
+        SeedIn(store, "plain journal note", created: Utc(2026, 11, 9, 5));
+        SeedIn(store, "older journal note", created: Utc(2026, 11, 4, 5));
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var dailyIds = brief.DailyGroups.SelectMany(group => group.Entries).Select(entry => entry.Id).ToList();
+        dailyIds.ShouldHaveSingleItem();
+        brief.Journal.Select(entry => entry.Id).Intersect(dailyIds).ShouldBeEmpty();
+        brief.Journal.Select(entry => entry.Content).ToList().ShouldBe(["plain journal note", "older journal note"]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_JournalKeepsItsPerScopeCountOnADailyHeavyDay()
+    {
+        var store = new FakeMemoryStore();
+        for (var index = 0; index < 5; index++)
+        {
+            SeedDailyNote(store, $"daily note {index}", Utc(2026, 11, 9, 3 + index), "medivh", "claude");
+        }
+
+        SeedIn(store, "plain newest", created: Utc(2026, 11, 9, 2));
+        SeedIn(store, "plain second", created: Utc(2026, 11, 8, 23));
+        SeedIn(store, "plain oldest", created: Utc(2026, 11, 7, 6));
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true, journalPerScope: 2), CancellationToken.None);
+
+        brief.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(5);
+        brief.Journal.Select(entry => entry.Content).ToList().ShouldBe(["plain newest", "plain second"]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OversizedBodyIsCappedFlaggedAndNamesDailyInOmitted()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "short daily note", Utc(2026, 11, 9, 4), "medivh", "claude");
+        SeedDailyNote(store, new string('x', 2000), Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var entries = brief.DailyGroups.SelectMany(group => group.Entries).ToList();
+        entries.Count.ShouldBe(2);
+        entries[0].Truncated.ShouldBeFalse();
+        entries[0].Content.ShouldBe("short daily note");
+        entries[1].Truncated.ShouldBeTrue();
+        entries[1].Content.Length.ShouldBe(1500);
+        brief.DailyMore.ShouldBe(0);
+        brief.Omitted.Count(section => section == BriefSection.Daily).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OverBudgetTailIsCountedInDailyMore()
+    {
+        var store = new FakeMemoryStore();
+        for (var index = 0; index < 4; index++)
+        {
+            SeedDailyNote(store, new string((char)('a' + index), 40), Utc(2026, 11, 9, 3 + index), "medivh", "claude");
+        }
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 100))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(
+            [new string('a', 40), new string('b', 40)]);
+        brief.DailyMore.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NeverConsumesTheSharedBriefBudget()
+    {
+        var store = new FakeMemoryStore();
+        SeedIn(store, new string('f', 50), kind: MemoryKind.Fact);
+        SeedDailyNote(store, new string('d', 200), Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions() with { BriefMaxTotalChars = 10 })
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
+        brief.Omitted.ShouldBe([BriefSection.Facts]);
+        brief.JournalState.ShouldBe(BriefSectionState.Empty);
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+        brief.DailyGroups.SelectMany(group => group.Entries).Single().Content.Length.ShouldBe(200);
+        brief.DailyMore.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_PinsTheExactStoreFilterFormForEachWindowRead()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "friday note", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+        SeedIn(store, "plain journal note", created: Utc(2026, 11, 9, 4));
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var dailyFilters = store.ListedFilters
+            .Where(filter => filter.CreatedAfter is not null || filter.CreatedBefore is not null)
+            .ToArray();
+        dailyFilters.Length.ShouldBe(4);
+
+        var expectedDays = new[] { new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 8), new DateOnly(2026, 11, 7), new DateOnly(2026, 11, 6) };
+        for (var index = 0; index < dailyFilters.Length; index++)
+        {
+            var filter = dailyFilters[index];
+            filter.Tags.ShouldBe(["daily-notes"]);
+            filter.Kind.ShouldBe(MemoryKind.Journal);
+            filter.Status.ShouldBe(MemoryStatus.Active);
+            filter.Tome.ShouldBe("default");
+            filter.ProjectId.ShouldBeNull();
+            filter.Scopes.ShouldBe([MemoryScope.Project, MemoryScope.Global]);
+            filter.ExcludeTags.ShouldBeEmpty();
+            filter.CreatedAfter.ShouldBe(MoscowMidnightUtc(expectedDays[index]));
+            filter.CreatedBefore.ShouldBe(MoscowMidnightUtc(expectedDays[index]).AddDays(1));
+            filter.CreatedAfter!.Value.Offset.ShouldBe(TimeSpan.Zero);
+            filter.CreatedBefore!.Value.Offset.ShouldBe(TimeSpan.Zero);
+        }
+
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NoteBeyondTheWindowUpperBoundNeverLeaksIntoAWindow()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "note two local days ahead", Utc(2026, 11, 11, 5), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.Today);
+        brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["today note"]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_SaturdayAndSundayEmptyResolveLastWorkingDayToFriday()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "kelthuzad reviewed t1", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+        SeedDailyNote(store, "kelthuzad logged ac", Utc(2026, 11, 6, 9), "kelthuzad", "claude");
+        SeedDailyNote(store, "dagget slept", Utc(2026, 11, 6, 10), "dagget", "qwen");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+        brief.DailyGroups.ShouldAllBe(group => group.Bucket == BriefDailyBucket.LastWorkingDay);
+        brief.DailyGroups.Select(group => group.Day).Distinct().ShouldHaveSingleItem().ShouldBe(new DateOnly(2026, 11, 6));
+        brief.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(3);
+        brief.DailyMore.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NoteOnTheOldestCandidateStillSurfaces()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "seven days back note", Utc(2026, 11, 2, 6), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.LastWorkingDay);
+        brief.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 2));
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NoteEightLocalDaysBackYieldsEmptySectionNotStale()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "eight days back note", Utc(2026, 11, 1, 6), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyState.ShouldBe(BriefSectionState.Empty);
+        brief.DailyGroups.ShouldBeEmpty();
+        brief.DailyMore.ShouldBe(0);
+        brief.Omitted.ShouldNotContain(BriefSection.Daily);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_WithoutZoneUsesTheMachineLocalDayBoundary()
+    {
+        var now = new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero);
+        var defaultPlan = new DailyWindowResolver(new MemoryEngineOptions(), new FakeClock(now)).Resolve();
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "just after local midnight", defaultPlan.Today.CreatedAfter.AddMinutes(30), "medivh", "claude");
+
+        var brief = await ServiceAt(now, store, new MemoryEngineOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.Today);
+        brief.DailyGroups[0].Day.ShouldBe(defaultPlan.Today.Day);
+        if (DailyWindowResolver.ResolveZone(null).Id != "UTC")
+        {
+            brief.DailyGroups[0].Day.ShouldNotBe(new DateOnly(now.Year, now.Month, now.Day));
+        }
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_ExplicitZoneWinsOverTheMachineDefault()
+    {
+        var now = new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero);
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "boundary note", new DateTimeOffset(2026, 11, 12, 21, 30, 0, TimeSpan.Zero), "medivh", "claude");
+
+        var pinned = await ServiceAt(now, store, new MemoryEngineOptions { DailyTimeZone = "UTC" })
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+        var defaulted = await ServiceAt(now, store, new MemoryEngineOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        pinned.DailyGroups.ShouldHaveSingleItem();
+        pinned.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 12));
+        defaulted.DailyGroups.ShouldHaveSingleItem();
+        defaulted.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 13));
+        if (DailyWindowResolver.ResolveZone(null).Id != "UTC")
+        {
+            defaulted.DailyGroups[0].Day.ShouldNotBe(pinned.DailyGroups[0].Day);
+        }
+    }
+
+    [Fact]
+    public async Task Brief_FlagOff_PayloadMatchesThePreFeatureSnapshot()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        Sha256Hex(CanonicalPayload(brief)).ShouldBe("2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
+    }
+
+    [Fact]
+    public async Task Brief_FlagOff_WithOmittedSections_MatchesThePreFeatureSnapshot()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 120 })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.Omitted.ShouldNotBeEmpty();
+        Sha256Hex(CanonicalPayload(brief)).ShouldBe("2a7774f2cdff6bd7daa097c00ca6d578d190b69b52670d140c29b3df083ac709");
+    }
+
+    private static readonly DateTimeOffset MoscowMondayUtc = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
+
+    private static MemoryEngineOptions DailyOptions(
+        string? zone = "Europe/Moscow",
+        int lookbackDays = 7,
+        int entryCap = 1500,
+        int totalCap = 6000) => new()
+        {
+            DailyTimeZone = zone,
+            DailyLookbackDays = lookbackDays,
+            BriefDailyMaxEntryChars = entryCap,
+            BriefDailyMaxTotalChars = totalCap,
+        };
+
+    private static DateTimeOffset Utc(int year, int month, int day, int hour, int minute = 0) =>
+        new(year, month, day, hour, minute, 0, TimeSpan.Zero);
+
+    private static DateTimeOffset MoscowMidnightUtc(DateOnly day) =>
+        new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(3)).ToUniversalTime();
+
+    private static void SeedDailyNote(
+        FakeMemoryStore store,
+        string content,
+        DateTimeOffset created,
+        string alias,
+        string vendor) =>
+        SeedIn(store, content, created: created, tags: ["daily-notes"], actor: MemoryActor.Agent(alias, vendor));
+
+    private static void SeedSnapshotFixture(FakeMemoryStore store, FakeTomeManifestStore manifests)
+    {
+        SeedIn(
+            store,
+            "you are a grimoire keeper",
+            scope: MemoryScope.Personal,
+            kind: MemoryKind.Fact,
+            tags: [PersonaSectionExtensions.PersonaTag, "persona:identity"],
+            id: StableId(1));
+        SeedIn(store, new string('f', 50), kind: MemoryKind.Fact, importance: 1, id: StableId(2));
+        SeedIn(store, "global rule", kind: MemoryKind.Fact, scope: MemoryScope.Global, importance: 0.6, id: StableId(3));
+        SeedIn(
+            store,
+            "buried decision",
+            status: MemoryStatus.Tombstoned,
+            tombstoneReason: "superseded by vote",
+            tombstonedAt: FakeClock.DefaultStart.AddDays(-1),
+            id: StableId(4));
+        SeedIn(store, "plain journal note", created: FakeClock.DefaultStart.AddHours(-1), id: StableId(5));
+        SeedIn(store, "daily heavy note", created: FakeClock.DefaultStart.AddMinutes(-30), tags: ["daily-notes"], id: StableId(6));
+        manifests.Seed(new TomeManifest
+        {
+            Key = "alpha",
+            Description = "the alpha tome",
+            CreatedBy = "medivh",
+            CreatedAt = FakeClock.DefaultStart.AddDays(-2),
+            UpdatedAt = FakeClock.DefaultStart.AddDays(-2),
+        });
+    }
+
+    private static Guid StableId(int slot) => Guid.Parse($"00000000-0000-4000-8000-0000000000{slot:x2}");
+
+    private static string CanonicalPayload(BriefResult brief) =>
+        JsonSerializer.Serialize(brief, SnapshotJson);
+
+    private static string Sha256Hex(string payload) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
+
+    private static readonly JsonSerializerOptions SnapshotJson = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private BriefService Service(MemoryEngineOptions? options = null) =>
-        new(_store, new PersonaService(_store, _embeddings, _clock), new FakeTomeManifestStore(), _clock, options);
+        new(_store, new PersonaService(_store, _embeddings, _clock), _manifests, _clock, options);
+
+    private BriefService ServiceAt(
+        DateTimeOffset now,
+        FakeMemoryStore store,
+        MemoryEngineOptions options,
+        FakeTomeManifestStore? manifests = null) =>
+        new(store,
+            new PersonaService(store, _embeddings, new FakeClock(now)),
+            manifests ?? _manifests,
+            new FakeClock(now),
+            options);
 
     private static BriefQuery Query(
         string? tome = null,
@@ -348,7 +730,8 @@ public sealed class BriefServiceTests
         IReadOnlyList<MemoryScope>? scopes = null,
         int? factsPerScope = null,
         int? journalPerScope = null,
-        int? tombstoneLimit = null) => new()
+        int? tombstoneLimit = null,
+        bool daily = false) => new()
         {
             Tome = tome,
             ProjectId = projectId,
@@ -356,6 +739,7 @@ public sealed class BriefServiceTests
             FactsPerScope = factsPerScope,
             JournalPerScope = journalPerScope,
             TombstoneLimit = tombstoneLimit,
+            Daily = daily,
         };
 
     private MemoryRecord Seed(
@@ -372,13 +756,35 @@ public sealed class BriefServiceTests
         Guid? supersededBy = null,
         string? tombstoneReason = null,
         DateTimeOffset? tombstonedAt = null,
-        string? tome = null)
+        string? tome = null) =>
+        SeedIn(_store, content, scope, kind, importance, created, accessed, projectId, sessionId, tags, status,
+            supersededBy, tombstoneReason, tombstonedAt, tome);
+
+    private static MemoryRecord SeedIn(
+        FakeMemoryStore store,
+        string content,
+        MemoryScope scope = MemoryScope.Project,
+        MemoryKind kind = MemoryKind.Journal,
+        double importance = 0.5,
+        DateTimeOffset? created = null,
+        DateTimeOffset? accessed = null,
+        string? projectId = null,
+        string? sessionId = null,
+        IReadOnlyList<string>? tags = null,
+        MemoryStatus status = MemoryStatus.Active,
+        Guid? supersededBy = null,
+        string? tombstoneReason = null,
+        DateTimeOffset? tombstonedAt = null,
+        string? tome = null,
+        MemoryActor? actor = null,
+        Guid? id = null)
     {
         var record = TestMemories.Create(
             content,
             [],
             scope: scope,
             kind: kind,
+            actor: actor,
             created: created,
             accessed: accessed,
             importance: importance,
@@ -390,7 +796,13 @@ public sealed class BriefServiceTests
             tombstoneReason: tombstoneReason,
             tombstonedAt: tombstonedAt,
             tome: tome);
-        _store.Seed(record, []);
+
+        if (id is { } fixedId)
+        {
+            record = record with { Id = fixedId };
+        }
+
+        store.Seed(record, []);
         return record;
     }
 
