@@ -549,6 +549,225 @@ public sealed class BriefToolTests
         payload.GetProperty("tomes").GetProperty("items").GetArrayLength().ShouldBe(0);
     }
 
+    [Fact]
+    public async Task Brief_DailyFlag_ReturnsGroupsByActorWithEntriesOldestFirst()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedDailyAsync(session, "medivh opened the board", DailyNote(0), "medivh", "claude");
+        await SeedDailyAsync(session, "medivh pushed the seam", DailyNote(30), "medivh", "qwen");
+        await SeedDailyAsync(session, "thrall wired the door", DailyNote(10), "thrall", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var daily = result.Payload().GetProperty("daily");
+        daily.GetProperty("state").GetString().ShouldBe("Populated");
+        daily.GetProperty("more").GetInt32().ShouldBe(0);
+
+        var groups = daily.GetProperty("groups");
+        groups.GetArrayLength().ShouldBe(2);
+        groups[0].GetProperty("actor").GetString().ShouldBe("medivh");
+        groups[0].GetProperty("bucket").GetString().ShouldBe("Today");
+        groups[0].GetProperty("day").GetString().ShouldBe(ExpectedLocalDay());
+        groups[0].GetProperty("entries").EnumerateArray()
+            .Select(entry => entry.GetProperty("content").GetString())
+            .ShouldBe(["medivh opened the board", "medivh pushed the seam"]);
+        groups[1].GetProperty("actor").GetString().ShouldBe("thrall");
+        groups[0].GetProperty("entries")[0].GetProperty("truncated").GetBoolean().ShouldBeFalse();
+        groups[0].GetProperty("entries")[0].GetProperty("memoryId").GetGuid().ShouldNotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OversizedBodyNamesDailyInOmittedInsteadOfThrowing()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedDailyAsync(session, new string('x', 2000), DailyNote(0), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("omitted").EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldContain("daily");
+        var entry = payload.GetProperty("daily").GetProperty("groups")[0].GetProperty("entries")[0];
+        entry.GetProperty("truncated").GetBoolean().ShouldBeTrue();
+        entry.GetProperty("content").GetString()!.Length.ShouldBe(1500);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OverBudgetTailCountsMoreAndNamesOmitted()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefDailyMaxTotalChars = 100 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        await SeedDailyAsync(session, new string('a', 40), DailyNote(0), "medivh", "claude");
+        await SeedDailyAsync(session, new string('b', 40), DailyNote(10), "medivh", "claude");
+        await SeedDailyAsync(session, new string('c', 40), DailyNote(20), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var daily = result.Payload().GetProperty("daily");
+        daily.GetProperty("groups")[0].GetProperty("entries").GetArrayLength().ShouldBe(2);
+        daily.GetProperty("more").GetInt32().ShouldBe(1);
+        result.Payload().GetProperty("omitted").EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldContain("daily");
+    }
+
+    [Fact]
+    public async Task Brief_WithoutDailyParam_CarriesNoDailyKeyAndMatchesTheRecordedWirePayload()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.TryGetProperty("daily", out _).ShouldBeFalse();
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+        Sha256Hex(result.Text()).ShouldBe("d670c7ae84f38c99c1d3ffc401005e39755c1a8c3c41323ef98dadc756ee70ee");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFalseParam_MatchesTheOmittedParamPayloadByteForByte()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var omitted = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+        var declined = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = false,
+        });
+
+        omitted.ShouldSucceed();
+        declined.ShouldSucceed();
+        Sha256Hex(declined.Text()).ShouldBe(Sha256Hex(omitted.Text()));
+        declined.Payload().TryGetProperty("daily", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_WithUnresolvableConfiguredZone_WarnsNamingTheId()
+    {
+        var engineOptions = new MemoryEngineOptions { DailyTimeZone = "Not/AZone" };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("daily").GetProperty("state").GetString().ShouldBe("Empty");
+        payload.GetProperty("warnings").EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldBe(["DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC."]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_ZoneWarningAndEmptyTomeWarningAreBothKept()
+    {
+        var engineOptions = new MemoryEngineOptions { DailyTimeZone = "Not/AZone" };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "warm the store",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var warnings = result.Payload().GetProperty("warnings").EnumerateArray()
+            .Select(value => value.GetString())
+            .ToArray();
+
+        warnings.Length.ShouldBe(2, customMessage:
+            "the projection must UNION the Core payload warning with the empty-tome note; " +
+            "one item means one of the two was overwritten");
+        warnings[0].ShouldBe("DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC.");
+        warnings[1].ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: test-client");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_WithResolvableZone_KeepsTheWarningsKeyAbsent()
+    {
+        var engineOptions = new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        await SeedDailyAsync(session, "moscow evening note", DailyNote(0), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("daily").GetProperty("state").GetString().ShouldBe("Populated");
+        payload.GetProperty("hint").GetString()!.ShouldContain("tome is empty",
+            customMessage: "characterization of today's behavior, not endorsement: IsEmpty() ignores DailyState, " +
+                "so a store whose only content is daily notes is still taught the scry door on a daily:true brief");
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse("an empty warnings list would serialize as a key");
+    }
+
+    [Fact]
+    public async Task Brief_DailySchema_ParamIsListedAndDescribed()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var schema = (await session.Client.ListToolMap())["memory_brief"].JsonSchema;
+        schema.TryGetProperty("properties", out var properties).ShouldBeTrue();
+        properties.TryGetProperty("daily", out var daily).ShouldBeTrue("the daily param is missing from the schema");
+
+        daily.GetProperty("description").GetString()!.ShouldContain("grouped by actor");
+        schema.TryGetProperty("required", out _).ShouldBeFalse(
+            "memory_brief requires nothing, the new daily param included");
+    }
+
+    private static readonly DateTimeOffset BriefClockInstant = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
+
+    private static DateTimeOffset DailyNote(int minutes) => BriefClockInstant.AddMinutes(minutes);
+
+    private static string ExpectedLocalDay() =>
+        TimeZoneInfo.ConvertTime(BriefClockInstant, TimeZoneInfo.Local).ToString("yyyy-MM-dd");
+
+    private static async Task SeedDailyAsync(
+        McpTestSession session,
+        string content,
+        DateTimeOffset created,
+        string alias,
+        string vendor) =>
+        await session.Store.UpsertAsync(new MemoryRecord
+        {
+            Id = Guid.NewGuid(),
+            Content = content,
+            Scope = MemoryScope.Project,
+            Kind = MemoryKind.Journal,
+            Actor = MemoryActor.Agent(alias, vendor),
+            Tome = McpTestSession.ClientActor,
+            Tags = ["daily-notes"],
+            CreatedAt = created,
+            LastAccessedAt = created,
+        }, ReadOnlyMemory<float>.Empty, CancellationToken.None);
+
+    private static string Sha256Hex(string text) =>
+        Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+
     private static TomeManifest Manifest(string key, string description) => new()
     {
         Key = key,

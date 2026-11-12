@@ -33,6 +33,8 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
         int? tombstoneLimit = null,
         [Description("Tome to brief; omit for your resolved tome.")]
         string? tome = null,
+        [Description("Add the daily section: the last working day's notes and today's, grouped by actor. Omit for the standard payload.")]
+        bool? daily = null,
         CancellationToken cancellationToken = default)
     {
         var (scopesFilter, scopesError) = EnumParams.ParseEntries<MemoryScope>(scopes, nameof(scopes));
@@ -57,7 +59,9 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
                 FactsPerScope = factsPerScope,
                 JournalPerScope = journalPerScope,
                 TombstoneLimit = tombstoneLimit,
+                Daily = daily ?? false,
             }, ct);
+            var tomeWarnings = await EmptyTomeWarning.BuildAsync(store, IsEmpty(result), tome, resolvedTome, ct);
 
             return ToolResults.Success(new BriefView
             {
@@ -66,17 +70,52 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
                 Facts = ToItemsSection(result.FactsState, result.Facts, ToFactItem),
                 Tombstones = ToItemsSection(result.TombstonesState, result.Tombstones, ToTombstoneItem),
                 Journal = ToItemsSection(result.JournalState, result.Journal, ToJournalItem),
+                Daily = daily == true ? ToDailySection(result) : null,
                 Tomes = ToTomesSection(result),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
                 CompactionDue = ToCompactionSection(result.CompactionDue),
-                Warnings = await EmptyTomeWarning.BuildAsync(store, IsEmpty(result), tome, resolvedTome, ct),
+                Warnings = MergeWarnings(result.Warnings, tomeWarnings),
             });
         }, cancellationToken);
     }
 
     private static BriefCompactionSection? ToCompactionSection(BriefCompactionDue? due) =>
         due is null ? null : new BriefCompactionSection { PendingEntries = due.PendingEntries };
+
+    // Core reports the daily zone degradation and EmptyTomeWarning reports the tome; both land in the
+    // same warnings channel, so neither may overwrite the other. Nothing to say stays null — an empty
+    // list would serialize a key onto a payload that has nothing to report.
+    private static IReadOnlyList<string>? MergeWarnings(IReadOnlyList<string>? coreWarnings, IReadOnlyList<string>? tomeWarnings)
+    {
+        if (coreWarnings is null)
+        {
+            return tomeWarnings;
+        }
+
+        return tomeWarnings is null
+            ? coreWarnings
+            : [.. coreWarnings.Concat(tomeWarnings).Distinct(StringComparer.Ordinal)];
+    }
+
+    private static BriefDailySection ToDailySection(BriefResult result) => new()
+    {
+        State = result.DailyState,
+        More = result.DailyMore,
+        Groups = [.. result.DailyGroups.Select(group => new BriefDailyGroupItem
+        {
+            Day = group.Day,
+            Bucket = group.Bucket,
+            Actor = group.Actor,
+            Entries = [.. group.Entries.Select(entry => new BriefDailyEntryItem
+            {
+                MemoryId = entry.Id,
+                Content = entry.Content,
+                Truncated = entry.Truncated,
+                CreatedAt = entry.CreatedAt,
+            })],
+        })],
+    };
 
     private const string EmptyTomeHint = "tome is empty — use memory_scry for cross-tome context";
 
@@ -204,6 +243,7 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
         BriefSection.Tombstones => "tombstones",
         BriefSection.Journal => "journal",
         BriefSection.Tomes => "tomes",
+        BriefSection.Daily => "daily",
         _ => throw new ArgumentOutOfRangeException(nameof(section), section, "Unknown brief section."),
     };
 }
