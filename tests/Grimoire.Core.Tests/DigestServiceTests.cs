@@ -56,6 +56,7 @@ public sealed class DigestServiceTests
 
         digest.Recent.Select(hit => hit.Content).ShouldBe(["deploy runbook"]);
         digest.Recent[0].Match.ShouldBe(DigestMatch.Tag);
+        _store.ListCallCount.ShouldBe(3);
     }
 
     [Fact]
