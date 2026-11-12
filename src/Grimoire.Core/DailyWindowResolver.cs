@@ -2,7 +2,7 @@ namespace Grimoire.Core;
 
 public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock clock)
 {
-    public DailyWindowPlan Resolve() => Resolve(ResolveZone(options.DailyTimeZone));
+    public DailyWindowPlan Resolve() => Resolve(ResolveZone(options.DailyTimeZone).Zone);
 
     public DailyWindowPlan Resolve(TimeZoneInfo zone)
     {
@@ -15,10 +15,26 @@ public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock cloc
         };
     }
 
-    public static TimeZoneInfo ResolveZone(string? timeZoneId) =>
-        ResolveSystemZone(string.IsNullOrWhiteSpace(timeZoneId) ? TimeZoneInfo.Local.Id : timeZoneId);
+    public static DailyZoneResolution ResolveZone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return new DailyZoneResolution
+            {
+                Zone = ResolveSystemZone(TimeZoneInfo.Local.Id),
+                Source = DailyZoneSource.MachineLocal,
+            };
+        }
 
-    private static TimeZoneInfo ResolveSystemZone(string timeZoneId)
+        return TryResolveSystemZone(timeZoneId) is { } configured
+            ? new DailyZoneResolution { Zone = configured, Source = DailyZoneSource.Configured }
+            : new DailyZoneResolution { Zone = TimeZoneInfo.Utc, Source = DailyZoneSource.UtcFallback };
+    }
+
+    private static TimeZoneInfo ResolveSystemZone(string timeZoneId) =>
+        TryResolveSystemZone(timeZoneId) ?? TimeZoneInfo.Utc;
+
+    private static TimeZoneInfo? TryResolveSystemZone(string timeZoneId)
     {
         try
         {
@@ -26,7 +42,7 @@ public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock cloc
         }
         catch (Exception failure) when (failure is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return TimeZoneInfo.Utc;
+            return null;
         }
     }
 

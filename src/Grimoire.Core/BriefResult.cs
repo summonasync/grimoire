@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Grimoire.Core;
 
 public sealed record BriefResult
@@ -35,4 +37,7 @@ public sealed record BriefResult
     public required IReadOnlyList<BriefSection> Omitted { get; init; }
 
     public BriefCompactionDue? CompactionDue { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

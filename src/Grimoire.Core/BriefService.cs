@@ -61,10 +61,18 @@ public sealed class BriefService(
         IReadOnlySet<Guid>? dailyIds = null;
         var dailyMore = 0;
         var dailyFound = false;
+        IReadOnlyList<string>? warnings = null;
 
         if (query.Daily)
         {
-            var daily = await CollectDailyAsync(scopes, tome, query.ProjectId, cancellationToken);
+            var zone = DailyWindowResolver.ResolveZone(_options.DailyTimeZone);
+
+            if (zone.Source == DailyZoneSource.UtcFallback)
+            {
+                warnings = [$"DailyTimeZone '{_options.DailyTimeZone}' did not resolve; daily buckets use UTC."];
+            }
+
+            var daily = await CollectDailyAsync(zone, scopes, tome, query.ProjectId, cancellationToken);
             dailyGroups = daily.Groups;
             dailyIds = daily.Ids;
             dailyMore = daily.More;
@@ -103,6 +111,7 @@ public sealed class BriefService(
             DailyMore = dailyMore,
             Omitted = omitted,
             CompactionDue = await compactionDue,
+            Warnings = warnings,
         };
     }
 
@@ -198,12 +207,13 @@ public sealed class BriefService(
 
     private async Task<(IReadOnlyList<BriefDailyGroup> Groups, IReadOnlySet<Guid> Ids, int More, bool Truncated, bool Found)>
         CollectDailyAsync(
+            DailyZoneResolution zone,
             IReadOnlyList<MemoryScope> scopes,
             string tome,
             string? projectId,
             CancellationToken cancellationToken)
     {
-        var plan = new DailyWindowResolver(_options, clock).Resolve();
+        var plan = new DailyWindowResolver(_options, clock).Resolve(zone.Zone);
         var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, projectId, cancellationToken);
         var (lastWorkingDay, lastWorkingDayRecords) =
             await FirstCandidateHoldingAsync(plan, scopes, tome, projectId, cancellationToken);

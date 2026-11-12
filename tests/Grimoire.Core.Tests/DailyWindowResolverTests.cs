@@ -119,7 +119,7 @@ public sealed class DailyWindowResolverTests
     [InlineData("Mars/Olympus_Mons")]
     public void ResolveZone_UnknownId_FallsBackToUtcWithoutThrowing(string timeZoneId)
     {
-        var zone = DailyWindowResolver.ResolveZone(timeZoneId);
+        var zone = DailyWindowResolver.ResolveZone(timeZoneId).Zone;
 
         zone.ShouldBeSameAs(TimeZoneInfo.Utc);
     }
@@ -130,7 +130,7 @@ public sealed class DailyWindowResolverTests
     [InlineData("   ")]
     public void ResolveZone_MissingId_DefaultsToTheMachineLocalZone(string? timeZoneId)
     {
-        var zone = DailyWindowResolver.ResolveZone(timeZoneId);
+        var zone = DailyWindowResolver.ResolveZone(timeZoneId).Zone;
         var machineLocal = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneInfo.Local.Id);
 
         zone.Id.ShouldBe(machineLocal.Id);
@@ -159,9 +159,9 @@ public sealed class DailyWindowResolverTests
     public void Resolve_OptionsWithExplicitZone_WinOverTheMachineDefault()
     {
         var now = new DateTimeOffset(2026, 11, 12, 20, 30, 0, TimeSpan.Zero);
-        var kyiv = DailyWindowResolver.ResolveZone("Europe/Kyiv");
+        var kyiv = DailyWindowResolver.ResolveZone("Europe/Kyiv").Zone;
         var expected = PlanAt(now, kyiv);
-        var machineDefault = PlanAt(now, DailyWindowResolver.ResolveZone(null));
+        var machineDefault = PlanAt(now, DailyWindowResolver.ResolveZone(null).Zone);
 
         var plan = Resolver(now, new MemoryEngineOptions { DailyTimeZone = "Europe/Kyiv" }).Resolve();
 
@@ -182,7 +182,7 @@ public sealed class DailyWindowResolverTests
         string afterIso,
         string beforeIso)
     {
-        var zone = DailyWindowResolver.ResolveZone("Europe/Kyiv");
+        var zone = DailyWindowResolver.ResolveZone("Europe/Kyiv").Zone;
         zone.Id.ShouldBe("Europe/Kyiv");
 
         var plan = PlanAt(DateTimeOffset.Parse(nowIso, CultureInfo.InvariantCulture), zone);
@@ -209,9 +209,45 @@ public sealed class DailyWindowResolverTests
     [Fact]
     public void ResolveZone_KnownSystemId_ResolvesThatZone()
     {
-        var zone = DailyWindowResolver.ResolveZone("Europe/Moscow");
+        var zone = DailyWindowResolver.ResolveZone("Europe/Moscow").Zone;
 
         zone.BaseUtcOffset.ShouldBe(TimeSpan.FromHours(3));
+    }
+
+    [Theory]
+    [InlineData("Europe/Moscow", DailyZoneSource.Configured)]
+    [InlineData("Not/AZone", DailyZoneSource.UtcFallback)]
+    [InlineData("Mars/Olympus_Mons", DailyZoneSource.UtcFallback)]
+    [InlineData("", DailyZoneSource.MachineLocal)]
+    [InlineData("   ", DailyZoneSource.MachineLocal)]
+    [InlineData(null, DailyZoneSource.MachineLocal)]
+    public void ResolveZone_ReportsWhichBranchItTook(string? timeZoneId, DailyZoneSource expected)
+    {
+        var outcome = DailyWindowResolver.ResolveZone(timeZoneId);
+
+        outcome.Source.ShouldBe(expected);
+
+        if (expected == DailyZoneSource.UtcFallback)
+        {
+            outcome.Zone.ShouldBeSameAs(TimeZoneInfo.Utc);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveZone_DefaultPathNeverClaimsFallbackEvenWhenTheHostIdIsBroken(string? timeZoneId)
+    {
+        var outcome = DailyWindowResolver.ResolveZone(timeZoneId);
+        var hostIdResolves = TimeZoneInfo.TryFindSystemTimeZoneById(TimeZoneInfo.Local.Id, out _);
+
+        outcome.Source.ShouldBe(DailyZoneSource.MachineLocal);
+
+        if (!hostIdResolves)
+        {
+            outcome.Zone.ShouldBeSameAs(TimeZoneInfo.Utc);
+        }
     }
 
     [Fact]

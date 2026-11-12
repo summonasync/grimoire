@@ -660,6 +660,108 @@ public sealed class BriefServiceTests
     }
 
     [Fact]
+    public async Task Brief_DailyFlag_UnresolvableConfiguredZoneWarnsOnceNamingTheId()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "friday note", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+
+        var windowReads = 0;
+        store.OnListAsync = filter =>
+        {
+            if (filter.CreatedAfter is not null)
+            {
+                windowReads++;
+            }
+        };
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: "Not/AZone"))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyState.ShouldBe(BriefSectionState.Populated);
+        windowReads.ShouldBe(4);
+        brief.Warnings.ShouldHaveSingleItem();
+
+        var warning = brief.Warnings![0];
+        warning.ShouldBe("DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC.");
+        warning.ShouldContain("Not/AZone");
+        warning.ShouldContain("UTC");
+        warning.ShouldNotContain("Exception");
+        warning.ShouldNotContain("Could not find");
+
+        CanonicalPayload(brief).ShouldContain(
+            "\"Warnings\":[\"DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC.\"]");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_UnsetZoneStaysSilentWhileTheSameClockWithABogusIdWarns()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var windowReads = 0;
+        store.OnListAsync = filter =>
+        {
+            if (filter.CreatedAfter is not null)
+            {
+                windowReads++;
+            }
+        };
+
+        var defaulted = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: null))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        windowReads.ShouldBeGreaterThan(0);
+        defaulted.Warnings.ShouldBeNull();
+
+        var bogus = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: "Not/AZone"))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        bogus.Warnings.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_ResolvableConfiguredZoneStaysSilentWhileABogusIdWarns()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var moscow = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: "Europe/Moscow"))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        moscow.DailyState.ShouldBe(BriefSectionState.Populated);
+        moscow.DailyGroups.ShouldHaveSingleItem();
+        moscow.Warnings.ShouldBeNull();
+
+        var bogus = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: "Not/AZone"))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        bogus.Warnings.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Brief_FlagOff_WithUnresolvableZoneNeverReachesTheDailyWarningPath()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "today note", Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var windowReads = 0;
+        store.OnListAsync = filter =>
+        {
+            if (filter.CreatedAfter is not null)
+            {
+                windowReads++;
+            }
+        };
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(zone: "Not/AZone"))
+            .BriefAsync(Query(), CancellationToken.None);
+
+        windowReads.ShouldBe(0);
+        brief.Warnings.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Brief_FlagOff_PayloadMatchesThePreFeatureSnapshot()
     {
         SeedSnapshotFixture(_store, _manifests);
@@ -667,7 +769,7 @@ public sealed class BriefServiceTests
         var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" })
             .BriefAsync(Query(), CancellationToken.None);
 
-        Sha256Hex(CanonicalPayload(brief)).ShouldBe("2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
+        PayloadMatchesSnapshot(brief, "2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
     }
 
     [Fact]
@@ -679,10 +781,19 @@ public sealed class BriefServiceTests
             .BriefAsync(Query(), CancellationToken.None);
 
         brief.Omitted.ShouldNotBeEmpty();
-        Sha256Hex(CanonicalPayload(brief)).ShouldBe("2a7774f2cdff6bd7daa097c00ca6d578d190b69b52670d140c29b3df083ac709");
+        PayloadMatchesSnapshot(brief, "2a7774f2cdff6bd7daa097c00ca6d578d190b69b52670d140c29b3df083ac709");
     }
 
     private static readonly DateTimeOffset MoscowMondayUtc = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
+
+    private static void PayloadMatchesSnapshot(BriefResult brief, string hash)
+    {
+        brief.Warnings.ShouldBeNull();
+
+        var payload = CanonicalPayload(brief);
+        payload.ShouldNotContain("\"Warnings\"");
+        Sha256Hex(payload).ShouldBe(hash);
+    }
 
     private static MemoryEngineOptions DailyOptions(
         string? zone = "Europe/Moscow",
