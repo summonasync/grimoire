@@ -35,6 +35,21 @@ public sealed class BriefServiceTests
     }
 
     [Fact]
+    public async Task Brief_NoDailyFlag_DailyFieldsStayAtDefaultsOverPopulatedSections()
+    {
+        Seed("daily shape fact", kind: MemoryKind.Fact, importance: 1);
+        Seed("daily shape journal", kind: MemoryKind.Journal, created: FakeClock.DefaultStart.AddHours(-1));
+
+        var brief = await Service().BriefAsync(Query(), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.JournalState.ShouldBe(BriefSectionState.Populated);
+        brief.DailyState.ShouldBe(BriefSectionState.Empty);
+        brief.DailyGroups.ShouldBeEmpty();
+        brief.DailyMore.ShouldBe(0);
+    }
+
+    [Fact]
     public async Task Brief_StaleSimilarJournal_ReportsTheClusterSize()
     {
         SeedStaleJournal("wired serilog twice", [1f, 0.05f, 0f]);

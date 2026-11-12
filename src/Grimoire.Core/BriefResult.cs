@@ -26,6 +26,12 @@ public sealed record BriefResult
 
     public string? TomesNote { get; init; }
 
+    public BriefSectionState DailyState { get; init; } = BriefSectionState.Empty;
+
+    public IReadOnlyList<BriefDailyGroup> DailyGroups { get; init; } = [];
+
+    public int DailyMore { get; init; }
+
     public required IReadOnlyList<BriefSection> Omitted { get; init; }
 
     public BriefCompactionDue? CompactionDue { get; init; }
