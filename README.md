@@ -93,6 +93,9 @@ grimoire serve    # web console on http://127.0.0.1:4770
 # 4. Or let the console come to you
 grimoire ui       # opens http://grimoire.localhost:4770 in the default browser,
                   # starting the systemd user unit first when nothing is serving
+
+# 5. Or read the crew's day back
+grimoire report   # evening report of daily notes: today's active records, grouped by actor
 ```
 
 `grimoire ui` probes `http://127.0.0.1:<serve.port>/health`; when nothing
@@ -113,6 +116,21 @@ grimoire ui --disable-at-login   # removes it; reports cleanly when there is not
 The entry names the binary you ran, so re-enabling after a release
 refreshes it. Running either flag twice is a no-op: a matching entry
 reports "already up to date" and is not rewritten.
+
+`grimoire report` is the evening read of a day's work: active records of one
+local day grouped by actor, newest first inside each group. `--date
+<yyyy-MM-dd>` picks the day (default today, resolved in the local zone),
+`--tag` overrides the `daily-notes` default, `--project <id>` narrows the
+day to one project, and `--json` prints the same report as data. An empty
+day says so in one explicit line naming the window, tags and tome it
+actually read — `No daily notes in 2026-11-12 (window
+2026-11-11T21:00:00Z..2026-11-12T21:00:00Z, tags daily-notes, tome
+default).` — never silence, never a header implying content. That line is
+also the answer to the other question an empty report raises: `report`
+reads the engine's default tome and has no `--tome` flag, so a day that
+looks empty may simply live in another tome. `--project` shares its help
+text with `brief` (where the same filter is described as "the brief"); for
+`report` it filters the reported day's records to that project.
 
 Wire an agent to the memory (stdio MCP):
 
@@ -352,16 +370,22 @@ wire-level contract tests.
 ## Configuration
 
 `~/.grimoire/config.json`, every key overridable via
-`GRIMOIRE_<SECTION>__<PROP>`:
+`GRIMOIRE_<SECTION>__<PROP>`; a root-level key such as `defaultTome` overrides
+as `GRIMOIRE_DEFAULTTOME`:
 
 | Section | Keys (defaults) |
 |---|---|
+| *(root)* | `defaultTome` (`default`) |
 | `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
 | `embedding` | `provider` (`ollama`), `model` (`qwen3-embedding`), `endpoint` (`http://localhost:11434`), `dimensions` (1024) |
-| `memory` | `defaultTome` (`default`), `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
+| `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 
 Unknown keys are rejected — typos in a hand-edited file fail loudly.
+`grimoire config set` addresses `section.property` pairs, so a root-level key
+like `defaultTome` is edited directly in the file. That key is also the tome
+the CLI `report` reads: `GRIMOIRE_TOME` steers the MCP and web faces and the
+`--tome` flag chain of the verbs that have it, and `report` has no such flag.
 
 ## Development
 
