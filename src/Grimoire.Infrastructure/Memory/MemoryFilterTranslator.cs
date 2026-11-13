@@ -151,19 +151,18 @@ internal static class MemoryFilterTranslator
     // nothing, so a mixed-case candidate narrows more at the store than the post-filter ever did.
     private static IEnumerable<Condition> ActorConditions(MemoryFilter filter)
     {
-        if (filter.Actor is not { } actor || MemoryActor.AliasPart(actor) is not { } alias)
+        if (filter.Actor is not { } actor)
         {
             return [];
         }
 
-        var separator = actor.IndexOf('+', StringComparison.Ordinal);
-        var vendor = separator < 0 ? null : actor[(separator + 1)..];
+        var (alias, vendor) = MemoryActorSemantics.Segments(actor)[0];
 
-        return string.IsNullOrEmpty(vendor)
+        return vendor is null
             ? [Conditions.MatchKeyword("actor.alias", alias)]
             : [
                 Conditions.MatchKeyword("actor.alias", alias),
-                Conditions.MatchKeyword("actor.vendor", vendor!),
+                Conditions.MatchKeyword("actor.vendor", vendor),
             ];
     }
 

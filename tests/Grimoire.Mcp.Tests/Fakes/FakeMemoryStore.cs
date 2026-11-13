@@ -147,6 +147,11 @@ internal sealed class FakeMemoryStore : IMemoryStore
             return false;
         }
 
+        if (!MemoryActorSemantics.MatchesExactly(record.Actor, filter.Actor))
+        {
+            return false;
+        }
+
         if (filter.Tags.Count > 0 && !record.Tags.Any(filter.Tags.Contains))
         {
             return false;

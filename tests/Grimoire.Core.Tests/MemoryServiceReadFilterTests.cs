@@ -110,7 +110,7 @@ public sealed class MemoryServiceReadFilterTests
     }
 
     [Fact]
-    public async Task Recall_RefillsTheWindowWhenFiltersWashOutTheFirstPage()
+    public async Task Recall_WithAnActor_FillsThePageFromOneHonestWindow()
     {
         Seed("noise 1", [0.9950f, 0.0998f, 0f], actor: MemoryActor.Human);
         Seed("noise 2", [0.9899f, 0.1421f, 0f], actor: MemoryActor.Human);
@@ -121,9 +121,14 @@ public sealed class MemoryServiceReadFilterTests
         var second = Seed("deep 2", [0.4f, 0.9165f, 0f]);
         Seed("deep 3", [0.3f, 0.9539f, 0f]);
 
+        // Was Recall_RefillsTheWindowWhenFiltersWashOutTheFirstPage: it proved the refill by seeding
+        // a window full of another actor's rows, and that washout cannot be produced from recall any
+        // more. Before/after on this identical fixture: two calls and twelve points fetched to hand
+        // back two rows, now one call and six points for the same two rows. The loop in
+        // MemoryService is untouched and unreachable through recall - recorded, not claimed fixed.
         var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
 
-        _store.SearchCallCount.ShouldBe(2);
+        _store.SearchCallCount.ShouldBe(1);
         matches.Select(match => match.Record.Id).ShouldBe([first.Id, second.Id]);
     }
 
@@ -137,9 +142,12 @@ public sealed class MemoryServiceReadFilterTests
         Seed("noise 5", [0.9747f, 0.2234f, 0f], actor: MemoryActor.Human);
         var only = Seed("only honest", [0.8660f, 0.5f, 0f]);
 
+        // The escalation loop itself is untouched by this slice (its own card), but its cause moved:
+        // an actor query can no longer wash out a window, so the honest short page is now reached in
+        // one call — one 6-point window holding the single row that belongs to this actor.
         var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
 
-        _store.SearchCallCount.ShouldBe(2);
+        _store.SearchCallCount.ShouldBe(1);
         matches.Select(match => match.Record.Id).ShouldBe([only.Id]);
     }
 
