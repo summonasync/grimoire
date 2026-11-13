@@ -129,6 +129,21 @@ fingerprint marker and brick the store). The typed confirmation exists because a
 delete has no undo: tombstones die with the tome, `memory_restore` has nothing to
 restore from.
 
+Amendment — 2026-11-13 (feature 056-gc-expired-count-status-blind, owner ruling B): the
+"expired session records" above means **expired session records whose status is Active**, and
+the code now says so in the filter instead of inheriting it from the translator's
+default-to-Active. No in-process store double reproduces that default, so with the clause
+implicit, every test surface let GC delete superseded session rows that production keeps — the
+rule was unprovable exactly where it was being tested. The rule itself is unchanged and
+deliberate: a session row past its TTL that is Superseded (or Tombstoned inside the retention
+window) is not reaped, because corrections are read through `SupersededBy` chains and deleting
+those rows would sever history by absence rather than by a query bug. What changed is that GC
+admits it: `GcResult.RetainedPastTtl` counts those rows after the delete (counted before it, a
+row past both TTL and retention would be reported as removed *and* kept) and stays out of
+`TotalRemoved`, and `grimoire gc` prints it as "past TTL kept by policy". The accumulation is
+accepted, not solved — unbounded superseded-session growth is the price of intact lineage, and
+it shows up as store size, not as wrong answers.
+
 ## ADR-006: Product name "Grimoire" — 2026-10-17
 
 Status: Accepted (user decision, naming tournament final ballot)
