@@ -98,6 +98,24 @@ export interface SettingsResponse {
   editable: string[];
 }
 
+export interface SessionHandshakeItem {
+  clientName: string | null;
+  clientVersion: string | null;
+  protocolVersion: string | null;
+  actorAlias: string | null;
+  actorVendor: string | null;
+  occurredAt: string;
+  ageHours: number;
+  host: string;
+}
+
+export interface SessionsResponse {
+  items: SessionHandshakeItem[];
+  limit: number;
+  windowHours: number;
+  degradationReason: string | null;
+}
+
 export interface TomeStats {
   active: number;
   tombstoned: number;

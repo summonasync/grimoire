@@ -17,6 +17,7 @@ import { Icon } from "@/shared/ui/icons";
 import { Sigil } from "@/shared/ui/sigil";
 import { webBuildSha } from "@/shared/lib/web-build";
 import { RecentAgentsPanel } from "@/views/console/recent-agents-panel";
+import { RecentHandshakesPanel } from "@/views/console/recent-handshakes-panel";
 
 const scopeOrder = ["session", "project", "global", "personal"] as const;
 
@@ -363,6 +364,7 @@ export function ConsoleScreen() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <RecentAgentsPanel />
+        <RecentHandshakesPanel />
       </div>
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[0.7rem] text-muted">
