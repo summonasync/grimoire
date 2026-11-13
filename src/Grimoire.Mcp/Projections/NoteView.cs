@@ -18,6 +18,10 @@ internal sealed record NoteView
 
     public string? TopicTag { get; init; }
 
+    public string? TopicDecision { get; init; }
+
+    public string? TopicRationale { get; init; }
+
     public required bool SupersededExisting { get; init; }
 
     public Guid? SupersededMemoryId { get; init; }

@@ -20,10 +20,11 @@ internal sealed class NoteTool(
         "Zero-ceremony journal write: supply content, the server does the bookkeeping - kind is always " +
         "Journal, importance is fixed at 0.5. Pass topic to force a topic:<value> stamp; without it the top " +
         "embedding neighbors vote and two agreeing neighbors at similarity >= 0.75 stamp their shared topic, " +
-        "otherwise the note lands untagged. Scope defaults to 'Project' and resolves projectId from the " +
-        "caller's working directory via the project registry (an unresolved cwd is rejected with the registered " +
-        "aliases); 'Session' keeps a ~24h TTL; 'Global' and 'Personal' live across projects. The response is one " +
-        "payload carrying memoryId, scope, projectId, topicTag and nearDuplicates; an identical retry replays " +
+        "a winning vote under the confidence threshold stamps nothing and topicRationale says why. Scope " +
+        "defaults to 'Project' and resolves projectId from the caller's working directory via the project " +
+        "registry (an unresolved cwd is rejected with the registered aliases); 'Session' keeps a ~24h TTL; " +
+        "'Global' and 'Personal' live across projects. The response is one payload carrying memoryId, scope, " +
+        "projectId, topicTag, topicDecision, topicRationale and nearDuplicates; an identical retry replays " +
         "idempotently. For durable curated facts use memory_remember instead.";
 
     public Task<CallToolResult> Note(
@@ -92,7 +93,7 @@ internal sealed class NoteTool(
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
-            var result = await memories.NoteAsync(new NoteRequest
+            var note = await memories.NoteAsync(new NoteRequest
             {
                 Content = content,
                 Scope = scopeEffective,
@@ -104,6 +105,8 @@ internal sealed class NoteTool(
                 Tags = tags ?? [],
             }, ct);
 
+            var result = note.Result;
+
             return ToolResults.Success(new NoteView
             {
                 MemoryId = result.Record.Id,
@@ -112,7 +115,9 @@ internal sealed class NoteTool(
                 Tome = result.Record.Tome,
                 ProjectId = result.Record.ProjectId,
                 Tags = result.Record.Tags,
-                TopicTag = TopicTagOf(result.Record.Tags),
+                TopicTag = note.Vote?.Tag ?? TopicTagOf(result.Record.Tags),
+                TopicDecision = note.Vote?.Decision.ToString("G"),
+                TopicRationale = RationaleOf(note.Vote),
                 SupersededExisting = result.SupersededExisting,
                 SupersededMemoryId = result.SupersededId,
                 NearDuplicates = result.NearMatches.Count == 0
@@ -132,6 +137,44 @@ internal sealed class NoteTool(
 
     private static string? TopicTagOf(IReadOnlyList<string> tags) => tags.FirstOrDefault(tag =>
         tag.StartsWith(ITopicClassifier.TopicPrefix, StringComparison.Ordinal));
+
+    private static string? RationaleOf(TopicVote? vote) => vote switch
+    {
+        null => null,
+        { Decision: TopicVoteDecision.Explicit } => "explicit topic hint; neighbors were not consulted",
+        { Decision: TopicVoteDecision.Voted } =>
+            $"{vote.WinningCount} neighbors: {vote.Tag} (best similarity {vote.BestSimilarity:F2})",
+        { Decision: TopicVoteDecision.BelowConfidence } =>
+            $"{vote.WinningCount} neighbors agreed on {vote.CandidateTag} at best similarity {vote.BestSimilarity:F2}, " +
+            "under the topic confidence threshold, so nothing was stamped; pass topic to stamp it anyway",
+        _ => NoConsensusRationale(vote),
+    };
+
+    private static string NoConsensusRationale(TopicVote vote)
+    {
+        var counted = vote.Neighbors
+            .Where(entry => entry.Counted)
+            .Select(entry => entry.Tag)
+            .Distinct()
+            .ToArray();
+        var bare = vote.Neighbors
+            .Where(entry => !entry.Counted)
+            .Select(entry => entry.Tag)
+            .Distinct()
+            .Take(4)
+            .ToArray();
+
+        if (counted.Length == 0 && bare.Length == 0)
+        {
+            return "no qualifying neighbor carried a tag";
+        }
+
+        var seen = counted.Length == 0
+            ? "no neighbor carried a topic:<value> tag"
+            : $"topic tags seen, none with enough agreement: {string.Join(", ", counted)}";
+
+        return bare.Length == 0 ? seen : $"{seen}; bare tags do not vote: {string.Join(", ", bare)}";
+    }
 
     private ToolError ProjectTagError(ProjectTagRejection rejection, ProjectTagResolution resolution, string? projectId)
     {
