@@ -14,8 +14,7 @@ internal static class SessionsQueryBounds
         }
 
         if (windowHours is { } hours
-            && (!double.IsFinite(hours)
-                || hours < SessionHandshakeProjection.MinWindowHours
+            && (hours < SessionHandshakeProjection.MinWindowHours
                 || hours > SessionHandshakeProjection.MaxWindowHours))
         {
             var candidate = hours.ToString("R", CultureInfo.InvariantCulture);
