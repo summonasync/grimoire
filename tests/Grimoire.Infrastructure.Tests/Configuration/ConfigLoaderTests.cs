@@ -462,6 +462,99 @@ public sealed class ConfigLoaderTests : IDisposable
         exception.Message.ShouldContain("pathz");
     }
 
+    [Theory]
+    [InlineData(
+        """{ "qdrant": { "collection": "shared", "manifestCollection": "shared" } }""",
+        "qdrant.manifestCollection 'shared' is the same collection as qdrant.collection.")]
+    [InlineData(
+        """{ "qdrant": { "collection": "shared", "sessionCollection": "shared" } }""",
+        "qdrant.sessionCollection 'shared' is the same collection as qdrant.collection.")]
+    [InlineData(
+        """{ "qdrant": { "collection": "mem", "manifestCollection": "mem-sessions" } }""",
+        "qdrant.sessionCollection 'mem-sessions' is the same collection as qdrant.manifestCollection.")]
+    public void Load_WithCollidingQdrantCollections_Throws(string json, string violation)
+    {
+        var path = WriteConfig(json);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldBe($"Qdrant collections are invalid: {violation}");
+    }
+
+    [Theory]
+    [InlineData("""{ "qdrant": { "collection": "" } }""", "qdrant.collection")]
+    [InlineData("""{ "qdrant": { "collection": "   " } }""", "qdrant.collection")]
+    [InlineData("""{ "qdrant": { "manifestCollection": "" } }""", "qdrant.manifestCollection")]
+    [InlineData("""{ "qdrant": { "sessionCollection": "  " } }""", "qdrant.sessionCollection")]
+    public void Load_WithBlankQdrantCollectionName_Throws(string json, string knob)
+    {
+        var path = WriteConfig(json);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldBe($"Qdrant collections are invalid: {knob} must not be empty.");
+    }
+
+    [Fact]
+    public void Load_WithQdrantDefaults_KeepsThreeDistinctCollections()
+    {
+        var options = new ConfigLoader(MissingPath(), EmptyEnvironment).Load();
+
+        var effective = new[]
+        {
+            options.Qdrant.Collection,
+            options.Qdrant.ManifestCollectionOrDefault,
+            options.Qdrant.SessionCollectionOrDefault,
+        };
+
+        effective.ShouldBe(["grimoire", "grimoire-manifests", "grimoire-sessions"]);
+        options.Qdrant.ManifestCollection.ShouldBeNull();
+        options.Qdrant.SessionCollection.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithRenamedMemoryCollection_KeepsTheDerivedSiblingsDistinct()
+    {
+        var path = WriteConfig("""{ "qdrant": { "collection": "vault" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.ManifestCollectionOrDefault.ShouldBe("vault-manifests");
+        options.Qdrant.SessionCollectionOrDefault.ShouldBe("vault-sessions");
+    }
+
+    [Fact]
+    public void Load_WithSessionCollectionNamedLikeItsOwnDerivation_Loads()
+    {
+        var path = WriteConfig("""{ "qdrant": { "sessionCollection": "grimoire-sessions" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.SessionCollection.ShouldBe("grimoire-sessions");
+    }
+
+    [Fact]
+    public void Load_WithCollectionsDifferingOnlyByCase_Loads()
+    {
+        var path = WriteConfig("""{ "qdrant": { "collection": "Grimoire", "sessionCollection": "grimoire" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.Collection.ShouldBe("Grimoire");
+        options.Qdrant.SessionCollection.ShouldBe("grimoire");
+    }
+
+    [Fact]
+    public void Load_WithCollidingCollectionsFromEnvironmentOverride_Throws()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_QDRANT__SESSIONCOLLECTION", "grimoire")]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            "Qdrant collections are invalid: qdrant.sessionCollection 'grimoire' is the same collection as qdrant.collection.");
+    }
+
     private static ConfigLoader Loader(
         string path,
         IEnumerable<(string Name, string Value)> overrides) =>
