@@ -66,10 +66,23 @@ public sealed class BriefService(
         if (query.Daily)
         {
             var zone = DailyWindowResolver.ResolveZone(_options.DailyTimeZone);
+            List<string> dailyWarnings = [];
+
+            // Ordered by the config key each warning names: the disabled section first, then the zone
+            // its buckets would have used. T5 prints this list as-is, so this order is the CLI's order.
+            if (string.IsNullOrWhiteSpace(_options.DailyTag))
+            {
+                dailyWarnings.Add("DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.");
+            }
 
             if (zone.Source == DailyZoneSource.UtcFallback)
             {
-                warnings = [$"DailyTimeZone '{_options.DailyTimeZone}' did not resolve; daily buckets use UTC."];
+                dailyWarnings.Add($"DailyTimeZone '{_options.DailyTimeZone}' did not resolve; daily buckets use UTC.");
+            }
+
+            if (dailyWarnings.Count > 0)
+            {
+                warnings = dailyWarnings;
             }
 
             var daily = await CollectDailyAsync(zone, scopes, tome, query.ProjectId, cancellationToken);

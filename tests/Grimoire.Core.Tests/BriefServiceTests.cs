@@ -761,6 +761,92 @@ public sealed class BriefServiceTests
         brief.Warnings.ShouldBeNull();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Brief_DailyFlag_BlankTagWarnsOnceAndLeavesTheSectionEmpty(string tag)
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "medivh opened the board", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "thrall wired the door", Utc(2026, 11, 9, 6), "thrall", "claude");
+
+        var windowReads = 0;
+        store.OnListAsync = filter =>
+        {
+            if (filter.CreatedAfter is not null)
+            {
+                windowReads++;
+            }
+        };
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(tag: tag))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        store.Records.Count(record => record.Tags.Contains("daily-notes")).ShouldBe(2);
+        windowReads.ShouldBeGreaterThan(0);
+
+        var warnings = brief.Warnings!.ToArray();
+        warnings.Length.ShouldBe(1);
+        warnings[0].ShouldBe("DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.");
+        warnings[0].ShouldContain("DailyTag");
+        warnings[0].ShouldNotContain("DailyTimeZone");
+        brief.DailyState.ShouldBe(BriefSectionState.Empty);
+        brief.DailyGroups.ShouldBeEmpty();
+        brief.DailyMore.ShouldBe(0);
+        brief.Omitted.ShouldNotContain(BriefSection.Daily);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NormalTagIsSilentWhereTheBlankTagOnTheSameStoreWarns()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "medivh opened the board", Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var configured = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+        var blank = await ServiceAt(MoscowMondayUtc, store, DailyOptions(tag: ""))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        configured.Warnings.ShouldBeNull();
+        configured.DailyState.ShouldBe(BriefSectionState.Populated);
+        blank.Warnings.ShouldHaveSingleItem();
+        blank.DailyState.ShouldBe(BriefSectionState.Empty);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_BlankTagAndUnresolvableZone_WarnTagFirstThenZone()
+    {
+        var brief = await ServiceAt(MoscowMondayUtc, new FakeMemoryStore(), DailyOptions(zone: "Not/AZone", tag: ""))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var warnings = brief.Warnings!.ToArray();
+        warnings.Length.ShouldBe(2);
+        warnings[0].ShouldBe("DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.");
+        warnings[1].ShouldBe("DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC.");
+    }
+
+    [Fact]
+    public async Task Brief_FlagOff_BlankTagAnnouncesNothingAboutASectionNobodyAskedFor()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var windowReads = 0;
+        _store.OnListAsync = filter =>
+        {
+            if (filter.CreatedAfter is not null)
+            {
+                windowReads++;
+            }
+        };
+
+        var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow", DailyTag = "" })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        _store.Records.Count(record => record.Tags.Contains("daily-notes")).ShouldBe(1);
+        windowReads.ShouldBe(0);
+        PayloadMatchesSnapshot(brief, "2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
+    }
+
     [Fact]
     public async Task Brief_FlagOff_PayloadMatchesThePreFeatureSnapshot()
     {
@@ -797,11 +883,13 @@ public sealed class BriefServiceTests
 
     private static MemoryEngineOptions DailyOptions(
         string? zone = "Europe/Moscow",
+        string tag = "daily-notes",
         int lookbackDays = 7,
         int entryCap = 1500,
         int totalCap = 6000) => new()
         {
             DailyTimeZone = zone,
+            DailyTag = tag,
             DailyLookbackDays = lookbackDays,
             BriefDailyMaxEntryChars = entryCap,
             BriefDailyMaxTotalChars = totalCap,
