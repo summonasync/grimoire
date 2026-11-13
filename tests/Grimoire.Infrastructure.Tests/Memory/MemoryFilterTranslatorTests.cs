@@ -34,6 +34,22 @@ public sealed class MemoryFilterTranslatorTests
     }
 
     [Fact]
+    public void Translate_WithMultipleTags_RendersOneMatchAnyCondition()
+    {
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter
+        {
+            Tags = ["topic:deploy", "deploy"],
+        });
+
+        var tagConditions = filter.Must
+            .Where(item => item.Field is not null && item.Field.Key == MemoryPayloadFields.Tags)
+            .ToArray();
+
+        tagConditions.ShouldHaveSingleItem();
+        tagConditions[0].Field!.Match!.Keywords.Strings.ShouldBe(["topic:deploy", "deploy"]);
+    }
+
+    [Fact]
     public void Translate_WithTomeAndStatusList_ConjoinsBothConstraints()
     {
         var filter = MemoryFilterTranslator.Translate(new MemoryFilter

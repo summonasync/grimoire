@@ -16,7 +16,8 @@ internal sealed class DigestTool(DigestService digests, IMemoryStore store, Memo
         "Pull everything one tome knows about a topic in a single read - a topic-centric digest from newest " +
         "down to tombstones. Sections: longMemo (consolidated Facts), recent (fresh Journal entries) and gone " +
         "(superseded and tombstoned records, the anti-resurrection tail). Topic resolution is deterministic: " +
-        "records tagged topic:<value> union records embedding-similar (>= 0.75) to the topic string; every hit " +
+        "records tagged topic:<value> or with the bare <value> tag union records embedding-similar (>= 0.75) " +
+        "to the topic string; every hit " +
         "carries match: \"tag\" or \"similar\" and the union deduplicates with tag winning. Sections fill " +
         "newest-first under char budgets, long entries are truncated and flagged, and sections that do not fit " +
         "are named in omitted. Digest hits bump access stats like recall does. Compact projection is the " +
