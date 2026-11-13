@@ -68,7 +68,7 @@ public sealed class GcCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok);
         _host.Output.ToString().ShouldContain(
-            "expired sessions: 1, aged tombstones: 0, past TTL kept by policy: 1");
+            "Removed 1 memories (expired sessions: 1, aged tombstones: 0, past TTL kept by policy: 1)");
         _host.Store.Records.ShouldContain(record => record.Id == superseded.Id);
     }
 
