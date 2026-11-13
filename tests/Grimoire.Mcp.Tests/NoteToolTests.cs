@@ -294,7 +294,7 @@ public sealed class NoteToolTests
         var payload = result.Payload();
         payload.GetProperty("topicTag").GetString().ShouldBe("topic:onnx");
         payload.GetProperty("topicDecision").GetString().ShouldBe("Voted");
-        var rationale = payload.GetProperty("topicRationale").GetString();
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
         rationale.ShouldContain("2 neighbors");
         rationale.ShouldContain("topic:onnx");
     }
@@ -318,7 +318,7 @@ public sealed class NoteToolTests
         var payload = result.Payload();
         payload.TryGetProperty("topicTag", out _).ShouldBeFalse("a below-confidence vote must not stamp");
         payload.GetProperty("topicDecision").GetString().ShouldBe("BelowConfidence");
-        var rationale = payload.GetProperty("topicRationale").GetString();
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
         rationale.ShouldContain("topic:onnx");
         rationale.ShouldContain("nothing was stamped");
     }

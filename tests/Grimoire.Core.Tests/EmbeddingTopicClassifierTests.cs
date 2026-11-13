@@ -170,7 +170,7 @@ public sealed class EmbeddingTopicClassifierTests
         vote.CandidateTag.ShouldBe("topic:deploy");
         vote.Decision.ShouldBe(TopicVoteDecision.Voted);
         vote.WinningCount.ShouldBe(2);
-        vote.BestSimilarity.Value.ShouldBeGreaterThan(0.8);
+        vote.BestSimilarity.ShouldNotBeNull().ShouldBeGreaterThan(0.8);
         vote.Neighbors.ShouldContain(entry => entry.Tag == "ops" && !entry.Counted);
     }
 
@@ -186,7 +186,7 @@ public sealed class EmbeddingTopicClassifierTests
         vote.CandidateTag.ShouldBe("topic:deploy");
         vote.Decision.ShouldBe(TopicVoteDecision.BelowConfidence);
         vote.WinningCount.ShouldBe(2);
-        vote.BestSimilarity.Value.ShouldBeLessThan(0.8);
+        vote.BestSimilarity.ShouldNotBeNull().ShouldBeLessThan(0.8);
     }
 
     [Fact]
