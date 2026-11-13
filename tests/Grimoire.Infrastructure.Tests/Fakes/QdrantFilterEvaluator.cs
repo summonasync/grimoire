@@ -17,7 +17,7 @@ public static class QdrantFilterEvaluator
         : throw new NotSupportedException($"Condition kind on '{condition.Field?.Key}' is not supported by the fake.");
 
     private static bool IsEmpty(IReadOnlyDictionary<string, Value> payload, string key) =>
-        !payload.TryGetValue(key, out var value) || value.KindCase == Value.KindOneofCase.NullValue;
+        !TryResolve(payload, key, out var value) || value.KindCase == Value.KindOneofCase.NullValue;
 
     private static bool Matches(FieldCondition field, IReadOnlyDictionary<string, Value> payload)
     {
@@ -36,7 +36,7 @@ public static class QdrantFilterEvaluator
 
     private static bool Matches(Match match, IReadOnlyDictionary<string, Value> payload, string key)
     {
-        if (!payload.TryGetValue(key, out var value))
+        if (!TryResolve(payload, key, out var value))
         {
             return false;
         }
@@ -53,7 +53,7 @@ public static class QdrantFilterEvaluator
 
     private static bool Matches(DatetimeRange range, IReadOnlyDictionary<string, Value> payload, string key)
     {
-        if (!payload.TryGetValue(key, out var value) || value.KindCase != Value.KindOneofCase.StringValue)
+        if (!TryResolve(payload, key, out var value) || value.KindCase != Value.KindOneofCase.StringValue)
         {
             return false;
         }
@@ -92,4 +92,50 @@ public static class QdrantFilterEvaluator
                 .Select(item => item.StringValue)],
             _ => throw new NotSupportedException($"Payload field '{key}' does not carry keyword values."),
         };
+
+    // Real Qdrant resolves dotted keys into struct payloads; this double only ever looked at the
+    // top level, which made it answer "no match" for anything aimed inside a struct — an actor
+    // condition among them. Absent segment and null value both resolve to "not there", matching
+    // what the server reported when probed directly.
+    private static bool TryResolve(IReadOnlyDictionary<string, Value> payload, string key, out Value value)
+    {
+        var segments = key.Split('.');
+        var current = new Value();
+        var fields = (IReadOnlyDictionary<string, Value>?)payload;
+
+        for (var index = 0; index < segments.Length; index++)
+        {
+            if (fields is null || !fields.TryGetValue(segments[index], out current))
+            {
+                value = new Value();
+                return false;
+            }
+
+            // The last segment resolves to whatever it holds, container included: a plain keyword on
+            // "actor" is a real query shape and the server answers it with no match, not with an error.
+            if (index == segments.Length - 1 || current.KindCase is not (Value.KindOneofCase.StructValue or Value.KindOneofCase.ListValue))
+            {
+                break;
+            }
+
+            fields = current.KindCase == Value.KindOneofCase.StructValue
+                ? current.StructValue.Fields
+                : ToIndexedFields(current.ListValue.Values);
+        }
+
+        value = current;
+        return true;
+    }
+
+    private static IReadOnlyDictionary<string, Value> ToIndexedFields(IEnumerable<Value> values)
+    {
+        var indexed = new Dictionary<string, Value>();
+        var index = 0;
+        foreach (var item in values)
+        {
+            indexed[index++.ToString(CultureInfo.InvariantCulture)] = item;
+        }
+
+        return indexed;
+    }
 }

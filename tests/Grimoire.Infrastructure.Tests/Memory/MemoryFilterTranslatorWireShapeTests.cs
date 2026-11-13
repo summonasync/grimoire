@@ -35,11 +35,17 @@ public sealed class MemoryFilterTranslatorWireShapeTests
     }
 
     [Fact]
-    public void Translate_IgnoringActor_IsRecordedSoThatNobodyMistakesItForFiltering()
+    public void Translate_ActorIsNoLongerInvisibleOnTheWire()
     {
         var withActor = Dump(new MemoryFilter { Actor = "kelthuzad+qwen" });
 
-        withActor.ShouldBe(Dump(new MemoryFilter()));
+        // The sibling of this test asserted the opposite — that an actor candidate dumped identically
+        // to an empty filter — while the translator dropped the dimension and recall papered over it.
+        // The ten goldens above still pin every other dimension at main's exact bytes, so this change
+        // is visible as the actor clause and nothing else.
+        withActor.ShouldNotBe(Dump(new MemoryFilter()));
+        withActor.ShouldContain("actor.alias");
+        withActor.ShouldContain("actor.vendor");
     }
 
     private static MemoryFilter Shape(string name) => name switch

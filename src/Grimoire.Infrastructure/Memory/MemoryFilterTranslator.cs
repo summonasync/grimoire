@@ -82,6 +82,11 @@ internal static class MemoryFilterTranslator
                 lte: tombstonedBefore.UtcDateTime));
         }
 
+        foreach (var actorCondition in ActorConditions(filter))
+        {
+            translated.Must.Add(actorCondition);
+        }
+
         if (filter.CreatedAfter is not null || filter.CreatedBefore is not null)
         {
             // The window is half-open by contract: MemoryFilterExtensions excludes the record sitting
@@ -136,6 +141,30 @@ internal static class MemoryFilterTranslator
         }
 
         return new Condition { Filter = anyOf };
+    }
+
+    // Actor is stored as a struct payload and the filter carries it as one candidate string, so the
+    // clause splits into one keyword per segment: alias always, vendor only when the candidate names
+    // one. A trailing separator ("alias+") names no vendor and is read as alias-only — where that
+    // diverges from the matcher is pinned by a test, not smoothed over. Matching is exact, by
+    // decision: the matcher next door compares case-insensitively and the write path normalizes
+    // nothing, so a mixed-case candidate narrows more at the store than the post-filter ever did.
+    private static IEnumerable<Condition> ActorConditions(MemoryFilter filter)
+    {
+        if (filter.Actor is not { } actor || MemoryActor.AliasPart(actor) is not { } alias)
+        {
+            return [];
+        }
+
+        var separator = actor.IndexOf('+', StringComparison.Ordinal);
+        var vendor = separator < 0 ? null : actor[(separator + 1)..];
+
+        return string.IsNullOrEmpty(vendor)
+            ? [Conditions.MatchKeyword("actor.alias", alias)]
+            : [
+                Conditions.MatchKeyword("actor.alias", alias),
+                Conditions.MatchKeyword("actor.vendor", vendor!),
+            ];
     }
 
     private static string[] ScopeValues(IReadOnlyList<MemoryScope> scopes) =>
