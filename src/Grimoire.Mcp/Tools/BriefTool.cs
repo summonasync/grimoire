@@ -144,11 +144,14 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
         "embedding provider is unreachable - reads returned nothing, writes landed nothing, and the retry is " +
         "safe when infra is back.";
 
+    // DailyState is Populated whenever the window found a note, whatever the daily purse did with it
+    // afterwards — a note that never made it onto the wire is still a reason not to teach the scry door.
     private static bool IsEmpty(BriefResult result) =>
         result.PersonaState == BriefSectionState.Empty &&
         result.FactsState == BriefSectionState.Empty &&
         result.TombstonesState == BriefSectionState.Empty &&
-        result.JournalState == BriefSectionState.Empty;
+        result.JournalState == BriefSectionState.Empty &&
+        result.DailyState == BriefSectionState.Empty;
 
     private static BriefPersonaSection ToPersonaSection(BriefResult result, string tome)
     {

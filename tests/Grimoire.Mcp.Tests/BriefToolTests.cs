@@ -704,7 +704,7 @@ public sealed class BriefToolTests
     }
 
     [Fact]
-    public async Task Brief_DailyFlag_WithResolvableZone_KeepsTheWarningsKeyAbsent()
+    public async Task Brief_DailyFlag_DailyOnlyTome_KeepsTheWarningsKeyAbsentAndStopsPreachingEmptiness()
     {
         var engineOptions = new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" };
         await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
@@ -717,11 +717,83 @@ public sealed class BriefToolTests
 
         result.ShouldSucceed();
         var payload = result.Payload();
-        payload.GetProperty("daily").GetProperty("state").GetString().ShouldBe("Populated");
-        payload.GetProperty("hint").GetString()!.ShouldContain("tome is empty",
-            customMessage: "characterization of today's behavior, not endorsement: IsEmpty() ignores DailyState, " +
-                "so a store whose only content is daily notes is still taught the scry door on a daily:true brief");
+        var daily = payload.GetProperty("daily");
+        daily.GetProperty("state").GetString().ShouldBe("Populated");
+        daily.GetProperty("groups")[0].GetProperty("entries").GetArrayLength().ShouldBe(1);
+        payload.GetProperty("hint").GetString()!.ShouldNotContain("tome is empty",
+            customMessage: "T4 pinned the opposite here as characterization: IsEmpty() ignored DailyState and " +
+                "taught the scry door to a tome that only holds daily notes. Owner ruling 2026-11-12 moved the " +
+                "fix into 045 before T5 renders the path.");
         payload.TryGetProperty("warnings", out _).ShouldBeFalse("an empty warnings list would serialize as a key");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_DailyOnlyTomeWithExplicitParam_SuppressesTheEmptinessPair()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await SeedDailyAsync(session, "morning standup on the wire gate", DailyNote(0), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+            ["tome"] = McpTestSession.ClientActor,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("daily").GetProperty("state").GetString().ShouldBe("Populated");
+        payload.GetProperty("hint").GetString()!.ShouldNotContain("tome is empty");
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse(
+            "KnownTomeKeys learns the tome from the very record that carries the daily note, so the empty-tome " +
+            "note cannot fire here even with the old IsEmpty; this arm locks it against a future regression");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NotesSwallowedByTheDailyPurse_AreStillContent()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefDailyMaxTotalChars = 0 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        await SeedDailyAsync(session, "a note the purse refused to print", DailyNote(0), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        var daily = payload.GetProperty("daily");
+        daily.GetProperty("state").GetString().ShouldBe("Populated");
+        daily.GetProperty("groups").GetArrayLength().ShouldBe(0);
+        daily.GetProperty("more").GetInt32().ShouldBe(1);
+        payload.GetProperty("hint").GetString()!.ShouldNotContain("tome is empty",
+            customMessage: "a note the budget swallowed still exists in the store — the tome is not empty, " +
+                "the render just ran out of chars");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_GenuinelyEmptyTome_KeepsTheHintAndTheWarning()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "warm the store under a tome this brief does not ask for",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["daily"] = true,
+            ["tome"] = "nonesuch-tome",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("daily").GetProperty("state").GetString().ShouldBe("Empty");
+        payload.GetProperty("hint").GetString()!.ShouldContain("tome is empty",
+            customMessage: "the fix must not swallow the real cold-start signal");
+        payload.GetProperty("warnings")[0].GetString()
+            .ShouldBe("tome 'nonesuch-tome' is empty or does not exist. Known tome keys: test-client");
     }
 
     [Fact]
