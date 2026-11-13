@@ -85,6 +85,27 @@ public sealed class MemoryActorSemanticsTests
     }
 
     [Fact]
+    public void MatchesExactly_ABareAliasDoesNotReachAVendorlessRowOfAnotherAlias()
+    {
+        // The case the whole suite was missing: under a precedence re-association of the vendor arm
+        // (A && vendor is null || Vendor == vendor) this becomes true while the rule says false, and
+        // every existing unit case kept passing. The harnesses killed that mutant; only this line
+        // makes the unit suite see it too.
+        MemoryActorSemantics.MatchesExactly(MemoryActor.Human, "kelthuzad").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void MatchesExactly_ADoubleSeparator_ProducesAStoreVendorTheMatcherCannotName()
+    {
+        // Third member of the same divergence family, pinned rather than tidied: "a++" splits on the
+        // first separator, so the store asks for alias "a" with vendor "+", while the matcher
+        // compares against ToString() and can never produce that vendor. Rejected by both sides for
+        // this actor - the agreement here is luck, and the test says so instead of implying a rule.
+        MemoryActorSemantics.MatchesExactly(MemoryActor.Agent("a", "plus"), "a++").ShouldBeFalse();
+        MemoryActorSemantics.Segments("a++").ShouldBe([("a", "+")]);
+    }
+
+    [Fact]
     public void MatchesExactly_BlankCandidate_LeavesEverythingIn()
     {
         MemoryActorSemantics.MatchesExactly(MemoryActor.Agent("kelthuzad", "qwen"), null).ShouldBeTrue();

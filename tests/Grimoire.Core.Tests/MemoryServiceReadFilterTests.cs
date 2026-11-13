@@ -165,9 +165,11 @@ public sealed class MemoryServiceReadFilterTests
         Seed("noise 5", [0.9747f, 0.2234f, 0f], actor: MemoryActor.Human);
         var only = Seed("only honest", [0.8660f, 0.5f, 0f]);
 
-        // The escalation loop itself is untouched by this slice (its own card), but its cause moved:
-        // an actor query can no longer wash out a window, so the honest short page is now reached in
-        // one call — one 6-point window holding the single row that belongs to this actor.
+        // The escalation loop itself is untouched by this slice (its own card), but its cause moved
+        // for a CLEAN actor candidate: the store narrows the window to this actor's rows, one of them
+        // survives, and the honest short page is reached in one call. Not a general statement — with
+        // the trailing-separator grammar the window can still fill and be emptied afterwards, which
+        // is what the trailing-separator test above exists to show.
         var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
 
         _store.SearchCallCount.ShouldBe(1);
