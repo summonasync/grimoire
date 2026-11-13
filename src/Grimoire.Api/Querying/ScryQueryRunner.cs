@@ -15,16 +15,16 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
             ? query.Tomes
             : [.. (await DiscoverTomesAsync(cancellationToken)).Where(tome => tome != own)];
 
-        var matches = targets.Count == 0
+        IReadOnlyList<RecallMatch> matches = targets.Count == 0
             ? []
-            : await memories.RecallAsync(new RecallQuery
+            : (await memories.RecallAsync(new RecallQuery
             {
                 Text = query.Query,
                 Scopes = MemoryScopes.LongTerm,
                 Kind = query.IncludeJournal ? null : MemoryKind.Fact,
                 Tomes = targets,
                 Limit = query.Limit,
-            }, cancellationToken);
+            }, cancellationToken)).Matches;
 
         var terms = LexicalTermMatcher.Tokenize(query.Query);
 

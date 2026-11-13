@@ -134,7 +134,7 @@ public sealed class MemoryService(
         return new RememberResult { Record = record, SupersededId = supersededId, NearMatches = nearMatches };
     }
 
-    public async Task<IReadOnlyList<RecallMatch>> RecallAsync(RecallQuery query, CancellationToken cancellationToken)
+    public async Task<RecallResult> RecallAsync(RecallQuery query, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query.Text))
         {
@@ -193,7 +193,11 @@ public sealed class MemoryService(
             results.Add(new RecallMatch { Record = accessed, Similarity = match.Similarity, Score = score });
         }
 
-        return results;
+        return new RecallResult
+        {
+            Matches = results,
+            Warnings = RoundCapWarning.Build(scan, query.Limit),
+        };
     }
 
     public async Task<bool> ForgetAsync(

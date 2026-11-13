@@ -121,7 +121,7 @@ internal sealed class RecallTool(
         return ToolResults.ExecuteAsync(async ct =>
         {
             var resolvedTome = await actors.ResolveTomeAsync(tome, ct);
-            var matches = await memories.RecallAsync(new RecallQuery
+            var recall = await memories.RecallAsync(new RecallQuery
             {
                 Text = query,
                 Scopes = scopeFilter is null ? [] : [scopeFilter.Value],
@@ -136,8 +136,11 @@ internal sealed class RecallTool(
                 Actor = actor,
                 Limit = limit,
             }, ct);
+            var matches = recall.Matches;
 
-            var warnings = await EmptyTomeWarning.BuildAsync(store, matches.Count == 0, tome, resolvedTome, ct);
+            var warnings = WarningMerge.Merge(
+                recall.Warnings,
+                await EmptyTomeWarning.BuildAsync(store, matches.Count == 0, tome, resolvedTome, ct));
 
             if (projectedKeys is null)
             {

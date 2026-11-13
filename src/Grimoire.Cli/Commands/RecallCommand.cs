@@ -14,12 +14,12 @@ internal sealed class RecallCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var memories = services.GetRequiredService<MemoryService>();
-        var matches = await memories.RecallAsync(new RecallQuery
+        var matches = (await memories.RecallAsync(new RecallQuery
         {
             Text = invocation.JoinedPositional(),
             Scopes = CliValues.ScopeList(invocation.Spec, invocation.Value("scope")),
             Limit = invocation.Value("limit") is { } raw ? CliValues.PositiveInt(invocation.Spec, "limit", raw) : 5,
-        }, cancellationToken);
+        }, cancellationToken)).Matches;
 
         if (matches.Count == 0)
         {

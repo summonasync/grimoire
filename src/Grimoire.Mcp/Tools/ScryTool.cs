@@ -94,7 +94,7 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
                 });
             }
 
-            var matches = await memories.RecallAsync(new RecallQuery
+            var recall = await memories.RecallAsync(new RecallQuery
             {
                 Text = query,
                 Scopes = MemoryScopes.LongTerm,
@@ -109,8 +109,9 @@ internal sealed class ScryTool(MemoryService memories, IMemoryStore store, Memor
             {
                 Tomes = targets,
                 Attribution = attributionFilter,
-                Hits = [.. matches.Select(match => ToHit(match, attributionFilter, terms))],
-                Count = matches.Count,
+                Hits = [.. recall.Matches.Select(match => ToHit(match, attributionFilter, terms))],
+                Count = recall.Matches.Count,
+                Warnings = recall.Warnings,
             });
         }, cancellationToken);
     }

@@ -9,4 +9,6 @@ internal sealed record ScryView
     public required IReadOnlyList<ScryHit> Hits { get; init; }
 
     public required int Count { get; init; }
+
+    public IReadOnlyList<string>? Warnings { get; init; }
 }

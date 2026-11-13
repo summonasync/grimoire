@@ -72,7 +72,7 @@ public sealed class MemoryServiceReadFilterTests
         var inWindow = Seed("fresh note", [0.9f, 0.4359f, 0f], created: FakeClock.DefaultStart);
         Seed("stale note", [0.95f, 0.3122f, 0f], created: FakeClock.DefaultStart.AddDays(-60), actor: MemoryActor.Human);
 
-        var matches = await _service.RecallAsync(Query(since: FakeClock.DefaultStart.AddDays(-1)), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(since: FakeClock.DefaultStart.AddDays(-1)), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(inWindow.Id);
@@ -84,8 +84,8 @@ public sealed class MemoryServiceReadFilterTests
         Seed("out of window", [0.99f, 0.141f, 0f], created: FakeClock.DefaultStart.AddDays(-90), actor: MemoryActor.Human);
         var wanted = Seed("in window", [0.8f, 0.6f, 0f], created: FakeClock.DefaultStart);
 
-        var matches = await _service.RecallAsync(
-            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+        var matches = (await _service.RecallAsync(
+            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(wanted.Id);
@@ -98,13 +98,13 @@ public sealed class MemoryServiceReadFilterTests
         Seed("tagged out", [0.95f, 0.3122f, 0f], created: FakeClock.DefaultStart, tags: ["noise"]);
         Seed("actor out", [0.85f, 0.5268f, 0f], created: FakeClock.DefaultStart, tags: ["plan"], actor: MemoryActor.Human);
 
-        var matches = await _service.RecallAsync(new RecallQuery
+        var matches = (await _service.RecallAsync(new RecallQuery
         {
             Text = QueryText,
             Tags = ["plan"],
             CreatedBefore = FakeClock.DefaultStart.AddHours(1),
             Actor = "dotnet-coder",
-        }, CancellationToken.None);
+        }, CancellationToken.None)).Matches;
 
         matches.Select(match => match.Record.Id).ShouldBe([wanted.Id]);
     }
@@ -127,7 +127,7 @@ public sealed class MemoryServiceReadFilterTests
         // two rows, now one call and six points. The loop itself is untouched and still reachable
         // through the "alias+" grammar - see the test that pins that, which falsified my earlier
         // claim that recall could no longer trigger it.
-        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);
         matches.Select(match => match.Record.Id).ShouldBe([first.Id, second.Id]);
@@ -149,7 +149,7 @@ public sealed class MemoryServiceReadFilterTests
         // the refill fires. For this one grammar the post-filter is the only thing standing between
         // this query and a wrong answer, which is why "recall can no longer trigger the escalation"
         // was false and why the asymmetry is on record rather than quietly aligned.
-        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder+"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder+"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(2);
         matches.ShouldBeEmpty();
@@ -170,7 +170,7 @@ public sealed class MemoryServiceReadFilterTests
         // survives, and the honest short page is reached in one call. Not a general statement — with
         // the trailing-separator grammar the window can still fill and be emptied afterwards, which
         // is what the trailing-separator test above exists to show.
-        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);
         matches.Select(match => match.Record.Id).ShouldBe([only.Id]);
@@ -184,7 +184,7 @@ public sealed class MemoryServiceReadFilterTests
         Seed("mild", [0.7f, 0.7141f, 0f]);
         Seed("cool", [0.6f, 0.8f, 0f]);
 
-        var matches = await _service.RecallAsync(Query(limit: 1), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 1), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);
         matches.Count.ShouldBe(1);
@@ -198,7 +198,7 @@ public sealed class MemoryServiceReadFilterTests
         Seed("noise 2", [0.9899f, 0.1421f, 0f], actor: MemoryActor.Human);
         var only = Seed("only match", [0.8660f, 0.5f, 0f]);
 
-        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);
         matches.Count.ShouldBe(1);
@@ -216,8 +216,8 @@ public sealed class MemoryServiceReadFilterTests
         Seed("too late 3", [0.9848f, 0.1736f, 0f], created: FakeClock.DefaultStart.AddDays(90));
         var wanted = Seed("in window", [0.8f, 0.6f, 0f]);
 
-        var matches = await _service.RecallAsync(
-            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+        var matches = (await _service.RecallAsync(
+            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(2);
         matches.Count.ShouldBe(1);
@@ -241,8 +241,8 @@ public sealed class MemoryServiceReadFilterTests
             new FakeEmbeddingProvider(Vectors),
             _clock);
 
-        var matches = await service.RecallAsync(
-            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+        var matches = (await service.RecallAsync(
+            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(2);
         matches.Select(match => match.Record.Id).ShouldBe([vanishing.Id]);
@@ -258,8 +258,8 @@ public sealed class MemoryServiceReadFilterTests
         Seed("too late 5", [0.9747f, 0.2234f, 0f], created: FakeClock.DefaultStart.AddDays(90));
         var seen = Seed("in both windows", [0.8f, 0.6f, 0f]);
 
-        var matches = await _service.RecallAsync(
-            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+        var matches = (await _service.RecallAsync(
+            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(2);
         matches.Select(match => match.Record.Id).ShouldBe([seen.Id]);
@@ -274,8 +274,8 @@ public sealed class MemoryServiceReadFilterTests
             Seed($"too late {index}", [0.9f - index * 0.001f, 0.1f, 0f], created: FakeClock.DefaultStart.AddDays(90));
         }
 
-        var matches = await _service.RecallAsync(
-            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+        var matches = (await _service.RecallAsync(
+            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(4);
         matches.ShouldBeEmpty();

@@ -88,9 +88,11 @@ internal sealed class McpTestSession : IAsyncDisposable
         IAgentIdentitySource? identityFile = null,
         FakeTomeManifestStore? manifests = null,
         FakeSessionRegistry? sessions = null,
-        string? clientProtocolVersion = null)
+        string? clientProtocolVersion = null,
+        Func<IMemoryStore, IMemoryStore>? storeDecorator = null)
     {
         var store = new FakeMemoryStore();
+        var graph = storeDecorator is null ? store : storeDecorator(store);
         var embeddings = new FakeEmbeddingProvider();
         var clock = new FakeClock();
         var gc = gcState ?? new FakeGcStateStore();
@@ -99,7 +101,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         var manifestsStore = manifests ?? new FakeTomeManifestStore();
         var sessionRegistry = sessions ?? new FakeSessionRegistry();
         var services = new FakeServiceProvider(
-            store, embeddings, clock, engineOptions, claims, gcOptions, gc,
+            graph, embeddings, clock, engineOptions, claims, gcOptions, gc,
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
             board,

@@ -6,5 +6,7 @@ public sealed record RecallEscalationResult
 
     public required int Rounds { get; init; }
 
+    public required int LastWindow { get; init; }
+
     public required RecallStopReason StoppedBy { get; init; }
 }

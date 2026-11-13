@@ -40,14 +40,14 @@ internal sealed class ScryCommand(CliEnvironment environment)
             return ExitCodes.Ok;
         }
 
-        var matches = await services.GetRequiredService<MemoryService>().RecallAsync(new RecallQuery
+        var matches = (await services.GetRequiredService<MemoryService>().RecallAsync(new RecallQuery
         {
             Text = query,
             Scopes = MemoryScopes.LongTerm,
             Kind = includeJournal ? null : MemoryKind.Fact,
             Tomes = targets,
             Limit = limit,
-        }, cancellationToken);
+        }, cancellationToken)).Matches;
 
         environment.Output.WriteLine($"Tomes: {string.Join(", ", targets)}");
         if (matches.Count == 0)

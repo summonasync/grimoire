@@ -31,17 +31,17 @@ public sealed class RecallEscalationLoop(IMemoryStore store, MemoryEngineOptions
 
             if (kept.Count >= limit)
             {
-                return Stop(kept, rounds, RecallStopReason.PageFilled);
+                return Stop(kept, rounds, window, RecallStopReason.PageFilled);
             }
 
             if (round.Count < window)
             {
-                return Stop(kept, rounds, RecallStopReason.StoreExhausted);
+                return Stop(kept, rounds, window, RecallStopReason.StoreExhausted);
             }
 
             if (rounds == MaxRounds)
             {
-                return Stop(kept, rounds, RecallStopReason.RoundCapReached);
+                return Stop(kept, rounds, window, RecallStopReason.RoundCapReached);
             }
 
             window *= 2;
@@ -51,10 +51,12 @@ public sealed class RecallEscalationLoop(IMemoryStore store, MemoryEngineOptions
     private static RecallEscalationResult Stop(
         Dictionary<Guid, VectorMatch> kept,
         int rounds,
+        int window,
         RecallStopReason reason) => new()
         {
             Kept = [.. kept.Values],
             Rounds = rounds,
+            LastWindow = window,
             StoppedBy = reason,
         };
 }

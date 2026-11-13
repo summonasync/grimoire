@@ -97,8 +97,8 @@ public sealed class MemoryServiceTomeTests
         await _service.RememberAsync(Request("deploy on friday", tome: "alpha"), CancellationToken.None);
         await _service.RememberAsync(Request("deploy on friday", tome: "beta"), CancellationToken.None);
 
-        var alpha = await _service.RecallAsync(Query(tome: "alpha"), CancellationToken.None);
-        var beta = await _service.RecallAsync(Query(tome: "beta"), CancellationToken.None);
+        var alpha = (await _service.RecallAsync(Query(tome: "alpha"), CancellationToken.None)).Matches;
+        var beta = (await _service.RecallAsync(Query(tome: "beta"), CancellationToken.None)).Matches;
 
         alpha.Select(match => match.Record.Tome).ShouldBe(["alpha"]);
         beta.Select(match => match.Record.Tome).ShouldBe(["beta"]);
@@ -110,8 +110,8 @@ public sealed class MemoryServiceTomeTests
         await _service.RememberAsync(Request("deploy on friday"), CancellationToken.None);
         await _service.RememberAsync(Request("deploy on friday", tome: "alpha"), CancellationToken.None);
 
-        var unscoped = await _service.RecallAsync(Query(), CancellationToken.None);
-        var alpha = await _service.RecallAsync(Query(tome: "alpha"), CancellationToken.None);
+        var unscoped = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
+        var alpha = (await _service.RecallAsync(Query(tome: "alpha"), CancellationToken.None)).Matches;
 
         unscoped.Select(match => match.Record.Tome).ShouldBe([TomeKey.DefaultTome]);
         alpha.Select(match => match.Record.Tome).ShouldBe(["alpha"]);
@@ -159,11 +159,11 @@ public sealed class MemoryServiceTomeTests
         await _service.RememberAsync(Request("deploy on friday", tome: "beta"), CancellationToken.None);
         await _service.RememberAsync(Request("deploy on friday", tome: "gamma"), CancellationToken.None);
 
-        var across = await _service.RecallAsync(new RecallQuery
+        var across = (await _service.RecallAsync(new RecallQuery
         {
             Text = QueryText,
             Tomes = ["alpha", "beta"],
-        }, CancellationToken.None);
+        }, CancellationToken.None)).Matches;
 
         across.Count.ShouldBe(2);
         across.Select(match => match.Record.Tome).OrderBy(tome => tome, StringComparer.Ordinal)
@@ -175,11 +175,11 @@ public sealed class MemoryServiceTomeTests
     {
         await _service.RememberAsync(Request("deploy on friday", tome: "alpha-squad"), CancellationToken.None);
 
-        var across = await _service.RecallAsync(new RecallQuery
+        var across = (await _service.RecallAsync(new RecallQuery
         {
             Text = QueryText,
             Tomes = ["gamma", "Alpha Squad", "alpha-squad"],
-        }, CancellationToken.None);
+        }, CancellationToken.None)).Matches;
 
         across.Select(match => match.Record.Tome).ShouldBe(["alpha-squad"]);
     }

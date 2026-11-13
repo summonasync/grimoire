@@ -43,7 +43,7 @@ public sealed class MatchedTermsLatencyTests(ITestOutputHelper output)
 
         foreach (var query in queries)
         {
-            var hits = await service.RecallAsync(new RecallQuery { Text = query, Limit = RecallLimit }, CancellationToken.None);
+            var hits = (await service.RecallAsync(new RecallQuery { Text = query, Limit = RecallLimit }, CancellationToken.None)).Matches;
 
             hits.Count.ShouldBe(RecallLimit);
 
