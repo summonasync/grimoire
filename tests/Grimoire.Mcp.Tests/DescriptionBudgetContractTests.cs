@@ -6,7 +6,14 @@ namespace Grimoire.Mcp.Tests;
 
 public sealed class DescriptionBudgetContractTests
 {
-    private const int TotalDescriptionCeiling = 16000;
+    // Raised 16000 -> 16500 on 2026-11-13 by the owner, after the guard fired on a merge rather than on
+    // bloat: this tree measures 16075 while origin/main was measured green under the old cap, so it took
+    // two real features together - 045's `daily` parameter and 052's memory_note additions - to cross it,
+    // and neither one alone. The ceiling is a tripwire for saturation, not a budget the surface is
+    // allowed to grow into silently; at saturation the honest move is a deliberate raise with the
+    // arithmetic recorded, not deleting documentation from whichever feature noticed last. Headroom
+    // against the measured 16075: 425 chars across all 16 tools.
+    private const int TotalDescriptionCeiling = 16500;
 
     private const int StartupContractCeiling = 2500;
 

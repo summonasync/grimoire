@@ -34,6 +34,16 @@ public sealed record MemoryEngineOptions
 
     public int BriefMaxEntryChars { get; init; } = 400;
 
+    public string DailyTag { get; init; } = "daily-notes";
+
+    public int DailyLookbackDays { get; init; } = 7;
+
+    public string? DailyTimeZone { get; init; }
+
+    public int BriefDailyMaxEntryChars { get; init; } = 1500;
+
+    public int BriefDailyMaxTotalChars { get; init; } = 6000;
+
     public double DigestSimilarityThreshold { get; init; } = 0.60;
 
     public int DigestRecentCap { get; init; } = 10;

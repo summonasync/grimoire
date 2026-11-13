@@ -7,4 +7,5 @@ public enum BriefSection
     Tombstones,
     Journal,
     Tomes,
+    Daily,
 }
