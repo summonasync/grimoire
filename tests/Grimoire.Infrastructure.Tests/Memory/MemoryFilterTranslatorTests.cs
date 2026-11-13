@@ -125,6 +125,32 @@ public sealed class MemoryFilterTranslatorTests
 
         var range = filter.Must.Single(item => item.Field?.Key == MemoryPayloadFields.CreatedAt).Field!.DatetimeRange!;
         range.Gte!.ToDateTime().ShouldBe(TestMemories.Moment.UtcDateTime);
+        range.Gt.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Translate_WithCreatedBefore_AddsExclusiveUpperBoundOnCreatedAt()
+    {
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter { CreatedBefore = TestMemories.Moment });
+
+        var range = filter.Must.Single(item => item.Field?.Key == MemoryPayloadFields.CreatedAt).Field!.DatetimeRange!;
+        range.Lt!.ToDateTime().ShouldBe(TestMemories.Moment.UtcDateTime);
+        range.Lte.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Translate_WithBothCreatedBounds_RendersOneRangeCarryingGteAndLt()
+    {
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter
+        {
+            CreatedAfter = TestMemories.Moment,
+            CreatedBefore = TestMemories.Moment.AddHours(6),
+        });
+
+        var range = filter.Must.Single(item => item.Field?.Key == MemoryPayloadFields.CreatedAt).Field!.DatetimeRange!;
+        range.Gte!.ToDateTime().ShouldBe(TestMemories.Moment.UtcDateTime);
+        range.Lt!.ToDateTime().ShouldBe(TestMemories.Moment.AddHours(6).UtcDateTime);
+        filter.Must.Count(item => item.Field?.Key == MemoryPayloadFields.CreatedAt).ShouldBe(1);
     }
 
     [Fact]

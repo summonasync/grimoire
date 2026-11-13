@@ -77,6 +77,80 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
+    public async Task List_WithCreatedBefore_ExcludesTheRecordAtTheBoundAndKeepsTheEarlierOne()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var boundary = TestMemories.Moment;
+        var atBound = await SeedAsync(store, TestMemories.Create("at-bound", created: boundary));
+        var oneTickBefore = await SeedAsync(store, TestMemories.Create("one-tick-before", created: boundary.AddTicks(-1)));
+        var oneTickAfter = await SeedAsync(store, TestMemories.Create("one-tick-after", created: boundary.AddTicks(1)));
+
+        var ids = await ListIdsAsync(store, new MemoryFilter { CreatedBefore = boundary });
+
+        // The earlier record has to be present for the exclusion below to mean anything.
+        ids.ShouldContain(oneTickBefore.Id);
+        ids.ShouldNotContain(atBound.Id);
+        ids.ShouldNotContain(oneTickAfter.Id);
+    }
+
+    [Fact]
+    public async Task Count_WithCreatedBefore_CountsOnlyRecordsStrictlyBeforeTheBound()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var boundary = TestMemories.Moment;
+        await SeedAsync(store, TestMemories.Create("at-bound", created: boundary));
+        await SeedAsync(store, TestMemories.Create("one-tick-before", created: boundary.AddTicks(-1)));
+        await SeedAsync(store, TestMemories.Create("a-day-before", created: boundary.AddDays(-1)));
+
+        var count = await store.CountAsync(new MemoryFilter { CreatedBefore = boundary }, CancellationToken.None);
+
+        count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task List_WithCreatedBeforeInAnotherOffset_BoundsTheUtcInstantNotTheLocalTicks()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var boundary = TestMemories.Moment;
+        await SeedAsync(store, TestMemories.Create("at-bound", created: boundary));
+        var oneTickBefore = await SeedAsync(store, TestMemories.Create("one-tick-before", created: boundary.AddTicks(-1)));
+
+        // The same instant spelled as 15:00+03:00: the bound must be read as an instant, not as
+        // whatever wall-clock digits the offset representation happens to carry.
+        var ids = await ListIdsAsync(store, new MemoryFilter { CreatedBefore = boundary.ToOffset(TimeSpan.FromHours(3)) });
+
+        ids.ShouldContain(oneTickBefore.Id);
+        ids.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Window_WithBothCreatedBounds_ReadsAndCountsTheSameSet()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var from = TestMemories.Moment;
+        var until = TestMemories.Moment.AddHours(6);
+        var beforeWindow = await SeedAsync(store, TestMemories.Create("before-window", created: from.AddSeconds(-1)));
+        var atFrom = await SeedAsync(store, TestMemories.Create("at-from", created: from));
+        var inside = await SeedAsync(store, TestMemories.Create("inside", created: from.AddHours(3)));
+        await SeedAsync(store, TestMemories.Create("at-until", created: until));
+        await SeedAsync(store, TestMemories.Create("after-until", created: until.AddSeconds(1)));
+
+        var filter = new MemoryFilter { CreatedAfter = from, CreatedBefore = until };
+        var ids = await ListIdsAsync(store, filter);
+        var count = await store.CountAsync(filter, CancellationToken.None);
+
+        ids.ShouldContain(atFrom.Id);
+        ids.ShouldContain(inside.Id);
+        ids.ShouldNotContain(beforeWindow.Id);
+        ids.Count.ShouldBe(2);
+        count.ShouldBe(ids.Count);
+    }
+
+    [Fact]
     public async Task Get_ById_ReturnsRawRecordWithAnyStatus()
     {
         var db = new FakeQdrantVectorDb();
