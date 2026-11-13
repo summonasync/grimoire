@@ -18,6 +18,8 @@ internal sealed record BriefView
 
     public required IReadOnlyList<string> Omitted { get; init; }
 
+    public IReadOnlyDictionary<string, BriefDigestSection>? OmissionDigest { get; init; }
+
     public string? Hint { get; init; }
 
     public BriefCompactionSection? CompactionDue { get; init; }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Grimoire.Core;
 using ModelContextProtocol.Client;
 
@@ -367,6 +368,186 @@ public sealed class BriefToolTests
     }
 
     [Fact]
+    public async Task Brief_SomethingStillFits_WritesNoDigestKey()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "a fact that fits",
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+        });
+        await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = "a note that fits",
+            ["scope"] = "Global",
+        });
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("omitted").GetArrayLength().ShouldBe(0);
+        payload.TryGetProperty("omissionDigest", out _).ShouldBeFalse(
+            "an empty digest map would serialize a key onto a payload that lost nothing");
+    }
+
+    [Fact]
+    public async Task Brief_SectionFallsOutOfBudget_DigestNamesEveryRecordThatFellWithIt()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefMaxTotalChars = 5 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        await session.Store.UpsertAsync(
+            JournalNote("the note the purse refused to print", BriefClockInstant), new float[] { 1, 0, 0 }, CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("journal").GetProperty("state").GetString().ShouldBe("Omitted");
+        payload.GetProperty("journal").GetProperty("items").GetArrayLength().ShouldBe(0);
+
+        var journal = payload.GetProperty("omissionDigest").GetProperty("journal");
+        journal.GetProperty("count").GetInt32().ShouldBe(1);
+        var dropped = journal.GetProperty("dropped");
+        dropped.GetArrayLength().ShouldBe(journal.GetProperty("count").GetInt32(),
+            customMessage: "count is the size of dropped, not a second number to guess");
+        var record = dropped[0];
+        record.GetProperty("memoryId").GetGuid().ShouldNotBe(Guid.Empty);
+        record.GetProperty("excerpt").GetString().ShouldBe("the note the purse refused to print");
+        record.GetProperty("reason").GetString().ShouldBe("SectionBudget");
+        record.GetProperty("excerptCut").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_MultiSectionDigest_WritesItsKeysInCoreOrderOnTheWire()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefDailyMaxTotalChars = 50 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+
+        var first = await RememberFactAsync(session, "the first standing fact");
+        var second = await RememberFactAsync(session, "the second standing fact");
+        var retracted = await RememberFactAsync(session, "a fact retracted for the tombstone");
+        var retractedToo = await RememberFactAsync(session, "a second fact retracted for the tombstone");
+        await ForgetAsync(session, retracted, "the tombstone the limit cut");
+        session.Clock.UtcNow = session.Clock.UtcNow.AddMinutes(1);
+        await ForgetAsync(session, retractedToo, "the tombstone that stayed");
+        await session.Store.UpsertAsync(
+            JournalNote("the journal note the limit cut", BriefClockInstant), new float[] { 1, 0, 0 }, CancellationToken.None);
+        await session.Store.UpsertAsync(
+            JournalNote("the journal note that fit", BriefClockInstant.AddMinutes(5)), new float[] { 0, 1, 0 }, CancellationToken.None);
+        await SeedDailyAsync(session, new string('d', 40), DailyNote(0), "medivh", "claude");
+        await SeedDailyAsync(session, new string('e', 40), DailyNote(10), "medivh", "claude");
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>
+        {
+            ["factsPerScope"] = 1,
+            ["journalPerScope"] = 1,
+            ["tombstoneLimit"] = 1,
+            ["daily"] = true,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        var digest = payload.GetProperty("omissionDigest");
+
+        // JsonElement walks properties in document order, so this is the byte order of the wire payload,
+        // not a set comparison. Core builds the map Facts, Tombstones, Journal, Daily and the projection
+        // must hand it over in that order; alphabetical would be daily, facts, journal, tombstones.
+        digest.EnumerateObject()
+            .Select(section => section.Name)
+            .ShouldBe(["facts", "tombstones", "journal", "daily"], customMessage:
+                "digest section keys must reach the wire in Core's fixed order, not sorted");
+
+        digest.GetProperty("facts").GetProperty("dropped")[0].GetProperty("reason").GetString().ShouldBe("ReadLimit");
+        digest.GetProperty("tombstones").GetProperty("dropped")[0].GetProperty("reason").GetString().ShouldBe("ReadLimit");
+        digest.GetProperty("journal").GetProperty("dropped")[0].GetProperty("reason").GetString().ShouldBe("ReadLimit");
+        digest.GetProperty("daily").GetProperty("dropped")[0].GetProperty("reason").GetString().ShouldBe("DailyPurse");
+
+        foreach (var section in digest.EnumerateObject())
+        {
+            section.Value.GetProperty("count").GetInt32().ShouldBe(1, customMessage: $"section '{section.Name}'");
+        }
+
+        var digestIds = digest.EnumerateObject()
+            .SelectMany(section => section.Value.GetProperty("dropped").EnumerateArray()
+                .Select(record => record.GetProperty("memoryId").GetGuid()))
+            .ToArray();
+        digestIds.Length.ShouldBe(4);
+        digestIds.Distinct().Count().ShouldBe(digestIds.Length);
+
+        var shown = payload.GetProperty("facts").GetProperty("items")[0].GetProperty("memoryId").GetGuid();
+        digestIds.ShouldNotContain(shown, customMessage: "a record on the wire is not a record that fell out");
+        digestIds.ShouldContain(shown == first ? second : first);
+
+        var omitted = payload.GetProperty("omitted").EnumerateArray()
+            .Select(value => value.GetString())
+            .ToArray();
+        omitted.ShouldContain("daily", customMessage: "the digest and the section names must agree about the loss");
+    }
+
+    [Fact]
+    public async Task Brief_DigestExcerpt_AtTheNeverTruncateFloorStaysWhole_AboveItIsCutToWidth()
+    {
+        var engineOptions = new MemoryEngineOptions { BriefMaxTotalChars = 5 };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        var wholeId = Guid.NewGuid();
+        var cutId = Guid.NewGuid();
+        await session.Store.UpsertAsync(
+            JournalNote(new string('a', 300), BriefClockInstant, wholeId), new float[] { 1, 0, 0 }, CancellationToken.None);
+        await session.Store.UpsertAsync(
+            JournalNote(new string('b', 301), BriefClockInstant.AddMinutes(1), cutId), new float[] { 0, 1, 0 }, CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var dropped = result.Payload().GetProperty("omissionDigest").GetProperty("journal").GetProperty("dropped");
+        dropped.GetArrayLength().ShouldBe(2);
+
+        var whole = DigestRecord(dropped, wholeId);
+        whole.GetProperty("excerpt").GetString()!.Length.ShouldBe(300);
+        whole.GetProperty("excerptCut").GetBoolean().ShouldBeFalse(
+            customMessage: "the floor is a guarantee, not a cap — a record at exactly 300 is never cut");
+
+        var cut = DigestRecord(dropped, cutId);
+        cut.GetProperty("excerpt").GetString()!.Length.ShouldBe(80);
+        cut.GetProperty("excerptCut").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Brief_DigestExcerpt_ConfiguredFloorCutsTheFirstCharAboveItToTheConfiguredWidth()
+    {
+        var engineOptions = new MemoryEngineOptions
+        {
+            BriefMaxTotalChars = 5,
+            BriefNeverTruncateChars = 80,
+            BriefDigestExcerptChars = 12,
+        };
+        await using var session = await McpTestSession.StartAsync(engineOptions: engineOptions);
+        var wholeId = Guid.NewGuid();
+        var cutId = Guid.NewGuid();
+        await session.Store.UpsertAsync(
+            JournalNote(new string('c', 80), BriefClockInstant, wholeId), new float[] { 1, 0, 0 }, CancellationToken.None);
+        await session.Store.UpsertAsync(
+            JournalNote(new string('d', 81), BriefClockInstant.AddMinutes(1), cutId), new float[] { 0, 1, 0 }, CancellationToken.None);
+
+        var result = await session.Client.CallToolAsync("memory_brief", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        var dropped = result.Payload().GetProperty("omissionDigest").GetProperty("journal").GetProperty("dropped");
+
+        var whole = DigestRecord(dropped, wholeId);
+        whole.GetProperty("excerpt").GetString()!.Length.ShouldBe(80);
+        whole.GetProperty("excerptCut").GetBoolean().ShouldBeFalse(
+            customMessage: "a record at exactly the floor stays whole; the comparison is <=, not <");
+
+        var cut = DigestRecord(dropped, cutId);
+        cut.GetProperty("excerpt").GetString().ShouldBe(new string('d', 12),
+            customMessage: "the cut width comes from BriefDigestExcerptChars, not a hardcoded 80");
+        cut.GetProperty("excerptCut").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Brief_ScopesSchema_SpellsOutTheScopeValues()
     {
         await using var session = await McpTestSession.StartAsync();
@@ -406,6 +587,55 @@ public sealed class BriefToolTests
         CreatedAt = accessed,
         LastAccessedAt = accessed,
     };
+
+    private static JsonElement DigestRecord(JsonElement dropped, Guid memoryId)
+    {
+        foreach (var record in dropped.EnumerateArray())
+        {
+            if (record.GetProperty("memoryId").GetGuid() == memoryId)
+            {
+                return record;
+            }
+        }
+
+        throw new InvalidOperationException($"the digest dropped array never named {memoryId}");
+    }
+
+    private static MemoryRecord JournalNote(string content, DateTimeOffset created, Guid? id = null) => new()
+    {
+        Id = id ?? Guid.NewGuid(),
+        Content = content,
+        Scope = MemoryScope.Global,
+        Kind = MemoryKind.Journal,
+        Actor = MemoryActor.Human,
+        Tome = McpTestSession.ClientActor,
+        CreatedAt = created,
+        LastAccessedAt = created,
+    };
+
+    private static async Task<Guid> RememberFactAsync(McpTestSession session, string content)
+    {
+        var result = await session.Client.CallToolAsync("memory_remember", new Dictionary<string, object?>
+        {
+            ["content"] = content,
+            ["scope"] = "Global",
+            ["kind"] = "Fact",
+        });
+
+        result.ShouldSucceed();
+        return result.Payload().GetProperty("memoryId").GetGuid();
+    }
+
+    private static async Task ForgetAsync(McpTestSession session, Guid memoryId, string reason)
+    {
+        var result = await session.Client.CallToolAsync("memory_forget", new Dictionary<string, object?>
+        {
+            ["memoryId"] = memoryId.ToString(),
+            ["reason"] = reason,
+        });
+
+        result.ShouldSucceed();
+    }
 
     private static async Task SeedPersonaAsync(McpTestSession session)
     {

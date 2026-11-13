@@ -73,6 +73,7 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
                 Daily = daily == true ? ToDailySection(result) : null,
                 Tomes = ToTomesSection(result),
                 Omitted = [.. result.Omitted.Select(ToSectionName)],
+                OmissionDigest = ToOmissionDigest(result.OmissionDigest),
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
                 CompactionDue = ToCompactionSection(result.CompactionDue),
                 Warnings = MergeWarnings(result.Warnings, tomeWarnings),
@@ -238,6 +239,39 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
             Note = result.TomesNote,
         };
     }
+
+    // Core hands the digest over in its fixed section order (Facts, Tombstones, Journal, Daily) and that
+    // order is the wire contract, so the projection walks the source and keeps the keys as they came:
+    // a sorted or LINQ-grouped rebuild would quietly rearrange what the reader sees first. Nothing fell
+    // out stays null, and null writes no key — an empty map would move the no-omission payload hash.
+    private static IReadOnlyDictionary<string, BriefDigestSection>? ToOmissionDigest(
+        IReadOnlyDictionary<BriefSection, BriefSectionOmissions>? digest)
+    {
+        if (digest is null)
+        {
+            return null;
+        }
+
+        var sections = new Dictionary<string, BriefDigestSection>(digest.Count, StringComparer.Ordinal);
+        foreach (var (section, omissions) in digest)
+        {
+            sections[ToSectionName(section)] = new BriefDigestSection
+            {
+                Count = omissions.Count,
+                Dropped = [.. omissions.Dropped.Select(ToOmittedItem)],
+            };
+        }
+
+        return sections;
+    }
+
+    private static BriefOmittedItem ToOmittedItem(BriefOmittedRecord record) => new()
+    {
+        MemoryId = record.MemoryId,
+        Excerpt = record.Excerpt,
+        Reason = record.Reason,
+        ExcerptCut = record.ExcerptCut,
+    };
 
     private static string ToSectionName(BriefSection section) => section switch
     {
