@@ -205,6 +205,82 @@ public sealed class MemoryServiceReadFilterTests
         matches[0].Record.Id.ShouldBe(only.Id);
     }
 
+    [Fact]
+    public async Task Recall_WhenTheFirstWindowIsAllRejects_WidensUntilThePageFills()
+    {
+        // The store hands back candidates and the service filter decides: FakeMemoryStore does not
+        // model the date clause at all, so the three rows crowding the narrow window here are
+        // exactly the shape the escalation loop exists for — a full window that keeps nothing.
+        Seed("too late 1", [0.9950f, 0.0998f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 2", [0.9899f, 0.1421f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 3", [0.9848f, 0.1736f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        var wanted = Seed("in window", [0.8f, 0.6f, 0f]);
+
+        var matches = await _service.RecallAsync(
+            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.Count.ShouldBe(1);
+        matches[0].Record.Id.ShouldBe(wanted.Id);
+    }
+
+    [Fact]
+    public async Task Recall_WhenTheWiderWindowLosesARow_TheNarrowRoundStillCounts()
+    {
+        Seed("too late 1", [0.9950f, 0.0998f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 2", [0.9899f, 0.1421f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 3", [0.9848f, 0.1736f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 4", [0.9798f, 0.2000f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 5", [0.9747f, 0.2234f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        var vanishing = Seed("first window only", [0.8f, 0.6f, 0f]);
+
+        // Real ANN windows are not nested: a wider limit can lose a candidate the narrow one had.
+        // Replacement semantics would hand back the empty wide round and drop the row found first.
+        var service = TestMemories.Service(
+            new ApproximateWindowStore(_store, vanishing.Id, firstWindow: 6),
+            new FakeEmbeddingProvider(Vectors),
+            _clock);
+
+        var matches = await service.RecallAsync(
+            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.Select(match => match.Record.Id).ShouldBe([vanishing.Id]);
+    }
+
+    [Fact]
+    public async Task Recall_RowSeenInTwoRounds_IsReturnedAndBumpedOnce()
+    {
+        Seed("too late 1", [0.9950f, 0.0998f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 2", [0.9899f, 0.1421f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 3", [0.9848f, 0.1736f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 4", [0.9798f, 0.2000f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        Seed("too late 5", [0.9747f, 0.2234f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        var seen = Seed("in both windows", [0.8f, 0.6f, 0f]);
+
+        var matches = await _service.RecallAsync(
+            Query(limit: 2, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.Select(match => match.Record.Id).ShouldBe([seen.Id]);
+        _store.UpdateCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Recall_EveryRoundFillsAndNothingSurvives_StopsAtFourSearches()
+    {
+        for (var index = 1; index <= 24; index++)
+        {
+            Seed($"too late {index}", [0.9f - index * 0.001f, 0.1f, 0f], created: FakeClock.DefaultStart.AddDays(90));
+        }
+
+        var matches = await _service.RecallAsync(
+            Query(limit: 1, until: FakeClock.DefaultStart.AddDays(1)), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(4);
+        matches.ShouldBeEmpty();
+    }
+
     private MemoryRecord Seed(
         string content,
         float[]? vector = null,
