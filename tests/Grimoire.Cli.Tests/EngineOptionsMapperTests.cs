@@ -151,6 +151,23 @@ public sealed class EngineOptionsMapperTests : IDisposable
     }
 
     [Fact]
+    public void Load_DailyKeysFromTheEnvironment_ReachTheEngineOptions()
+    {
+        var environment = new Dictionary<string, string>
+        {
+            ["GRIMOIRE_MEMORY__DAILYTAG"] = "field-notes",
+            ["GRIMOIRE_MEMORY__DAILYTIMEZONE"] = "Europe/Moscow",
+        };
+
+        var config = new ConfigLoader(Path.Combine(_directory, "missing", "config.json"), environment).Load();
+        var options = EngineOptionsMapper.ToEngineOptions(config.Memory, config.DefaultTome);
+
+        options.DailyTag.ShouldBe("field-notes");
+        options.DailyTimeZone.ShouldBe("Europe/Moscow");
+        DailyWindowResolver.ResolveZone(options.DailyTimeZone).Zone.BaseUtcOffset.ShouldBe(TimeSpan.FromHours(3));
+    }
+
+    [Fact]
     public void ToEngineOptions_ClampsReindexBatchSizeToAtLeastOne()
     {
         var options = EngineOptionsMapper.ToEngineOptions(new MemoryOptions { ReindexBatchSize = 0 }, TomeKey.DefaultTome);
