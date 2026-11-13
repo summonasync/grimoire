@@ -347,6 +347,37 @@ Standing rules, enforced from day one:
   verbatim quotes stay as spoken — a convention the tool descriptions
   teach, not a store-enforced rule.
 
+## Recent MCP handshakes
+
+`grimoire mcp` records what it observed at the protocol level. The first request of a
+connection writes one row into a vector-less `grimoire-sessions` collection — client name
+and version, negotiated protocol version, the actor the chain resolved, transport, host,
+timestamp. `grimoire serve` projects those rows over `GET /api/sessions` (`limit` 1..500,
+default 50; `windowHours` 0..8760, default the configured retention; anything unusable is
+refused with a 400 that names the parameter before the registry is read) and the console's
+**Recent MCP handshakes** panel renders them under the heading "Clients the server saw at
+initialize".
+
+The panel reports observed handshakes. That is the whole claim, and these are the things it
+deliberately does not say:
+
+- **No presence, no "online", no connection count.** A row is one handshake at one
+  timestamp; it never means the client is connected now. The same client reconnecting four
+  times is four rows, and aged rows simply leave the window — nothing marks them dead.
+- **A connection that never sends a request is never recorded.** The write happens on the
+  first request through the transport, not at socket open. An empty panel means "no
+  handshake observed in the window", and the panel says exactly that.
+- **`sessionId` is null on stdio.** A stdio connection has no MCP session id to report, so
+  the field stays null there rather than carrying a stand-in value.
+- **A client that reports no identity is stored as `unknown`.** When the actor chain
+  resolves nothing, the row carries the chain's `unknown` alias — the same provenance the
+  memory-write path uses, not a placeholder invented for the console.
+
+Ownership is split one way: the MCP face writes and never prunes, `serve` reads and prunes,
+and a retention sweep runs in the serve process only. Reads degrade instead of failing — an
+unreachable registry answers an empty list plus a `degradationReason`, and the panel shows
+"Handshake registry unavailable" rather than pretending the window is empty.
+
 ## MCP tools
 
 | Tool | Teaches the agent to… |
@@ -376,9 +407,10 @@ as `GRIMOIRE_DEFAULTTOME`:
 | Section | Keys (defaults) |
 |---|---|
 | *(root)* | `defaultTome` (`default`) |
-| `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
+| `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`), `sessionCollection?` (`<collection>-sessions`) |
 | `embedding` | `provider` (`ollama`), `model` (`qwen3-embedding`), `endpoint` (`http://localhost:11434`), `dimensions` (1024) |
 | `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
+| `sessions` | `retentionHours?` (unset follows `memory.sessionTtlHours`) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 
 Unknown keys are rejected — typos in a hand-edited file fail loudly.
@@ -386,6 +418,10 @@ Unknown keys are rejected — typos in a hand-edited file fail loudly.
 like `defaultTome` is edited directly in the file. That key is also the tome
 the CLI `report` reads: `GRIMOIRE_TOME` steers the MCP and web faces and the
 `--tome` flag chain of the verbs that have it, and `report` has no such flag.
+An unusable handshake window — `sessions.retentionHours` (or its
+`memory.sessionTtlHours` fallback) that is not finite or not positive — stops `serve`
+at startup with a config error naming the knob, because a zero window would retire
+live handshake rows instead of aged ones.
 
 ## Development
 

@@ -87,12 +87,10 @@ public sealed class SessionRetentionSweeperTests
     }
 
     [Fact]
-    public async Task Sweep_CallsNothingButPruneAndLeavesTheMemoriesStoreAlone()
+    public async Task Sweep_CallsNothingButPruneOnTheRegistryItWasHanded()
     {
         var registry = new SweepingRegistry();
         registry.Seed(Row(Now.AddHours(-26)));
-        var memories = new FakeMemoryStore();
-        memories.Seed("a standing observation", [1f, 0f]);
         var sweeper = CreateSweeper(registry);
         using var cts = new CancellationTokenSource();
 
@@ -100,12 +98,11 @@ public sealed class SessionRetentionSweeperTests
         await Wait.UntilAsync(() => registry.PruneAttempts > 1);
         await sweeper.StopAsync(cts.Token);
 
+        // The sweep's whole reach is the delegate it was handed, so the recorded verb set is the
+        // observable boundary: measured with a prune that also listed, this flips to [prune, list]
+        // while a memory-store fake stayed at zero counters under the same wiring — the memories
+        // half of the old assertion could not fail and is gone rather than renamed.
         registry.Calls.Distinct().ShouldBe(["prune"]);
-        memories.UpsertCount.ShouldBe(0);
-        memories.UpdateCount.ShouldBe(0);
-        memories.DeleteCount.ShouldBe(0);
-        memories.GetCount.ShouldBe(0);
-        memories.Records.ShouldHaveSingleItem();
     }
 
     [Fact]

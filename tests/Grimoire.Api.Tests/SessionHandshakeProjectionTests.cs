@@ -99,6 +99,24 @@ public class SessionHandshakeProjectionTests
         registry.LastNotBefore.ShouldBe(Now.AddHours(-6));
     }
 
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    public void Constructor_NonFiniteRetentionDefault_RefusesTheProjectionBeforeAnyRequest(string candidate)
+    {
+        // The argument net substitutes this number when a caller asks no window, so a
+        // non-finite default would leave the guard, survive the clamp and reach the response
+        // as a number no JSON writer can emit — the refusal belongs to the composition, not
+        // to a fourth check inside the request path.
+        var hours = double.Parse(candidate, CultureInfo.InvariantCulture);
+
+        var failure = Should.Throw<ArgumentOutOfRangeException>(
+            () => new SessionHandshakeProjection(new FakeSessionRegistry(), new FakeClock(Now), hours));
+
+        failure.ParamName.ShouldBe("retentionHours");
+    }
+
     private static SessionRegistryEntry Entry(DateTimeOffset occurredAt) => new()
     {
         OccurredAt = occurredAt,

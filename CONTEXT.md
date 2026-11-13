@@ -16,7 +16,8 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
 - **Local web server** (`grimoire serve`, loopback HTTP + static SPA) — the human-facing
   surface: browse/search/edit memories, manage the tome shelf (create manifests, edit
   descriptions, purge a tome behind a typed confirmation), edit persona, scry across
-  tomes, view settings and stats; also runs the background GC sweep.
+  tomes, view settings and stats, read recent MCP handshakes at `GET /api/sessions`; also
+  runs the background GC sweep and the handshake retention sweep.
 - **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
   a directory), `install` (upsert the managed routing block into agent home memory files),
   `remember`, `recall`, `brief`, `report` (the evening read of the day's daily notes), `scry`,
@@ -79,6 +80,18 @@ a payload. Two orthogonal dimensions:
   `memory_tome_create` only when nothing on the brief's tome table fits; records without
   a manifest stay first-class (a tome exists with a manifest or ≥1 record). Manifest
   failures degrade reads (brief carries a note) and never block memory paths.
+- **Session handshakes are a registry, not memories**: an observation log the MCP face
+  writes — one row per connection, recorded on its first request — that only `serve` reads
+  and prunes. It is a sibling of the manifest shelf, not a tenant of the memory collection:
+  its own vector-less Qdrant collection (`grimoire-sessions`, derived from `qdrant.collection`
+  and overridable with `qdrant.sessionCollection`), no embedder, no payload indexes, and
+  newest-first retrieval done reader-side over a collection bounded by retention. The aging
+  knob is `sessions.retentionHours`; unset means it follows `memory.sessionTtlHours`. The
+  sweep that applies it is registered in the serve process only. Reads degrade (empty list
+  plus a reason), writes fail loudly. No fact surface — recall, list, digest, brief, scry —
+  can see a registry row, and the surface reports observed handshakes, never presence: a
+  connection that sends no request is never recorded, `sessionId` is null on stdio, and a
+  client that reports no identity is stored with the actor chain's `unknown` alias.
 - **Persona** is a first-class structured document in the personal scope of a tome, edited
   by humans (UI/CLI), read by agents via `memory_persona_get`.
 - **Scry is the one cross-tome door** (ADR-007): `memory_scry` reads other tomes at query

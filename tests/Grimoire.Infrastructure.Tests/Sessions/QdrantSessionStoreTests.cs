@@ -243,7 +243,7 @@ public sealed class QdrantSessionStoreTests
     }
 
     [Fact]
-    public async Task ListRecent_AppliesLimitThenWindow()
+    public async Task ListRecent_LimitInsideTheWindow_ReturnsTheNewestRowsInTheWindow()
     {
         await _store.WriteAsync(Entry(occurredAt: Moment.AddHours(3)), CancellationToken.None);
         await _store.WriteAsync(Entry(occurredAt: Moment.AddHours(2)), CancellationToken.None);

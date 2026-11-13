@@ -15,13 +15,15 @@ public sealed class SessionHandshakeProjection(ISessionRegistry registry, IClock
 
     public const double MaxWindowHours = 8760;
 
+    private readonly double _retentionHours = ValidateRetentionDefault(retentionHours);
+
     public async Task<SessionsResponse> ProjectAsync(
         int? limit,
         double? windowHours,
         CancellationToken cancellationToken)
     {
         var effectiveLimit = Math.Clamp(limit ?? DefaultLimit, MinLimit, MaxLimit);
-        var askedWindow = windowHours is { } raw && double.IsFinite(raw) ? raw : retentionHours;
+        var askedWindow = windowHours is { } raw && double.IsFinite(raw) ? raw : _retentionHours;
         var effectiveWindow = Math.Clamp(askedWindow, MinWindowHours, MaxWindowHours);
         var now = clock.UtcNow;
         var rows = await registry.ListRecentAsync(
@@ -43,4 +45,18 @@ public sealed class SessionHandshakeProjection(ISessionRegistry registry, IClock
             entry.OccurredAt,
             Math.Round((now - entry.OccurredAt).TotalHours, 2),
             entry.Host);
+
+    private static double ValidateRetentionDefault(double retentionHours)
+    {
+        if (!double.IsFinite(retentionHours))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(retentionHours),
+                retentionHours,
+                "The default handshake window must be a finite number of hours — a non-finite default survives the argument guard " +
+                "and reaches the response as a window no JSON writer can emit.");
+        }
+
+        return retentionHours;
+    }
 }

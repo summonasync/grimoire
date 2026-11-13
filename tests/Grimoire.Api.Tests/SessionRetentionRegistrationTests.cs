@@ -34,17 +34,12 @@ public sealed class SessionRetentionRegistrationTests
     [Theory]
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
-    public void Build_WithNonFiniteRetentionHours_CannotMaterialiseASweep(double hours)
+    public void Build_WithNonFiniteRetentionHours_RefusesTheHostBeforeItBindsAPort(double hours)
     {
-        using var app = ApiHostBuilder.Build(Options(hours), Ports(withRegistry: true));
+        var failure = Should.Throw<ArgumentOutOfRangeException>(
+            () => ApiHostBuilder.Build(Options(hours), Ports(withRegistry: true)));
 
-        // The knob reaches the sweep as a TimeSpan, and a TimeSpan refuses a non-finite hour count
-        // out of the box — ArgumentException for NaN, OverflowException for infinity, both measured
-        // here rather than assumed. The host cannot resolve its background services at all, so such
-        // a window never reaches the cutoff arithmetic, where it would silently mean 'retire all'.
-        var failure = Should.Throw<Exception>(() => app.Services.GetServices<IHostedService>().ToList());
-
-        failure.GetType().ShouldBeOneOf(typeof(ArgumentException), typeof(OverflowException));
+        failure.ParamName.ShouldBe("retentionHours");
     }
 
     [Theory]
