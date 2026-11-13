@@ -110,6 +110,23 @@ public sealed class QdrantMemoryStoreTests
     }
 
     [Fact]
+    public async Task List_WithCreatedBeforeInAnotherOffset_BoundsTheUtcInstantNotTheLocalTicks()
+    {
+        var db = new FakeQdrantVectorDb();
+        var store = NewStore(db);
+        var boundary = TestMemories.Moment;
+        await SeedAsync(store, TestMemories.Create("at-bound", created: boundary));
+        var oneTickBefore = await SeedAsync(store, TestMemories.Create("one-tick-before", created: boundary.AddTicks(-1)));
+
+        // The same instant spelled as 15:00+03:00: the bound must be read as an instant, not as
+        // whatever wall-clock digits the offset representation happens to carry.
+        var ids = await ListIdsAsync(store, new MemoryFilter { CreatedBefore = boundary.ToOffset(TimeSpan.FromHours(3)) });
+
+        ids.ShouldContain(oneTickBefore.Id);
+        ids.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Window_WithBothCreatedBounds_ReadsAndCountsTheSameSet()
     {
         var db = new FakeQdrantVectorDb();
