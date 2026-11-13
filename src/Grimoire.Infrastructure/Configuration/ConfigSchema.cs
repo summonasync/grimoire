@@ -1,4 +1,3 @@
-using System.Globalization;
 using Grimoire.Core;
 
 namespace Grimoire.Infrastructure.Configuration;
@@ -44,17 +43,10 @@ public static class ConfigSchema
     }
 
     /// <summary>
-    /// The numeric grammar both config doors read through: invariant-culture parse, then finite.
-    /// <paramref name="number"/> is only worth reading when the verdict is
+    /// The config doors' entry into <see cref="NumericGrammar"/>. Kept as the call site the doors
+    /// already use; <paramref name="number"/> is only worth reading when the verdict is
     /// <see cref="NumberVerdict.Finite"/>.
     /// </summary>
-    public static NumberVerdict ClassifyNumber(string value, out double number)
-    {
-        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
-        {
-            return NumberVerdict.NotNumber;
-        }
-
-        return double.IsFinite(number) ? NumberVerdict.Finite : NumberVerdict.NonFinite;
-    }
+    public static NumberVerdict ClassifyNumber(string value, out double number) =>
+        NumericGrammar.Classify(value, out number);
 }
