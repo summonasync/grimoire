@@ -14,6 +14,8 @@ public sealed record MemoryEngineOptions
 
     public int TopicAgreementCount { get; init; } = 2;
 
+    public double TopicConfidenceThreshold { get; init; } = 0.8;
+
     public double RelatedSimilarityThreshold { get; init; } = 0.82;
 
     public RecencyHalfLives RecencyHalfLives { get; init; } = new();
@@ -31,6 +33,16 @@ public sealed record MemoryEngineOptions
     public int BriefMaxTotalChars { get; init; } = 8000;
 
     public int BriefMaxEntryChars { get; init; } = 400;
+
+    public string DailyTag { get; init; } = "daily-notes";
+
+    public int DailyLookbackDays { get; init; } = 7;
+
+    public string? DailyTimeZone { get; init; }
+
+    public int BriefDailyMaxEntryChars { get; init; } = 1500;
+
+    public int BriefDailyMaxTotalChars { get; init; } = 6000;
 
     public double DigestSimilarityThreshold { get; init; } = 0.60;
 

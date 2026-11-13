@@ -110,7 +110,7 @@ public sealed class TomePurgeServiceTests
             UpdatedAt = FakeClock.DefaultStart,
         });
 
-        var noted = await memories.NoteAsync(new NoteRequest
+        var (noted, _) = await memories.NoteAsync(new NoteRequest
         {
             Content = "note survives",
             Actor = Agent,

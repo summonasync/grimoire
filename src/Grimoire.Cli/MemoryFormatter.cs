@@ -30,7 +30,7 @@ internal static class MemoryFormatter
         WriteLines(output, match.Record.Content, "  ");
     }
 
-    public static void WriteBrief(TextWriter output, BriefResult brief)
+    public static void WriteBrief(TextWriter output, BriefResult brief, bool daily)
     {
         output.WriteLine(Heading("persona", brief.PersonaState));
         if (brief.Persona is { } persona)
@@ -83,6 +83,45 @@ internal static class MemoryFormatter
         {
             output.WriteLine($"  ({note})");
         }
+
+        if (daily)
+        {
+            WriteDaily(output, brief);
+        }
+    }
+
+    // The daily block mirrors the MCP door's `daily` payload: Core already ordered buckets, actor
+    // groups and entries, so the renderer walks the lists as given and prints Core's warnings by
+    // index, after the section they describe.
+    private static void WriteDaily(TextWriter output, BriefResult brief)
+    {
+        output.WriteLine(Heading("daily", brief.DailyState));
+        foreach (var group in brief.DailyGroups)
+        {
+            output.WriteLine($"  {group.Day:yyyy-MM-dd} {Describe(group.Bucket)} {group.Actor} ({group.Entries.Count})");
+            foreach (var entry in group.Entries)
+            {
+                output.WriteLine($"    {entry.Id} {entry.CreatedAt:u}");
+                WriteLines(output, entry.Content, "      ");
+                if (entry.Truncated)
+                {
+                    output.WriteLine("      (truncated)");
+                }
+            }
+        }
+
+        if (brief.DailyMore > 0)
+        {
+            output.WriteLine($"  (+{brief.DailyMore} more)");
+        }
+
+        if (brief.Warnings is { } warnings)
+        {
+            foreach (var warning in warnings)
+            {
+                output.WriteLine($"Warning: {warning}");
+            }
+        }
     }
 
     private static string Heading(string name, BriefSectionState state) => state switch
@@ -90,6 +129,13 @@ internal static class MemoryFormatter
         BriefSectionState.Empty => $"{name}: (empty)",
         BriefSectionState.Omitted => $"{name}: (omitted: over budget)",
         _ => $"{name}:",
+    };
+
+    private static string Describe(BriefDailyBucket bucket) => bucket switch
+    {
+        BriefDailyBucket.LastWorkingDay => "last-working-day",
+        BriefDailyBucket.Today => "today",
+        _ => throw new ArgumentOutOfRangeException(nameof(bucket), bucket, "Unknown daily bucket."),
     };
 
     private static void WriteLines(TextWriter output, string content, string indent)

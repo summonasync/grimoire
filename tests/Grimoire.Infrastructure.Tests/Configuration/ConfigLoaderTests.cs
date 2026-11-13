@@ -194,6 +194,38 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithDailyTagEnvironmentOverride_AppliesValue()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__DAILYTAG", "field-notes")]);
+
+        var options = loader.Load();
+
+        options.Memory.DailyTag.ShouldBe("field-notes");
+        options.Memory.DailyTimeZone.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithDailyTimeZoneEnvironmentOverride_AppliesValue()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__DAILYTIMEZONE", "Not/AZone")]);
+
+        var options = loader.Load();
+
+        options.Memory.DailyTimeZone.ShouldBe("Not/AZone");
+        options.Memory.DailyTag.ShouldBe("daily-notes");
+    }
+
+    [Fact]
+    public void Load_WithMisspelledDailyTimeZoneEnvironmentName_Throws()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__DAILYZONETIMEZONE", "UTC")]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldContain("GRIMOIRE_MEMORY__DAILYZONETIMEZONE");
+    }
+
+    [Fact]
     public void Load_WithUnknownEnvironmentProperty_Throws()
     {
         var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORTT", "6000")]);

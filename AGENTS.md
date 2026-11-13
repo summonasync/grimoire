@@ -46,7 +46,11 @@ ONLY through the Overmind MCP tools.
 - **Loopback-only bind** for the HTTP face — that is the security boundary. Never bind a
   public interface without a new ADR.
 - **No silent deletes**: `forget` = tombstone (status + reason + timestamp); GC owns hard
-  delete (expired session records, aged tombstones).
+  delete (expired **Active** session records, aged tombstones). A session record past its TTL is
+  not reaped by that rule once it changes status: superseded ones stay for good (the correction
+  chain walks them), tombstoned ones stay until retention retires them as aged tombstones —
+  retained by ruling, not by oversight, and reported as `RetainedPastTtl`
+  (ADR-005 amendment 2026-11-13).
 - **Every memory write carries actor provenance** (agent alias+vendor, or `human`).
 - **Tome isolation**: writes are tome-bound and never cross tomes; cross-tome reads go
   through `memory_scry` (or naming a tome you own), session scope never crosses.

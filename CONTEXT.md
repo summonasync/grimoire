@@ -101,10 +101,13 @@ a payload. Two orthogonal dimensions:
 ## Standing rules
 
 - **No silent deletes.** `forget` writes a tombstone (status + reason + timestamp). Hard
-  delete is GC's job only: expired session records and aged tombstones — plus the
+  delete is GC's job only: expired **Active** session records and aged tombstones — plus the
   human-only console purge of a whole tome (records in every status + manifest), gated
-  by a typed confirmation of the tome key (ADR-005 amendment). Agents stay
-  tombstone-only.
+  by a typed confirmation of the tome key (ADR-005 amendment). A session record past its TTL
+  that is superseded or tombstoned-but-young stays: TTL reaping is Active-only by decision,
+  because corrections are read through `SupersededBy` chains, and GC reports the leftover
+  count (`RetainedPastTtl`) instead of pretending it is zero (ADR-005, 2026-11-13 amendment).
+  Agents stay tombstone-only.
 - **Loopback only.** The HTTP face binds `127.0.0.1` — that is the security boundary.
   Never bind a public interface without a new ADR.
 - **Tome isolation.** Writes are tome-bound and never cross tomes; reading another tome you

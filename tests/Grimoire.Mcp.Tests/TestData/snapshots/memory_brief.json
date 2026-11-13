@@ -5,6 +5,13 @@
     "idempotent": true,
     "input": {
       "parameters": {
+        "daily": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "factsPerScope": {
           "default": null,
           "type": [

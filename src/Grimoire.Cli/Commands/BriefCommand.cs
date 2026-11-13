@@ -14,6 +14,7 @@ internal sealed class BriefCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var brief = services.GetRequiredService<BriefService>();
+        var daily = CliValues.Switch(invocation, invocation.Spec, "daily");
         var result = await brief.BriefAsync(new BriefQuery
         {
             ProjectId = invocation.Value("project"),
@@ -21,9 +22,10 @@ internal sealed class BriefCommand(CliEnvironment environment)
             FactsPerScope = Hint(invocation, "facts-per-scope"),
             JournalPerScope = Hint(invocation, "journal-per-scope"),
             TombstoneLimit = Hint(invocation, "tombstone-limit"),
+            Daily = daily,
         }, cancellationToken);
 
-        MemoryFormatter.WriteBrief(environment.Output, result);
+        MemoryFormatter.WriteBrief(environment.Output, result, daily);
         return ExitCodes.Ok;
     }
 

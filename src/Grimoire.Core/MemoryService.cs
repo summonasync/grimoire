@@ -54,7 +54,7 @@ public sealed class MemoryService(
         return await CommitAsync(request, null, cancellationToken);
     }
 
-    public async Task<RememberResult> NoteAsync(NoteRequest request, CancellationToken cancellationToken)
+    public async Task<NoteResult> NoteAsync(NoteRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
         {
@@ -66,14 +66,17 @@ public sealed class MemoryService(
             IdempotencyKey.Compute(NoteContract(request, null), tome), clock.UtcNow, cancellationToken);
         if (replay is not null)
         {
-            return await ReplayAsync(replay, cancellationToken);
+            return new NoteResult(await ReplayAsync(replay, cancellationToken), null);
         }
 
         var vector = await embeddings.EmbedAsync(request.Content, cancellationToken);
-        var topicTag = ITopicClassifier.Normalize(request.Topic)
-            ?? await ClassifyTopicAsync(request, tome, vector, cancellationToken);
+        var explicitTag = ITopicClassifier.Normalize(request.Topic);
+        var vote = explicitTag is not null
+            ? new TopicVote { Tag = explicitTag, CandidateTag = explicitTag, Decision = TopicVoteDecision.Explicit }
+            : await ClassifyTopicAsync(request, tome, vector, cancellationToken);
 
-        return await CommitAsync(NoteContract(request, topicTag), vector, cancellationToken);
+        var result = await CommitAsync(NoteContract(request, vote?.Tag), vector, cancellationToken);
+        return new NoteResult(result, vote);
     }
 
     private async Task<RememberResult> ReplayAsync(MemoryRecord replay, CancellationToken cancellationToken)
@@ -329,6 +332,7 @@ public sealed class MemoryService(
         {
             Scopes = [MemoryScope.Session],
             ExpiresBefore = now,
+            Status = MemoryStatus.Active,
         }, cancellationToken);
 
         var aged = await store.ListAsync(new MemoryFilter
@@ -347,7 +351,22 @@ public sealed class MemoryService(
             await store.DeleteAsync(ids, cancellationToken);
         }
 
-        return new GcResult { ExpiredSessions = expired.Count, AgedTombstones = aged.Count };
+        // Counted after the delete on purpose: a session tombstone can be past TTL and past
+        // retention at once, and then it belongs in AgedTombstones only — reporting the same row
+        // as both removed and retained is the dishonesty this figure exists to remove.
+        var retained = await store.CountAsync(new MemoryFilter
+        {
+            Scopes = [MemoryScope.Session],
+            ExpiresBefore = now,
+            Statuses = [MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+        }, cancellationToken);
+
+        return new GcResult
+        {
+            ExpiredSessions = expired.Count,
+            AgedTombstones = aged.Count,
+            RetainedPastTtl = (int)retained,
+        };
     }
 
     public async Task<MemoryStats> StatsAsync(CancellationToken cancellationToken)
@@ -813,7 +832,7 @@ public sealed class MemoryService(
         Importance = NoteImportance,
     };
 
-    private async Task<string?> ClassifyTopicAsync(
+    private async Task<TopicVote?> ClassifyTopicAsync(
         NoteRequest request,
         string tome,
         ReadOnlyMemory<float> vector,
