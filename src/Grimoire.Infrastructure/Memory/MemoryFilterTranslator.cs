@@ -78,11 +78,15 @@ internal static class MemoryFilterTranslator
                 lte: tombstonedBefore.UtcDateTime));
         }
 
-        if (filter.CreatedAfter is { } createdAfter)
+        if (filter.CreatedAfter is not null || filter.CreatedBefore is not null)
         {
+            // The window is half-open by contract: MemoryFilterExtensions excludes the record sitting
+            // exactly on CreatedBefore, so the upper bound is lt. The lte shape of the two branches
+            // above would pull that record back inside the window.
             translated.Must.Add(Conditions.DatetimeRange(
                 MemoryPayloadFields.CreatedAt,
-                gte: createdAfter.UtcDateTime));
+                gte: filter.CreatedAfter?.UtcDateTime,
+                lt: filter.CreatedBefore?.UtcDateTime));
         }
 
         return translated;
