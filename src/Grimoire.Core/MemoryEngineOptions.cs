@@ -14,6 +14,8 @@ public sealed record MemoryEngineOptions
 
     public int TopicAgreementCount { get; init; } = 2;
 
+    public double TopicConfidenceThreshold { get; init; } = 0.8;
+
     public double RelatedSimilarityThreshold { get; init; } = 0.82;
 
     public RecencyHalfLives RecencyHalfLives { get; init; } = new();

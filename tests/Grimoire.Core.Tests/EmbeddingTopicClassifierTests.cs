@@ -23,7 +23,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBe("topic:deploy");
+        topic.Tag.ShouldBe("topic:deploy");
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBe("topic:alpha");
+        topic.Tag.ShouldBe("topic:alpha");
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBe("topic:beta");
+        topic.Tag.ShouldBe("topic:beta");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class EmbeddingTopicClassifierTests
 
         var topic = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 
-        topic.ShouldBeNull();
+        topic.Tag.ShouldBeNull();
     }
 
     [Fact]
@@ -139,8 +139,8 @@ public sealed class EmbeddingTopicClassifierTests
         var otherSession = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Session, null, "s-2", CancellationToken.None);
         var sameSession = await _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Session, null, "s-1", CancellationToken.None);
 
-        otherSession.ShouldBeNull();
-        sameSession.ShouldBe("topic:deploy");
+        otherSession.Tag.ShouldBeNull();
+        sameSession.Tag.ShouldBe("topic:deploy");
     }
 
     [Theory]
@@ -155,6 +155,83 @@ public sealed class EmbeddingTopicClassifierTests
         ITopicClassifier.Normalize(hint).ShouldBe(expected);
     }
 
+    private Task<TopicVote> Classify() =>
+        _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
+
+    [Fact]
+    public async Task Classify_VoteCarriesTheWinningEvidence()
+    {
+        Seed("neighbor one", [1f, 0.7f, 0f], "topic:deploy", extraTags: ["ops"]);
+        Seed("neighbor two", [1f, 0f, 0.7f], "topic:deploy");
+
+        var vote = await Classify();
+
+        vote.Tag.ShouldBe("topic:deploy");
+        vote.CandidateTag.ShouldBe("topic:deploy");
+        vote.Decision.ShouldBe(TopicVoteDecision.Voted);
+        vote.WinningCount.ShouldBe(2);
+        vote.BestSimilarity.Value.ShouldBeGreaterThan(0.8);
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "ops" && !entry.Counted);
+    }
+
+    [Fact]
+    public async Task Classify_WeakConsensusWithholdsTheTag()
+    {
+        Seed("fuzzy one", [1f, 0.85f, 0f], "topic:deploy");
+        Seed("fuzzy two", [1f, 0f, 0.85f], "topic:deploy");
+
+        var vote = await Classify();
+
+        vote.Tag.ShouldBeNull();
+        vote.CandidateTag.ShouldBe("topic:deploy");
+        vote.Decision.ShouldBe(TopicVoteDecision.BelowConfidence);
+        vote.WinningCount.ShouldBe(2);
+        vote.BestSimilarity.Value.ShouldBeLessThan(0.8);
+    }
+
+    [Fact]
+    public async Task Classify_ConfidenceThresholdComesFromOptions()
+    {
+        Seed("neighbor one", [1f, 0.7f, 0f], "topic:deploy");
+        Seed("neighbor two", [1f, 0f, 0.7f], "topic:deploy");
+
+        var strict = new EmbeddingTopicClassifier(_store, new MemoryEngineOptions { TopicConfidenceThreshold = 0.9 });
+        var off = new EmbeddingTopicClassifier(_store, new MemoryEngineOptions { TopicConfidenceThreshold = 0 });
+
+        var strictVote = await strict.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
+        var offVote = await off.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
+
+        strictVote.Decision.ShouldBe(TopicVoteDecision.BelowConfidence);
+        strictVote.Tag.ShouldBeNull();
+        offVote.Decision.ShouldBe(TopicVoteDecision.Voted);
+        offVote.Tag.ShouldBe("topic:deploy");
+    }
+
+    [Fact]
+    public async Task Classify_BareTagsAreSeenButNeverVote()
+    {
+        Seed("bare one", [1f, 0.7f, 0f], "deploy");
+        Seed("bare two", [1f, 0f, 0.7f], "deploy");
+
+        var vote = await Classify();
+
+        vote.Tag.ShouldBeNull();
+        vote.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "deploy" && !entry.Counted);
+    }
+
+    [Fact]
+    public async Task Classify_NeighborsWithoutTags_ReportNothingSeen()
+    {
+        Seed("plain neighbor", [1f, 0.7f, 0f], string.Empty);
+        Seed("plain neighbor two", [1f, 0f, 0.7f], string.Empty);
+
+        var vote = await Classify();
+
+        vote.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        vote.Neighbors.ShouldBeEmpty();
+    }
+
     private static ReadOnlyMemory<float> Vector(params float[] values) => values;
 
     private void Seed(
@@ -166,15 +243,26 @@ public sealed class EmbeddingTopicClassifierTests
         MemoryKind kind = MemoryKind.Journal,
         string? projectId = "grim",
         string? sessionId = null,
-        MemoryStatus status = MemoryStatus.Active)
-        => _store.Seed(TestMemories.Create(
+        MemoryStatus status = MemoryStatus.Active,
+        string[]? extraTags = null)
+    {
+        var tags = new List<string>();
+        if (!string.IsNullOrEmpty(topic))
+        {
+            tags.Add(topic);
+        }
+
+        tags.AddRange(extraTags ?? []);
+
+        _store.Seed(TestMemories.Create(
             content,
             vector,
             scope: scope,
             kind: kind,
             projectId: projectId,
             sessionId: sessionId,
-            tags: [topic],
+            tags: tags,
             status: status,
             tome: tome), vector);
+    }
 }
