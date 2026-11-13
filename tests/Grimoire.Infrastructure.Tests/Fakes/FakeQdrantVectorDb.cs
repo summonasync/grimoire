@@ -27,6 +27,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public List<(string Field, PayloadSchemaType Type)> CreatedIndexes { get; } = [];
 
+    public List<string> UsedCollections { get; } = [];
+
     public List<Filter> ScrolledFilters { get; } = [];
 
     public List<Filter> SearchedFilters { get; } = [];
@@ -124,6 +126,7 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
         }
 
         UpsertCount++;
+        UsedCollections.Add(collection);
 
         foreach (var point in points)
         {

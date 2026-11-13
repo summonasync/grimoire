@@ -62,6 +62,16 @@ public sealed class ConfigCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Config_SetNullableNumberValue_WritesNumberNotString()
+    {
+        var code = await _host.RunAsync("config", "set", "sessions.retentionHours", "48");
+
+        code.ShouldBe(ExitCodes.Ok);
+        JsonNode.Parse(File.ReadAllText(_host.ConfigPath))!["sessions"]!["retentionHours"]!.GetValue<double>().ShouldBe(48);
+        new ConfigLoader(_host.ConfigPath).Load().SessionsRetentionHoursOrDefault.ShouldBe(48);
+    }
+
+    [Fact]
     public async Task Config_SetUnknownKey_FailsWithoutTouchingFile()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_host.ConfigPath)!);
