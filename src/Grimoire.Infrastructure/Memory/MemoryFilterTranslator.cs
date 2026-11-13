@@ -8,15 +8,19 @@ internal static class MemoryFilterTranslator
     internal static Filter Translate(MemoryFilter filter)
     {
         var translated = new Filter();
+        // Which statuses are meant comes from Core; which wire shape they take stays here, so an
+        // explicit one-element list keeps rendering as any-of and an omitted clause keeps
+        // rendering as the single Active keyword. Same bytes, one home for the meaning.
+        var statuses = MemoryStatuses.Effective(filter);
         if (filter.Statuses.Count > 0)
         {
-            translated.Must.Add(StatusAnyCondition(filter.Statuses));
+            translated.Must.Add(StatusAnyCondition(statuses));
         }
         else
         {
             translated.Must.Add(Conditions.MatchKeyword(
                 MemoryPayloadFields.Status,
-                (filter.Status ?? MemoryStatus.Active).ToString()));
+                statuses[0].ToString()));
         }
 
         if (filter.Scopes.Count > 0)
@@ -78,6 +82,11 @@ internal static class MemoryFilterTranslator
                 lte: tombstonedBefore.UtcDateTime));
         }
 
+        foreach (var actorCondition in ActorConditions(filter))
+        {
+            translated.Must.Add(actorCondition);
+        }
+
         if (filter.CreatedAfter is not null || filter.CreatedBefore is not null)
         {
             // The window is half-open by contract: MemoryFilterExtensions excludes the record sitting
@@ -132,6 +141,32 @@ internal static class MemoryFilterTranslator
         }
 
         return new Condition { Filter = anyOf };
+    }
+
+    // Actor is stored as a struct payload and the filter carries it as one candidate string, so the
+    // clause splits into one keyword per segment: alias always, vendor only when the candidate names
+    // one. A trailing separator ("alias+") names no vendor and is read as alias-only — where that
+    // diverges from the matcher is pinned by a test, not smoothed over. Matching is exact, by
+    // decision: the matcher next door compares case-insensitively and the write path normalizes
+    // nothing, so a mixed-case candidate narrows more at the store than the post-filter ever did.
+    private static IEnumerable<Condition> ActorConditions(MemoryFilter filter)
+    {
+        if (filter.Actor is not { } actor)
+        {
+            return [];
+        }
+
+        var conditions = new List<Condition>();
+        foreach (var (alias, vendor) in MemoryActorSemantics.Segments(actor))
+        {
+            conditions.Add(Conditions.MatchKeyword("actor.alias", alias));
+            if (vendor is not null)
+            {
+                conditions.Add(Conditions.MatchKeyword("actor.vendor", vendor));
+            }
+        }
+
+        return conditions;
     }
 
     private static string[] ScopeValues(IReadOnlyList<MemoryScope> scopes) =>

@@ -148,15 +148,10 @@ public sealed class FakeMemoryStore : IMemoryStore
             query = query.Where(point => point.Record.Kind == filter.Kind);
         }
 
-        if (filter.Status is not null)
-        {
-            query = query.Where(point => point.Record.Status == filter.Status);
-        }
+        var statuses = MemoryStatuses.Effective(filter);
+        query = query.Where(point => statuses.Contains(point.Record.Status));
 
-        if (filter.Statuses.Count > 0)
-        {
-            query = query.Where(point => filter.Statuses.Contains(point.Record.Status));
-        }
+        query = query.Where(point => MemoryActorSemantics.MatchesExactly(point.Record.Actor, filter.Actor));
 
         if (filter.Tags.Count > 0)
         {
