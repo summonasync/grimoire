@@ -50,6 +50,9 @@ internal static class CommandCatalog
     private static readonly FlagSpec TombstoneLimit = new(
         "tombstone-limit", "n", "Tombstoned records in the digest. Default: 10.");
 
+    private static readonly FlagSpec Daily = FlagSpec.Switch(
+        "daily", "Add the daily section: notes tagged daily-notes from the last working day and today, grouped by actor.");
+
     private static readonly FlagSpec Reason = new(
         "reason", "text", "Tombstone reason. Default: 'forgotten via grimoire cli'.");
 
@@ -185,7 +188,7 @@ internal static class CommandCatalog
             Name = "brief",
             Summary = "Render the agent startup brief: persona, top facts, recent journal, tombstones.",
             Syntax = "brief",
-            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit],
+            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit, Daily],
         },
         new CommandSpec
         {
