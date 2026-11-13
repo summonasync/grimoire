@@ -125,6 +125,8 @@ public sealed class BriefCommandTests : IDisposable
         SeedRecord(_host.Store, Guid.Parse("88888888-8888-8888-8888-888888888888"), "fact on the bound",
             MemoryScope.Project, MemoryKind.Fact, bound);
 
+        // The Cli fake ignores CreatedBefore; this green is load-bearing on Core's Matches
+        // re-check — delete that branch and this test reddens (review 046-05 mutation 3).
         var code = await _host.RunAsync("brief", "--until", "2026-10-12");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
