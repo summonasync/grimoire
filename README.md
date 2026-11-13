@@ -324,8 +324,11 @@ matches `Radim+claude`, case-insensitive).
 Standing rules, enforced from day one:
 
 - **No silent deletes.** `forget` writes a tombstone (status + reason +
-  timestamp); only the GC hard-deletes — expired session records and aged
-  tombstones. The one extra hard-delete door is the human's: the console
+  timestamp); only the GC hard-deletes — expired **Active** session records and
+  aged tombstones. A session record past its TTL in another status stays, by
+  decision: superseded rows are what the correction chain reads through, so GC
+  reports them (`past TTL kept by policy`) instead of reaping them
+  (ADR-005, 2026-11-13 amendment). The one extra hard-delete door is the human's: the console
   tome purge, gated by a typed confirmation (ADR-005 amendment).
 - **Every write carries provenance** — agent alias+vendor, or `human`.
 - **Project writes carry a registered projectId.** scope=`project` is
