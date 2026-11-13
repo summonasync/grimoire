@@ -323,6 +323,58 @@ public sealed class NoteToolTests
         rationale.ShouldContain("nothing was stamped");
     }
 
+    [Fact]
+    public async Task Note_ExplicitTopic_RationaleSaysTheNeighborsWereNotConsulted()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("hinted note", [1f, 0, 0]);
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "hinted note",
+            ["projectId"] = "grimoire",
+            ["topic"] = "onnx",
+        });
+
+        var payload = result.Payload();
+        payload.GetProperty("topicDecision").GetString().ShouldBe("Explicit");
+        payload.GetProperty("topicRationale").GetString()!.ShouldContain("not consulted");
+    }
+
+    [Fact]
+    public async Task Note_OnlyBareTagsOnNeighbors_RefusesAndNamesThem()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("bare one", [1f, 0.7f, 0]);
+        session.Embeddings.Register("bare two", [1f, 0, 0.7f]);
+        session.Embeddings.Register("bare query", [1f, 0, 0]);
+        await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare one",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "deploy" },
+        });
+        await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare two",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "deploy" },
+        });
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare query",
+            ["projectId"] = "grimoire",
+        });
+
+        var payload = result.Payload();
+        payload.TryGetProperty("topicTag", out _).ShouldBeFalse();
+        payload.GetProperty("topicDecision").GetString().ShouldBe("NoConsensus");
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
+        rationale.ShouldContain("no neighbor carried a topic:<value> tag");
+        rationale.ShouldContain("bare tags do not vote: deploy");
+    }
+
     private static async Task Note(McpTestSession session, string content, string topic)
     {
         var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>

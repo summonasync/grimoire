@@ -90,13 +90,14 @@ public sealed class EmbeddingTopicClassifier(
         ExcludeTags = [PersonaSectionExtensions.PersonaTag],
     };
 
-    private static IEnumerable<string> TopicTagsOf(MemoryRecord record) => record.Tags
-        .Where(tag => tag.StartsWith(ITopicClassifier.TopicPrefix, StringComparison.Ordinal));
+    private static bool IsTopicTag(string tag) =>
+        tag.StartsWith(ITopicClassifier.TopicPrefix, StringComparison.Ordinal)
+        && tag.Length > ITopicClassifier.TopicPrefix.Length;
+
+    private static IEnumerable<string> TopicTagsOf(MemoryRecord record) =>
+        record.Tags.Where(IsTopicTag);
 
     private static IEnumerable<TopicVoteNeighbor> EvidenceOf(MemoryRecord record, double similarity) => record.Tags
         .Where(tag => !string.IsNullOrWhiteSpace(tag) && tag != PersonaSectionExtensions.PersonaTag)
-        .Select(tag => new TopicVoteNeighbor(
-            tag,
-            similarity,
-            tag.StartsWith(ITopicClassifier.TopicPrefix, StringComparison.Ordinal)));
+        .Select(tag => new TopicVoteNeighbor(tag, similarity, IsTopicTag(tag)));
 }

@@ -183,14 +183,25 @@ public sealed class MemoryServiceNoteTests
     }
 
     [Fact]
-    public async Task Note_ExplicitTopic_IsReportedAsExplicitAndNeedsNoAgreement()
+    public async Task Note_ExplicitTopic_IsReportedAsExplicitAndSkipsTheClassifier()
     {
-        var (_, vote) = await _service.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
+        var hintedStore = new FakeMemoryStore();
+        var hinted = TestMemories.Service(
+            hintedStore, new FakeEmbeddingProvider(Vectors), _clock, topics: new EmbeddingTopicClassifier(hintedStore));
+        var openStore = new FakeMemoryStore();
+        var open = TestMemories.Service(
+            openStore, new FakeEmbeddingProvider(Vectors), _clock, topics: new EmbeddingTopicClassifier(openStore));
 
-        vote!.Decision.ShouldBe(TopicVoteDecision.Explicit);
-        vote.Tag.ShouldBe("topic:deploy-lane");
-        vote.WinningCount.ShouldBe(0);
-        vote.BestSimilarity.ShouldBeNull();
+        var (_, hintVote) = await hinted.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
+        var (_, openVote) = await open.NoteAsync(Note("note about deploys"), CancellationToken.None);
+
+        hintVote!.Decision.ShouldBe(TopicVoteDecision.Explicit);
+        hintVote.Tag.ShouldBe("topic:deploy-lane");
+        hintVote.WinningCount.ShouldBe(0);
+        hintVote.BestSimilarity.ShouldBeNull();
+
+        openVote!.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        openStore.SearchCallCount.ShouldBe(hintedStore.SearchCallCount + 1);
     }
 
     [Fact]

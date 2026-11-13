@@ -155,6 +155,59 @@ public sealed class EmbeddingTopicClassifierTests
         ITopicClassifier.Normalize(hint).ShouldBe(expected);
     }
 
+    [Fact]
+    public async Task Classify_StrongNeighborOutsideTheWinnerDoesNotRescueAWeakConsensus()
+    {
+        Seed("weak alpha one", [1f, 0.85f, 0f], "topic:deploy");
+        Seed("weak alpha two", [1f, 0f, 0.85f], "topic:deploy");
+        Seed("strong beta", [1f, 0.2f, 0f], "topic:other");
+
+        var vote = await Classify();
+
+        vote.Decision.ShouldBe(TopicVoteDecision.BelowConfidence);
+        vote.Tag.ShouldBeNull();
+        vote.CandidateTag.ShouldBe("topic:deploy");
+        vote.BestSimilarity.ShouldNotBeNull().ShouldBeLessThan(0.8);
+    }
+
+    [Fact]
+    public async Task Classify_CountedFlagFollowsTheVotingRule()
+    {
+        Seed("neighbor one", [1f, 0.7f, 0f], "topic:deploy", extraTags: ["ops"]);
+
+        var vote = await Classify();
+
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "topic:deploy" && entry.Counted);
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "ops" && !entry.Counted);
+    }
+
+    [Fact]
+    public async Task Classify_DegeneratePrefixWithoutSlugDoesNotWin()
+    {
+        Seed("bare prefix one", [1f, 0.7f, 0f], "topic:");
+        Seed("bare prefix two", [1f, 0f, 0.7f], "topic:");
+
+        var vote = await Classify();
+
+        vote.Tag.ShouldBeNull();
+        vote.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "topic:" && !entry.Counted);
+    }
+
+    [Fact]
+    public async Task Classify_EvidenceIsOrderedBySimilarity()
+    {
+        Seed("weakest neighbor", [1f, 0.85f, 0f], "topic:deploy");
+        Seed("strongest neighbor", [1f, 0.2f, 0f], "topic:deploy");
+        Seed("middle neighbor", [1f, 0.5f, 0f], "topic:deploy");
+
+        var vote = await Classify();
+
+        vote.Neighbors.Count.ShouldBe(3);
+        vote.Neighbors[0].Similarity.ShouldBeGreaterThan(vote.Neighbors[1].Similarity);
+        vote.Neighbors[1].Similarity.ShouldBeGreaterThan(vote.Neighbors[2].Similarity);
+    }
+
     private Task<TopicVote> Classify() =>
         _classifier.ClassifyAsync(Vector(1f, 0f, 0f), TomeKey.DefaultTome, MemoryScope.Project, "grim", null, CancellationToken.None);
 

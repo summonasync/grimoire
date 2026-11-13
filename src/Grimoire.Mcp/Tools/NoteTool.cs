@@ -115,7 +115,7 @@ internal sealed class NoteTool(
                 Tome = result.Record.Tome,
                 ProjectId = result.Record.ProjectId,
                 Tags = result.Record.Tags,
-                TopicTag = note.Vote?.Tag ?? TopicTagOf(result.Record.Tags),
+                TopicTag = note.Vote is null ? TopicTagOf(result.Record.Tags) : note.Vote.Tag,
                 TopicDecision = note.Vote?.Decision.ToString("G"),
                 TopicRationale = RationaleOf(note.Vote),
                 SupersededExisting = result.SupersededExisting,
