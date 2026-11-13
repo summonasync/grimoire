@@ -21,7 +21,8 @@ public sealed class SessionHandshakeProjection(ISessionRegistry registry, IClock
         CancellationToken cancellationToken)
     {
         var effectiveLimit = Math.Clamp(limit ?? DefaultLimit, MinLimit, MaxLimit);
-        var effectiveWindow = Math.Clamp(windowHours ?? retentionHours, MinWindowHours, MaxWindowHours);
+        var askedWindow = windowHours is { } raw && double.IsFinite(raw) ? raw : retentionHours;
+        var effectiveWindow = Math.Clamp(askedWindow, MinWindowHours, MaxWindowHours);
         var now = clock.UtcNow;
         var rows = await registry.ListRecentAsync(
             effectiveLimit,

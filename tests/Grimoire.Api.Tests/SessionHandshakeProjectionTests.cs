@@ -1,3 +1,4 @@
+using System.Globalization;
 using Grimoire.Api.Sessions;
 using Grimoire.Api.Tests.Fakes;
 using Grimoire.Core;
@@ -49,17 +50,21 @@ public class SessionHandshakeProjectionTests
         high.Limit.ShouldBe(500);
     }
 
-    [Fact]
-    public async Task ProjectAsync_RoundsAgeToTwoDecimals()
+    [Theory]
+    [InlineData(-90.4, 1.51)]
+    [InlineData(-89.6, 1.49)]
+    [InlineData(-7.5, 0.12)]
+    [InlineData(-45, 0.75)]
+    public async Task ProjectAsync_RoundsAgeToTwoDecimals(double minutes, double expectedAgeHours)
     {
         var registry = new FakeSessionRegistry();
-        registry.Seed(Entry(Now.AddMinutes(-90)));
+        registry.Seed(Entry(Now.AddMinutes(minutes)));
 
         var response = await new SessionHandshakeProjection(registry, new FakeClock(Now), 6)
             .ProjectAsync(null, null, CancellationToken.None);
 
         response.Items.ShouldHaveSingleItem();
-        response.Items[0].AgeHours.ShouldBe(1.5);
+        response.Items[0].AgeHours.ShouldBe(expectedAgeHours);
         response.Items[0].Host.ShouldBe("workstation");
         response.Items[0].ProtocolVersion.ShouldBeNull();
     }
@@ -74,6 +79,24 @@ public class SessionHandshakeProjectionTests
 
         response.DegradationReason.ShouldBe("unreachable");
         response.Items.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    public async Task ProjectAsync_NonFiniteWindowAsksTheInjectedRetention(string candidate)
+    {
+        var registry = new FakeSessionRegistry();
+        var projection = new SessionHandshakeProjection(registry, new FakeClock(Now), retentionHours: 6);
+
+        var response = await projection.ProjectAsync(
+            null,
+            double.Parse(candidate, CultureInfo.InvariantCulture),
+            CancellationToken.None);
+
+        response.WindowHours.ShouldBe(6);
+        registry.LastNotBefore.ShouldBe(Now.AddHours(-6));
     }
 
     private static SessionRegistryEntry Entry(DateTimeOffset occurredAt) => new()

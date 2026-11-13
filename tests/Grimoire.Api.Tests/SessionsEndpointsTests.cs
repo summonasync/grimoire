@@ -140,8 +140,13 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
     }
 
     [Fact]
-    public async Task Get_WhileSpaFallbackIsInstalled_APIPathStaysOwnedByTheApi()
+    public async Task Get_WhileSpaExportIsInstalled_LiteralRouteWinsOverTheFallback()
     {
+        // The sessions route outranks the SPA catch-all: /api answers JSON while a shell path on
+        // the same host still answers index.html. Registration order is NOT what makes this hold —
+        // SpaHosting installs app.MapFallback and a literal route beats a fallback either way
+        // (moving the mapping behind UseSpaFrontend keeps the suite green) — so this pins the
+        // route split and dies if the fallback ever swallows /api paths.
         var exportRoot = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(exportRoot);
         await File.WriteAllTextAsync(
@@ -155,6 +160,7 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
 
         var sessions = await client.GetAsync("/api/sessions");
         var shell = await client.GetAsync("/memories");
+        var root = await client.GetAsync("/");
 
         sessions.StatusCode.ShouldBe(HttpStatusCode.OK);
         sessions.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
@@ -162,7 +168,88 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         body.GetProperty("items")[0].GetProperty("clientName").GetString().ShouldBe("qwen");
         shell.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await shell.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
+        root.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await root.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
         Directory.Delete(exportRoot, true);
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    [InlineData("-1")]
+    [InlineData("99999")]
+    public async Task Get_NonUsableWindowHours_Returns400AndReadsNothing(string value)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+        factory.Sessions.Seed(Entry(Now.AddHours(-1), "qwen", "2026-07-28"));
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?windowHours={value}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_request");
+        message.ShouldContain("windowHours");
+        factory.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("501")]
+    public async Task Get_OutOfRangeLimit_Returns400AndReadsNothing(string value)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+        factory.Sessions.Seed(Entry(Now.AddHours(-1), "qwen", "2026-07-28"));
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?limit={value}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_request");
+        message.ShouldContain("limit");
+        factory.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("windowHours=abc")]
+    [InlineData("limit=abc")]
+    [InlineData("limit=NaN")]
+    [InlineData("limit=1.5")]
+    [InlineData("limit=99999999999")]
+    public async Task Get_UnparseableQueryValue_ReturnsStructured400(string query)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?{query}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
+        (await ReadError(response)).code.ShouldBe("invalid_request");
+        factory.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("limit=1", 1, 24)]
+    [InlineData("limit=500", 500, 24)]
+    [InlineData("windowHours=0", 50, 0)]
+    [InlineData("windowHours=8760", 50, 8760)]
+    public async Task Get_AtTheDeclaredBounds_AnswersWithTheRequestedWindow(string query, int limit, double windowHours)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+        factory.Sessions.Seed(Entry(Now.AddHours(-1), "qwen", "2026-07-28"));
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?{query}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+        body.GetProperty("limit").GetInt32().ShouldBe(limit);
+        body.GetProperty("windowHours").GetDouble().ShouldBe(windowHours);
     }
 
     [Fact]
@@ -175,6 +262,14 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
 
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
         response.Content.Headers.Allow.ShouldBe(["GET"]);
+    }
+
+    private static async Task<(string code, string message)> ReadError(HttpResponseMessage response)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        var body = await JsonSerializer.DeserializeAsync<JsonElement>(stream, TestJson.Options);
+        var error = body.GetProperty("error");
+        return (error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
     }
 
     private static SessionRegistryEntry Entry(

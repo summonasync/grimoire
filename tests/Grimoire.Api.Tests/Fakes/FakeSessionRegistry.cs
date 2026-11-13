@@ -16,7 +16,12 @@ public sealed class FakeSessionRegistry : ISessionRegistry
 
     public void Seed(SessionRegistryEntry entry) => _entries.Add(entry);
 
-    public void Clear() => _entries.Clear();
+    public void Clear()
+    {
+        _entries.Clear();
+        LastLimit = null;
+        LastNotBefore = null;
+    }
 
     public Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken)
     {
