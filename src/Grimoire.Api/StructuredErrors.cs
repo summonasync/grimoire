@@ -7,6 +7,12 @@ namespace Grimoire.Api;
 
 internal static class StructuredErrors
 {
+    private const string BodyFault =
+        "The request body is missing, malformed, or does not match the expected schema.";
+
+    private const string ParameterFault =
+        "A route or query parameter of this request is missing or malformed.";
+
     public static void UseStructuredErrors(this WebApplication app)
     {
         app.Use(async (context, next) =>
@@ -20,7 +26,7 @@ internal static class StructuredErrors
                         context,
                         StatusCodes.Status400BadRequest,
                         "invalid_request",
-                        "The request body is missing, malformed, or does not match the expected schema.");
+                        AcceptsBody(context.Request.Method) ? BodyFault : ParameterFault);
                 }
             }
             catch (UpstreamUnavailableException ex)
@@ -42,6 +48,13 @@ internal static class StructuredErrors
             }
         });
     }
+
+    private static bool AcceptsBody(string method) =>
+        !(HttpMethods.IsGet(method)
+            || HttpMethods.IsHead(method)
+            || HttpMethods.IsDelete(method)
+            || HttpMethods.IsOptions(method)
+            || HttpMethods.IsTrace(method));
 
     private static async Task WriteAsync(HttpContext context, int statusCode, string code, string message)
     {
