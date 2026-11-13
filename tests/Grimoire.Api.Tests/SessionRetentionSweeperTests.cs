@@ -198,7 +198,7 @@ public sealed class SessionRetentionSweeperTests
             return Task.FromResult(Guid.CreateVersion7());
         }
 
-        public Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken)
+        public Task RefineActorAsync(Guid id, string alias, string? vendor, CancellationToken cancellationToken)
         {
             Calls.Add("refine");
             return Task.CompletedTask;

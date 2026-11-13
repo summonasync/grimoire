@@ -135,6 +135,32 @@ public sealed class QdrantSessionStoreTests
         _db.PayloadOf(id)[SessionPayloadFields.ActorVendor].ShouldBe((Value)"claude");
     }
 
+    [Fact]
+    public async Task Refine_NullVendor_PatchesAlias_AndLeavesTheStoredVendorUntouched()
+    {
+        var id = await _store.WriteAsync(Entry(), CancellationToken.None);
+
+        await _store.RefineActorAsync(id, "sigma", null, CancellationToken.None);
+
+        var patch = _db.SetPayloads.ShouldHaveSingleItem();
+        patch.ContainsKey(SessionPayloadFields.ActorAlias).ShouldBeTrue();
+        patch.ShouldNotContainKey(SessionPayloadFields.ActorVendor);
+        _db.PayloadOf(id)[SessionPayloadFields.ActorAlias].ShouldBe((Value)"sigma");
+        _db.PayloadOf(id)[SessionPayloadFields.ActorVendor].ShouldBe((Value)"qwen");
+    }
+
+    [Fact]
+    public async Task Refine_NullVendor_OnRowWithoutVendor_KeepsTheActorVendorKeyAbsent()
+    {
+        var id = await _store.WriteAsync(Entry() with { ActorVendor = null }, CancellationToken.None);
+
+        await _store.RefineActorAsync(id, "sigma", null, CancellationToken.None);
+
+        _db.PayloadOf(id).ShouldNotContainKey(SessionPayloadFields.ActorVendor);
+        (await _store.ListRecentAsync(10, null, CancellationToken.None))
+            .ShouldHaveSingleItem().ActorVendor.ShouldBeNull();
+    }
+
     [Theory]
     [InlineData(SessionPayloadFields.SchemaVersion)]
     [InlineData(SessionPayloadFields.OccurredAt)]

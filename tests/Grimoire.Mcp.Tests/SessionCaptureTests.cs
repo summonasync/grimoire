@@ -57,6 +57,22 @@ public sealed class SessionCaptureTests
     }
 
     [Fact]
+    public async Task FirstRequest_OnTheInitializeRevision_CapturesFullClientIdentityAtWriteTime()
+    {
+        var faults = new RecordingSessionCaptureFaultSink();
+        await using var session = await StartAsync(faults, clientProtocolVersion: "2025-06-18");
+
+        await session.Client.ListToolsAsync().AsTask().WaitAsync(Wait);
+        var row = await session.Sessions.AttemptedAsync.WaitAsync(Wait);
+
+        row.ClientName.ShouldNotBeNull();
+        row.ClientVersion.ShouldNotBeNull();
+        row.ProtocolVersion.ShouldNotBeNull();
+        row.ProtocolVersion.ShouldBe("2025-06-18");
+        faults.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task SessionIdentitySet_LaterInTheConnection_WritesNoSecondRow()
     {
         await using var session = await StartAsync(new RecordingSessionCaptureFaultSink());
@@ -108,7 +124,7 @@ public sealed class SessionCaptureTests
     }
 
     [Fact]
-    public async Task SessionIdentitySet_WithoutVendor_PatchesAnEmptyVendor()
+    public async Task SessionIdentitySet_WithoutVendor_PatchesTheAliasAndPassesNoVendor()
     {
         await using var session = await StartAsync(new RecordingSessionCaptureFaultSink());
 
@@ -120,7 +136,7 @@ public sealed class SessionCaptureTests
         var refinement = await session.Sessions.FirstRefinementAsync.WaitAsync(Wait);
 
         refinement.Alias.ShouldBe("solo");
-        refinement.Vendor.ShouldBe(string.Empty);
+        refinement.Vendor.ShouldBeNull();
     }
 
     [Fact]

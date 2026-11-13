@@ -57,6 +57,24 @@ public sealed class SessionActorRefinementTests
     }
 
     [Fact]
+    public async Task IdentityWithoutVendor_RefinesWithNullVendor()
+    {
+        var sessions = new FakeSessionRegistry();
+        var faults = new RecordingSessionCaptureFaultSink();
+        var refinement = new SessionActorRefinement(sessions, faults, TimeSpan.FromSeconds(10));
+        var point = Guid.CreateVersion7();
+
+        refinement.RowWritten(point);
+        refinement.IdentitySet(new MemoryActor("solo", null));
+        var record = await sessions.FirstRefinementAsync.WaitAsync(Wait);
+
+        record.Id.ShouldBe(point);
+        record.Alias.ShouldBe("solo");
+        record.Vendor.ShouldBeNull();
+        faults.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task RefinementOutage_LogsOneFaultLine_AndNeverRetries()
     {
         var sessions = new FakeSessionRegistry { RefineFailure = new UpstreamUnavailableException("qdrant") };

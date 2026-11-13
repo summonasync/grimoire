@@ -14,9 +14,10 @@ namespace Grimoire.Infrastructure.Sessions;
 /// reason, writes surface <see cref="UpstreamUnavailableException"/>). Point ids are random
 /// UUIDv7 values generated per write and handed back to the caller — one point per handshake
 /// is the unit of observation, so two identical handshakes are two rows and no field-derived
-/// hash may collapse them. The actor refinement patches only actorAlias and actorVendor on
-/// the addressed point via SetPayload and fails the same way a write does; an unknown id is
-/// acknowledged without creating a row.
+/// hash may collapse them. The actor refinement patches only actorAlias — plus actorVendor
+/// when the caller knows one — on the addressed point via SetPayload and fails the same way
+/// a write does; an unknown id is acknowledged without creating a row, and an unknown vendor
+/// leaves the stored field as it is.
 /// No payload indexes: Qdrant scroll has no server-side ordering, so newest-first retrieval
 /// and the window filter are done reader-side over a collection bounded by retention.
 /// Null contract fields are omitted from the payload and decode back to null — a missing
@@ -50,22 +51,26 @@ public sealed class QdrantSessionStore : ISessionRegistry
             return id;
         });
 
-    public async Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken) =>
+    public async Task RefineActorAsync(Guid id, string alias, string? vendor, CancellationToken cancellationToken) =>
         await GuardAsync(async () =>
         {
             await EnsureReadyAsync(cancellationToken);
 
+            var patch = new Dictionary<string, Value>
+            {
+                [SessionPayloadFields.ActorAlias] = alias,
+            };
+
+            if (vendor is { } knownVendor)
+            {
+                patch[SessionPayloadFields.ActorVendor] = knownVendor;
+            }
+
             // SetPayload addresses one existing point: on an unknown id Qdrant acknowledges
             // the update without creating a row, so the no-op policy is the server's own.
-            await _db.SetPayloadAsync(
-                _collection,
-                new Dictionary<string, Value>
-                {
-                    [SessionPayloadFields.ActorAlias] = alias,
-                    [SessionPayloadFields.ActorVendor] = vendor,
-                },
-                id,
-                cancellationToken);
+            // A null vendor keeps the key out of the patch, so the stored vendor survives
+            // untouched — the same null-omission the write path practises, never a placeholder.
+            await _db.SetPayloadAsync(_collection, patch, id, cancellationToken);
         });
 
     private async Task GuardAsync(Func<Task> call) =>

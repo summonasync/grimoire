@@ -7,14 +7,14 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
     private readonly object _gate = new();
     private readonly TaskCompletionSource<SessionRegistryEntry> _attempted =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource<(Guid Id, string Alias, string Vendor)> _refined =
+    private readonly TaskCompletionSource<(Guid Id, string Alias, string? Vendor)> _refined =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly List<SessionRegistryEntry> _written = [];
 
     private readonly List<Guid> _writtenIds = [];
 
-    private readonly List<(Guid Id, string Alias, string Vendor)> _refinedRows = [];
+    private readonly List<(Guid Id, string Alias, string? Vendor)> _refinedRows = [];
 
     private int attempts;
 
@@ -38,7 +38,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
         get { lock (_gate) return [.. _writtenIds]; }
     }
 
-    public IReadOnlyList<(Guid Id, string Alias, string Vendor)> Refinements
+    public IReadOnlyList<(Guid Id, string Alias, string? Vendor)> Refinements
     {
         get { lock (_gate) return [.. _refinedRows]; }
     }
@@ -50,7 +50,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
 
     public Task<SessionRegistryEntry> AttemptedAsync => _attempted.Task;
 
-    public Task<(Guid Id, string Alias, string Vendor)> FirstRefinementAsync => _refined.Task;
+    public Task<(Guid Id, string Alias, string? Vendor)> FirstRefinementAsync => _refined.Task;
 
     public async Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken)
     {
@@ -82,7 +82,7 @@ internal sealed class FakeSessionRegistry : ISessionRegistry
         return id;
     }
 
-    public async Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken)
+    public async Task RefineActorAsync(Guid id, string alias, string? vendor, CancellationToken cancellationToken)
     {
         lock (_gate)
         {

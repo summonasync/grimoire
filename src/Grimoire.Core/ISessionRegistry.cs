@@ -14,6 +14,9 @@ namespace Grimoire.Core;
 /// does not hold it is a documented no-op — it never creates a row — and an unreachable
 /// store surfaces UpstreamUnavailableException, the same failure shape as the write path.
 /// It patches only the actor fields; every other field of the row stays byte-equal.
+/// A null vendor means the caller does not know one: the stored vendor field is left
+/// exactly as it is — neither overwritten nor erased, and never replaced with a
+/// placeholder. Only a non-null vendor updates the field; alias is always required.
 /// </summary>
 public interface ISessionRegistry
 {
@@ -21,7 +24,7 @@ public interface ISessionRegistry
 
     Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken);
 
-    Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken);
+    Task RefineActorAsync(Guid id, string alias, string? vendor, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SessionRegistryEntry>> ListRecentAsync(
         int limit,

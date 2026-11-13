@@ -29,7 +29,7 @@ public sealed class FakeSessionRegistry : ISessionRegistry
         return Task.FromResult(Guid.CreateVersion7());
     }
 
-    public Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken) =>
+    public Task RefineActorAsync(Guid id, string alias, string? vendor, CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
     public Task<IReadOnlyList<SessionRegistryEntry>> ListRecentAsync(

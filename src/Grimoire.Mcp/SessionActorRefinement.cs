@@ -70,7 +70,7 @@ internal sealed class SessionActorRefinement(
             await registry.RefineActorAsync(
                 point,
                 identity.Alias,
-                identity.Vendor ?? string.Empty,
+                identity.Vendor,
                 budget.Token);
         }
         catch (Exception failure)
