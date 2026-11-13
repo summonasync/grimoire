@@ -49,6 +49,7 @@ internal sealed class ServeCommand(CliEnvironment environment)
         {
             Port = config.Serve.Port,
             GcIntervalMinutes = Math.Max(1, (int)Math.Round(config.Serve.GcIntervalMinutes)),
+            SessionsRetentionHours = config.SessionsRetentionHoursOrDefault,
             StaticRootPath = webRoot ?? DefaultWebRoot(),
             EnvTome = envTome,
             EnvActor = envActor,

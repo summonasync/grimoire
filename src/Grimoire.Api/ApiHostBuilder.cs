@@ -4,6 +4,7 @@ using Grimoire.Api.Agents;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Endpoints;
 using Grimoire.Api.Querying;
+using Grimoire.Api.Sessions;
 using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
@@ -100,6 +101,13 @@ public static class ApiHostBuilder
         app.MapHealthEndpoints(store, embeddings, clock);
         app.MapVersionEndpoints();
         app.MapAgentEndpoints(new AgentActivityProjection(store, clock));
+        // Hand-built containers (parity and bind tests) resolve no registry; mapping a route
+        // over an absent surface would answer an empty list for a store that is not wired at all.
+        if (services.GetService<ISessionRegistry>() is { } sessions)
+        {
+            app.MapSessionsEndpoints(new SessionHandshakeProjection(
+                sessions, clock, options.SessionsRetentionHours));
+        }
         app.UseSpaFrontend(options);
 
         return app;
