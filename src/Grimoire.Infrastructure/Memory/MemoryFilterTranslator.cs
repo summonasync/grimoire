@@ -156,14 +156,17 @@ internal static class MemoryFilterTranslator
             return [];
         }
 
-        var (alias, vendor) = MemoryActorSemantics.Segments(actor)[0];
+        var conditions = new List<Condition>();
+        foreach (var (alias, vendor) in MemoryActorSemantics.Segments(actor))
+        {
+            conditions.Add(Conditions.MatchKeyword("actor.alias", alias));
+            if (vendor is not null)
+            {
+                conditions.Add(Conditions.MatchKeyword("actor.vendor", vendor));
+            }
+        }
 
-        return vendor is null
-            ? [Conditions.MatchKeyword("actor.alias", alias)]
-            : [
-                Conditions.MatchKeyword("actor.alias", alias),
-                Conditions.MatchKeyword("actor.vendor", vendor),
-            ];
+        return conditions;
     }
 
     private static string[] ScopeValues(IReadOnlyList<MemoryScope> scopes) =>

@@ -34,7 +34,7 @@ public sealed class MemoryActorSemanticsTests
     }
 
     [Fact]
-    public void Segments_NoPlusAtAll_LeavesTheWholeStringAsTheAlias()
+    public void Segments_SplitsOnTheFirstSeparator_KeepingTheRestAsVendor()
     {
         // A vendor is whatever follows the first separator; a stray one inside an alias is the
         // alias's business, same rule ActorResolver.Parse applies on the write side.
@@ -51,7 +51,7 @@ public sealed class MemoryActorSemanticsTests
     }
 
     [Fact]
-    public void MatchesExactly_IsBlindToCaseOnPurposeAndSaysSo()
+    public void MatchesExactly_IsCaseSensitiveOnPurposeAndSaysSo()
     {
         var mine = MemoryActor.Agent("kelthuzad", "qwen");
 

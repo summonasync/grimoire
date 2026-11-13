@@ -122,14 +122,37 @@ public sealed class MemoryServiceReadFilterTests
         Seed("deep 3", [0.3f, 0.9539f, 0f]);
 
         // Was Recall_RefillsTheWindowWhenFiltersWashOutTheFirstPage: it proved the refill by seeding
-        // a window full of another actor's rows, and that washout cannot be produced from recall any
-        // more. Before/after on this identical fixture: two calls and twelve points fetched to hand
-        // back two rows, now one call and six points for the same two rows. The loop in
-        // MemoryService is untouched and unreachable through recall - recorded, not claimed fixed.
+        // a window full of another actor's rows, and a CLEAN actor candidate cannot do that any more.
+        // Before/after on this identical fixture: two calls and twelve points fetched to hand back
+        // two rows, now one call and six points. The loop itself is untouched and still reachable
+        // through the "alias+" grammar - see the test that pins that, which falsified my earlier
+        // claim that recall could no longer trigger it.
         var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None);
 
         _store.SearchCallCount.ShouldBe(1);
         matches.Select(match => match.Record.Id).ShouldBe([first.Id, second.Id]);
+    }
+
+    [Fact]
+    public async Task Recall_WithATrailingSeparator_StaysCorrectOnlyBecauseThePostFilterStillRuns()
+    {
+        for (var index = 1; index <= 5; index++)
+        {
+            Seed($"noise {index}", [0.99f - index * 0.01f, 0.1f, 0f], actor: MemoryActor.Human);
+        }
+
+        Seed("mine", [0.5f, 0.85f, 0f]);
+
+        // The pinned asymmetry with teeth. Five human rows outrank the one row this actor wrote, so
+        // the alias-only store clause fills the whole 6-point window with rows the matcher then
+        // rejects for the trailing separator: nothing survives, the window was full, and the refill
+        // fires. For this one grammar the post-filter is the only thing keeping the answer correct -
+        // which is why the asymmetry is on record rather than quietly aligned, and why my "recall can
+        // no longer trigger the escalation" claim was false.
+        var matches = await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder+"), CancellationToken.None);
+
+        _store.SearchCallCount.ShouldBe(2);
+        matches.ShouldBeEmpty();
     }
 
     [Fact]

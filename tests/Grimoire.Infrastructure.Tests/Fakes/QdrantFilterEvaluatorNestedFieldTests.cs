@@ -1,4 +1,6 @@
+using Grimoire.Core;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Tests.Memory;
 using Grimoire.Infrastructure.Tests.Fakes;
 using Qdrant.Client.Grpc;
 using Shouldly;
@@ -116,6 +118,25 @@ public sealed class QdrantFilterEvaluatorNestedFieldTests
 
         MatchingIds(ActiveOnly, points).ShouldBe(["active"]);
     }
+
+    [Fact]
+    public void MissingActorField_IsNotReachedWhileTheMatcherWouldKeepTheRow()
+    {
+        // Divergence (b) stated as a divergence: the fake cannot match a point whose payload has no
+        // actor struct at all, while MemoryFilterExtensions.MatchesActor keeps exactly such a record
+        // for any candidate. Unobservable in production writes (MemoryPayloadMapper always stores the
+        // struct and RequiredActor refuses a point without it), pinned so nobody "fixes" one side.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["no-actor"] = new Dictionary<string, Value> { [MemoryPayloadFields.Status] = "Active" },
+        };
+
+        MatchingIds(new Filter { Must = { DotPath("actor.alias", "human") } }, points).ShouldBeEmpty();
+        new MemoryFilter { Actor = "human" }.Matches(ActorBearingRecord()).ShouldBeTrue();
+    }
+
+    private static MemoryRecord ActorBearingRecord() =>
+        TestMemories.Create("written by the human", actor: MemoryActor.Human);
 
     private static Condition DotPath(string key, string value) =>
         Conditions.MatchKeyword(key, value);

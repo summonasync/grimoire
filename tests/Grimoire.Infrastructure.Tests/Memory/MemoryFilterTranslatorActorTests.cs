@@ -41,6 +41,21 @@ public sealed class MemoryFilterTranslatorActorTests
         FieldConditions(filter, "actor.vendor").ShouldBeEmpty();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Translate_WithABlankCandidate_LeavesTheDimensionUnconstrainedWithoutThrowing(string candidate)
+    {
+        // Found by hard review: Actor="" used to be an unconstrained read on main (the matcher
+        // treats blank as no clause) and the new branch made it an ArgumentOutOfRangeException
+        // inside every store read that carries it - reachable from memory_recall, memory_list
+        // and the Api query parameter.
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter { Actor = candidate });
+
+        FieldConditions(filter, "actor.alias").ShouldBeEmpty();
+        FieldConditions(filter, "actor.vendor").ShouldBeEmpty();
+    }
+
     [Fact]
     public void Translate_WithABareAlias_ConstrainsOnlyTheAliasSegment()
     {
