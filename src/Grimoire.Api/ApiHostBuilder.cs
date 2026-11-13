@@ -65,6 +65,17 @@ public static class ApiHostBuilder
             clock,
             consolidationOptions.SweepInterval,
             consolidationState));
+        // The registry is a serve-side surface: the MCP child writes rows and never prunes
+        // them, so the retention sweep is registered here and nowhere else. A provider
+        // without a registry (hand-built bind and parity hosts) gets neither routes nor sweep.
+        if (services.GetService<ISessionRegistry>() is { } sessionRegistry)
+        {
+            builder.Services.AddHostedService(_ => new SessionRetentionSweeper(
+                sessionRegistry.PruneAsync,
+                clock,
+                TimeSpan.FromHours(options.SessionsRetentionHours),
+                TimeSpan.FromMinutes(options.GcIntervalMinutes)));
+        }
 
         var tomeResolver = new ApiTomeResolver(
             new TomeResolver(engineOptions),
