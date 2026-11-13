@@ -10,7 +10,8 @@ internal sealed class SessionCapture(
     IClock clock,
     ISessionCaptureFaultSink faults,
     string transport,
-    TimeSpan writeBudget)
+    TimeSpan writeBudget,
+    SessionActorRefinement refinement)
 {
     public static readonly TimeSpan DefaultWriteBudget = TimeSpan.FromSeconds(10);
 
@@ -40,9 +41,10 @@ internal sealed class SessionCapture(
         try
         {
             var actor = await actors.GetActorAsync(budget.Token);
-            await registry.WriteAsync(
+            var id = await registry.WriteAsync(
                 SessionHandshakeRow.Build(server, actor, occurredAt, transport),
                 budget.Token);
+            refinement.RowWritten(id);
         }
         catch (Exception failure)
         {

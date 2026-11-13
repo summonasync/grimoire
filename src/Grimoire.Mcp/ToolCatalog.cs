@@ -11,7 +11,8 @@ internal static class ToolCatalog
     public static IReadOnlyList<McpServerTool> CreateTools(
         IServiceProvider services,
         SessionIdentityHolder sessionIdentity,
-        MemoryActorProvider actors)
+        MemoryActorProvider actors,
+        SessionActorRefinement refinement)
     {
         var store = Require<IMemoryStore>(services);
         var embeddings = Require<IEmbeddingProvider>(services);
@@ -61,7 +62,7 @@ internal static class ToolCatalog
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
             Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
             Build(TomeCreateTool.Name, TomeCreateTool.Title, TomeCreateTool.Description, new TomeCreateTool(manifests, actors).Create, readOnly: false, destructive: false, idempotent: false),
-            Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity).Set, readOnly: false, destructive: false, idempotent: true),
+            Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity, refinement).Set, readOnly: false, destructive: false, idempotent: true),
         ];
     }
 

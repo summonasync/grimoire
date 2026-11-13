@@ -82,6 +82,92 @@ public sealed class SessionCaptureTests
     }
 
     [Fact]
+    public async Task SessionIdentitySet_PatchesTheCapturedRow_Once()
+    {
+        var faults = new RecordingSessionCaptureFaultSink();
+        await using var session = await StartAsync(faults);
+
+        await session.Client.ListToolsAsync().AsTask().WaitAsync(Wait);
+        await session.Sessions.AttemptedAsync.WaitAsync(Wait);
+
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("tucker", "qwen"))
+            .AsTask().WaitAsync(Wait);
+        var refinement = await session.Sessions.FirstRefinementAsync.WaitAsync(Wait);
+
+        refinement.Id.ShouldBe(session.Sessions.StoredIds.Single());
+        refinement.Alias.ShouldBe("tucker");
+        refinement.Vendor.ShouldBe("qwen");
+
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("second", "claude"))
+            .AsTask().WaitAsync(Wait);
+        await Task.Delay(200);
+
+        session.Sessions.Refinements.Count.ShouldBe(1);
+        session.Sessions.Attempts.ShouldBe(1);
+        faults.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SessionIdentitySet_WithoutVendor_PatchesAnEmptyVendor()
+    {
+        await using var session = await StartAsync(new RecordingSessionCaptureFaultSink());
+
+        await session.Client.ListToolsAsync().AsTask().WaitAsync(Wait);
+        await session.Sessions.AttemptedAsync.WaitAsync(Wait);
+
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("solo", null))
+            .AsTask().WaitAsync(Wait);
+        var refinement = await session.Sessions.FirstRefinementAsync.WaitAsync(Wait);
+
+        refinement.Alias.ShouldBe("solo");
+        refinement.Vendor.ShouldBe(string.Empty);
+    }
+
+    [Fact]
+    public async Task SessionIdentitySet_RejectedByValidation_LeavesTheRowUntouched()
+    {
+        await using var session = await StartAsync(new RecordingSessionCaptureFaultSink());
+
+        await session.Client.ListToolsAsync().AsTask().WaitAsync(Wait);
+        await session.Sessions.AttemptedAsync.WaitAsync(Wait);
+
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("two words", "qwen"))
+            .AsTask().WaitAsync(Wait);
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("tucker", "qwen"))
+            .AsTask().WaitAsync(Wait);
+        var refinement = await session.Sessions.FirstRefinementAsync.WaitAsync(Wait);
+
+        refinement.Alias.ShouldBe("tucker");
+        session.Sessions.Refinements.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task RefinementOutage_ServesTheIdentityCall_AndFaultsOnce()
+    {
+        var sessions = new FakeSessionRegistry { RefineFailure = new UpstreamUnavailableException("qdrant") };
+        var faults = new RecordingSessionCaptureFaultSink();
+        await using var session = await StartAsync(faults, sessions: sessions);
+
+        await session.Client.ListToolsAsync().AsTask().WaitAsync(Wait);
+        await session.Sessions.AttemptedAsync.WaitAsync(Wait);
+
+        var result = await session.Client.CallToolAsync("session_identity_set", IdentityArgs("tucker", "qwen"))
+            .AsTask().WaitAsync(Wait);
+        var line = await faults.FirstLineAsync.WaitAsync(Wait);
+
+        result.ShouldSucceed();
+        line.ShouldContain("refinement");
+
+        await session.Client.CallToolAsync("session_identity_set", IdentityArgs("second", "claude"))
+            .AsTask().WaitAsync(Wait);
+        await Task.Delay(300);
+
+        sessions.Refinements.Count.ShouldBe(1);
+        sessions.Attempts.ShouldBe(1);
+        faults.Lines.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task StoreOutage_ServesTheRequest_LogsOneFaultLine_AndRetriesNothing()
     {
         var sessions = new FakeSessionRegistry { Failure = new UpstreamUnavailableException("qdrant") };
@@ -190,4 +276,15 @@ public sealed class SessionCaptureTests
             clientProtocolVersion: clientProtocolVersion);
 
     private static Dictionary<string, object?> EmptyArgs() => new();
+
+    private static Dictionary<string, object?> IdentityArgs(string alias, string? vendor)
+    {
+        var args = new Dictionary<string, object?> { ["alias"] = alias };
+        if (vendor is not null)
+        {
+            args["vendor"] = vendor;
+        }
+
+        return args;
+    }
 }

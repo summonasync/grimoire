@@ -12,6 +12,11 @@ internal static class McpServerFactory
         var clientInfo = new ClientInfoHolder();
         var sessionIdentity = new SessionIdentityHolder();
         var actors = ActorProviders.Create(options, services, clientInfo, sessionIdentity);
+        var registry = Require<ISessionRegistry>(services);
+        var clock = Require<IClock>(services);
+        var faults = options.CaptureFault ?? new StderrSessionCaptureFaultSink();
+        var writeBudget = options.SessionWriteBudget ?? SessionCapture.DefaultWriteBudget;
+        var refinement = new SessionActorRefinement(registry, faults, writeBudget);
         var serverOptions = new McpServerOptions
         {
             ServerInfo = new Implementation
@@ -25,18 +30,19 @@ internal static class McpServerFactory
             ToolCollection = new McpServerPrimitiveCollection<McpServerTool>(),
         };
 
-        foreach (var tool in ToolCatalog.CreateTools(services, sessionIdentity, actors))
+        foreach (var tool in ToolCatalog.CreateTools(services, sessionIdentity, actors, refinement))
         {
             serverOptions.ToolCollection.Add(tool);
         }
 
         var capture = new SessionCapture(
-            Require<ISessionRegistry>(services),
+            registry,
             actors,
-            Require<IClock>(services),
-            options.CaptureFault ?? new StderrSessionCaptureFaultSink(),
+            clock,
+            faults,
             SessionHandshakeRow.StdioTransport,
-            options.SessionWriteBudget ?? SessionCapture.DefaultWriteBudget);
+            writeBudget,
+            refinement);
         serverOptions.Filters.Message.IncomingFilters.Add(capture.Wrap);
 
         var server = McpServer.Create(transport, serverOptions, NullLoggerFactory.Instance, services);
