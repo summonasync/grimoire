@@ -32,6 +32,28 @@ internal static class MemoryFormatter
 
     public static void WriteBrief(TextWriter output, BriefResult brief, bool daily)
     {
+        WriteBriefSections(output, brief, daily);
+        if (daily)
+        {
+            WriteBriefWarnings(output, brief);
+        }
+    }
+
+    public static void WriteBriefWarnings(TextWriter output, BriefResult brief)
+    {
+        if (brief.Warnings is not { } warnings)
+        {
+            return;
+        }
+
+        foreach (var warning in warnings)
+        {
+            output.WriteLine($"Warning: {warning}");
+        }
+    }
+
+    public static void WriteBriefSections(TextWriter output, BriefResult brief, bool daily)
+    {
         output.WriteLine(Heading("persona", brief.PersonaState));
         if (brief.Persona is { } persona)
         {
@@ -122,14 +144,6 @@ internal static class MemoryFormatter
         }
 
         WriteOmitted(output, brief, BriefSection.Daily);
-
-        if (brief.Warnings is { } warnings)
-        {
-            foreach (var warning in warnings)
-            {
-                output.WriteLine($"Warning: {warning}");
-            }
-        }
     }
 
     private static string Heading(string name, BriefSectionState state) => state switch

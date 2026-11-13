@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
@@ -40,16 +41,24 @@ public sealed class BriefCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task Brief_FormatHook_IsRefusedWithAnHonestUsageError()
+    public async Task Brief_FormatHook_PrintsTheSessionStartEnvelope()
     {
         SeedPayload(_host.Store);
 
         var code = await _host.RunAsync("brief", "--format", "hook");
 
-        code.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
-        _host.Output.ToString().ShouldContain(
-            "--format hook is not wired in this build yet; the brief prints text. Drop --format or pass --format text.");
-        _host.Output.ToString().ShouldNotContain("deploys happen on friday");
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var stdout = _host.Output.ToString();
+        stdout.ShouldNotContain("not wired");
+        using var document = JsonDocument.Parse(stdout);
+        var output = document.RootElement.GetProperty("hookSpecificOutput");
+        output.GetProperty("hookEventName").GetString().ShouldBe("SessionStart");
+        var context = output.GetProperty("additionalContext").GetString();
+        context.ShouldNotBeNullOrWhiteSpace();
+        context!.ShouldContain("deploys happen on friday");
+        context.ShouldContain("superseded by the rewrite");
+        context.ShouldContain("user asked for the brief");
+        context.ShouldContain("tomes: (empty)");
     }
 
     [Fact]
@@ -206,6 +215,20 @@ public sealed class BriefCommandTests : IDisposable
 
         garbage.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
         _host.Output.ToString().ShouldContain("--max-chars must be a positive integer, got 'wide'.");
+    }
+
+    [Fact]
+    public async Task Brief_MaxCharsWithDaily_BindsTheDailyPurseToTheSameEnvelope()
+    {
+        var note = SeedDaily(_host.Store, new string('x', 2000), 0, "medivh", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily", "--max-chars", "5");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldNotContain(new string('x', 81),
+            customMessage: "the daily purse ignored --max-chars (review 046-05, N-2): the flood is still in the render.");
+        LineIndex(output, $"    {note.Id} daily-purse: {new string('x', 80)} [cut]").ShouldNotBe(-1);
     }
 
 

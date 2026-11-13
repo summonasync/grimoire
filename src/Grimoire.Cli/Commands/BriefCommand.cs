@@ -34,7 +34,7 @@ internal sealed class BriefCommand(CliEnvironment environment)
 
         if (format == BriefFormat.Hook)
         {
-            BriefHookRenderer.Write(invocation.Spec, environment, result, daily);
+            BriefHookRenderer.Write(environment, result, daily);
             return ExitCodes.Ok;
         }
 
