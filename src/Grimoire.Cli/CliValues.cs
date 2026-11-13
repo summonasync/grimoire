@@ -1,4 +1,3 @@
-using System.Globalization;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
 using Grimoire.Mcp;
@@ -48,7 +47,7 @@ internal static class CliValues
 
     public static double Unit(CommandSpec spec, string name, string value)
     {
-        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || number < 0 || number > 1)
+        if (NumericGrammar.Classify(value, out var number) != NumberVerdict.Finite || number < 0 || number > 1)
         {
             throw new UsageException($"--{name} must be a number between 0 and 1, got '{value}'.", spec);
         }
@@ -58,7 +57,7 @@ internal static class CliValues
 
     public static double Hours(CommandSpec spec, string name, string value)
     {
-        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var hours) || hours <= 0)
+        if (NumericGrammar.Classify(value, out var hours) != NumberVerdict.Finite || hours <= 0)
         {
             throw new UsageException($"--{name} must be a positive number of hours, got '{value}'.", spec);
         }
@@ -68,7 +67,7 @@ internal static class CliValues
 
     public static int PositiveInt(CommandSpec spec, string name, string value)
     {
-        if (!int.TryParse(value, out var number) || number <= 0)
+        if (!NumericGrammar.TryWholeNumber(value, out var number) || number <= 0)
         {
             throw new UsageException($"--{name} must be a positive integer, got '{value}'.", spec);
         }

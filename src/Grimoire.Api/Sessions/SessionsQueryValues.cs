@@ -1,4 +1,4 @@
-using System.Globalization;
+using Grimoire.Core;
 
 namespace Grimoire.Api.Sessions;
 
@@ -16,13 +16,13 @@ internal static class SessionsQueryValues
             return (null, null);
         }
 
-        if (!Number(raw, out var rows) || !double.IsInteger(rows) || rows is < int.MinValue or > int.MaxValue)
+        if (!NumericGrammar.TryWholeNumber(raw, out var rows))
         {
             return (null, $"limit must be a whole number of rows written as {NumberForm} with no group separators; " +
                           $"'{raw}' is not valid.");
         }
 
-        return ((int)rows, null);
+        return (rows, null);
     }
 
     public static (double? Value, string? Rejection) WindowHours(string? raw)
@@ -32,12 +32,9 @@ internal static class SessionsQueryValues
             return (null, null);
         }
 
-        return Number(raw, out var hours)
+        return NumericGrammar.Classify(raw, out var hours) == NumberVerdict.Finite
             ? (hours, null)
             : (null, $"windowHours must be a number of hours written as {NumberForm} with no group separators; " +
                      $"'{raw}' is not valid.");
     }
-
-    private static bool Number(string raw, out double value) =>
-        double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 }
