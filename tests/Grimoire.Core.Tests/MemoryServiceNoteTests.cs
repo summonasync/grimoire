@@ -11,6 +11,10 @@ public sealed class MemoryServiceNoteTests
         ["note about deploys"] = [1f, 0f, 0f],
         ["deploy neighbor one"] = [1f, 0.7f, 0f],
         ["deploy neighbor two"] = [1f, 0f, 0.7f],
+        ["fuzzy neighbor one"] = [1f, 0.85f, 0f],
+        ["fuzzy neighbor two"] = [1f, 0f, 0.85f],
+        ["bare neighbor one"] = [1f, 0.7f, 0f],
+        ["bare neighbor two"] = [1f, 0f, 0.7f],
         ["coffee brewing"] = [0f, 1f, 0f],
     };
 
@@ -33,7 +37,7 @@ public sealed class MemoryServiceNoteTests
         SeedNeighbor("deploy neighbor one", "topic:deploy");
         SeedNeighbor("deploy neighbor two", "topic:deploy");
 
-        var result = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
 
         result.Record.Tags.ShouldBe(["topic:deploy"]);
         result.Record.Kind.ShouldBe(MemoryKind.Journal);
@@ -48,7 +52,7 @@ public sealed class MemoryServiceNoteTests
         SeedNeighbor("deploy neighbor one", "topic:deploy");
         SeedNeighbor("deploy neighbor two", "topic:coffee");
 
-        var result = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
 
         result.Record.Tags.ShouldBeEmpty();
     }
@@ -59,7 +63,7 @@ public sealed class MemoryServiceNoteTests
         _store.Seed(TestMemories.Create("fuzzy one", [1f, 0.9f, 0f], projectId: "grim", tags: ["topic:deploy"]), [1f, 0.9f, 0f]);
         _store.Seed(TestMemories.Create("fuzzy two", [1f, 0f, 0.9f], projectId: "grim", tags: ["topic:deploy"]), [1f, 0f, 0.9f]);
 
-        var result = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
 
         result.Record.Tags.ShouldBeEmpty();
     }
@@ -70,7 +74,7 @@ public sealed class MemoryServiceNoteTests
         SeedNeighbor("deploy neighbor one", "topic:coffee");
         SeedNeighbor("deploy neighbor two", "topic:coffee");
 
-        var result = await _service.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
 
         result.Record.Tags.ShouldBe(["topic:deploy-lane"]);
     }
@@ -78,7 +82,7 @@ public sealed class MemoryServiceNoteTests
     [Fact]
     public async Task Note_PrefixedHint_IsNormalizedOnce()
     {
-        var result = await _service.NoteAsync(Note("note about deploys", topic: "topic:Deploy Lane"), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys", topic: "topic:Deploy Lane"), CancellationToken.None);
 
         result.Record.Tags.ShouldBe(["topic:deploy-lane"]);
     }
@@ -89,7 +93,7 @@ public sealed class MemoryServiceNoteTests
         SeedNeighbor("deploy neighbor one", "topic:deploy");
         SeedNeighbor("deploy neighbor two", "topic:deploy");
 
-        var result = await _service.NoteAsync(Note("note about deploys", topic: "   "), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys", topic: "   "), CancellationToken.None);
 
         result.Record.Tags.ShouldBe(["topic:deploy"]);
     }
@@ -99,9 +103,9 @@ public sealed class MemoryServiceNoteTests
     {
         SeedNeighbor("deploy neighbor one", "topic:deploy");
         SeedNeighbor("deploy neighbor two", "topic:deploy");
-        var first = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+        var (first, _) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
 
-        var second = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+        var (second, _) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
 
         second.IdempotentReplay.ShouldBeTrue();
         second.Record.Id.ShouldBe(first.Record.Id);
@@ -113,7 +117,7 @@ public sealed class MemoryServiceNoteTests
     [Fact]
     public async Task Note_SharesTheRememberIdempotencyRecipe()
     {
-        var note = await _service.NoteAsync(Note("note about deploys", tags: ["ops"]), CancellationToken.None);
+        var (note, _) = await _service.NoteAsync(Note("note about deploys", tags: ["ops"]), CancellationToken.None);
 
         var remembered = await _service.RememberAsync(new RememberRequest
         {
@@ -146,7 +150,7 @@ public sealed class MemoryServiceNoteTests
         SeedNeighbor("deploy neighbor one", "topic:deploy");
         SeedNeighbor("deploy neighbor two", "topic:deploy");
 
-        var result = await _service.NoteAsync(Note("note about deploys", scope: MemoryScope.Session, sessionId: "s-1", projectId: null), CancellationToken.None);
+        var (result, _) = await _service.NoteAsync(Note("note about deploys", scope: MemoryScope.Session, sessionId: "s-1", projectId: null), CancellationToken.None);
 
         result.Record.Tags.ShouldBeEmpty();
         result.Record.ExpiresAt.ShouldBe(result.Record.CreatedAt.AddHours(24));
@@ -157,11 +161,60 @@ public sealed class MemoryServiceNoteTests
     {
         var bare = TestMemories.Service(_store, _embeddings, _clock);
 
-        var hinted = await bare.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
-        var plain = await bare.NoteAsync(Note("coffee brewing"), CancellationToken.None);
+        var (hinted, _) = await bare.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
+        var (plain, _) = await bare.NoteAsync(Note("coffee brewing"), CancellationToken.None);
 
         hinted.Record.Tags.ShouldBe(["topic:deploy-lane"]);
         plain.Record.Tags.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Note_WeakConsensus_StampsNothingAndNamesTheCandidate()
+    {
+        SeedNeighbor("fuzzy neighbor one", "topic:deploy");
+        SeedNeighbor("fuzzy neighbor two", "topic:deploy");
+
+        var (result, vote) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+
+        result.Record.Tags.ShouldBeEmpty();
+        vote!.Decision.ShouldBe(TopicVoteDecision.BelowConfidence);
+        vote.CandidateTag.ShouldBe("topic:deploy");
+        vote.Tag.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Note_ExplicitTopic_IsReportedAsExplicitAndSkipsTheClassifier()
+    {
+        var hintedStore = new FakeMemoryStore();
+        var hinted = TestMemories.Service(
+            hintedStore, new FakeEmbeddingProvider(Vectors), _clock, topics: new EmbeddingTopicClassifier(hintedStore));
+        var openStore = new FakeMemoryStore();
+        var open = TestMemories.Service(
+            openStore, new FakeEmbeddingProvider(Vectors), _clock, topics: new EmbeddingTopicClassifier(openStore));
+
+        var (_, hintVote) = await hinted.NoteAsync(Note("note about deploys", topic: "Deploy Lane"), CancellationToken.None);
+        var (_, openVote) = await open.NoteAsync(Note("note about deploys"), CancellationToken.None);
+
+        hintVote!.Decision.ShouldBe(TopicVoteDecision.Explicit);
+        hintVote.Tag.ShouldBe("topic:deploy-lane");
+        hintVote.WinningCount.ShouldBe(0);
+        hintVote.BestSimilarity.ShouldBeNull();
+
+        openVote!.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        openStore.SearchCallCount.ShouldBe(hintedStore.SearchCallCount + 1);
+    }
+
+    [Fact]
+    public async Task Note_BareTaggedNeighbors_DoNotThemeTheNoteButShowInTheVote()
+    {
+        SeedNeighbor("bare neighbor one", "deploy");
+        SeedNeighbor("bare neighbor two", "deploy");
+
+        var (result, vote) = await _service.NoteAsync(Note("note about deploys"), CancellationToken.None);
+
+        result.Record.Tags.ShouldBeEmpty();
+        vote!.Decision.ShouldBe(TopicVoteDecision.NoConsensus);
+        vote.Neighbors.ShouldContain(entry => entry.Tag == "deploy" && !entry.Counted);
     }
 
     private NoteRequest Note(
