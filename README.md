@@ -133,7 +133,7 @@ looks empty may simply live in another tome. `--project` shares its help
 text with `brief` (where the same filter is described as "the brief"); for
 `report` it filters the reported day's records to that project.
 
-The same day has a second read, folded into the startup brief: `grimoire
+The same notes have a second read, folded into the startup brief: `grimoire
 brief --daily` and `memory_brief` with `daily: true` add a `daily` section —
 active journal records tagged `daily-notes` within the brief's scope filter
 (`Session` is never briefed), in two buckets: today and the first day behind
@@ -143,16 +143,19 @@ invention: daily notes are written once, tagged `daily-notes` by the session
 that wrote them (the rule in `CONTEXT.md`), and the daily section is the other
 end of that deal. A record that lands in the daily section is dropped from the
 brief's `journal` section, so the same note is never paid for twice. `report`
-and `--daily` differ in shape, not in truth: `report` reads one named local
-day, `--daily` reads today plus the last day that actually had a note.
+and `--daily` differ in shape — and, when `memory.dailyTimeZone` names a zone
+other than the machine's, in which calendar day each one calls today: `report`
+is always machine-local, `--daily` cuts its day in the configured zone.
 
 Two windows and a purse decide what the section shows. The day is cut at
 local midnight in the zone `memory.dailyTimeZone` names, so "today" means
-today where the machine's owner lives. Entries are budgeted: one longer than
-1500 characters is cut and flagged `truncated`, and once 6000 characters are
-spent the rest is only counted — a number in `more`, and `daily` named in
-`omitted`. Both numbers are code defaults, not config keys; the two knobs
-listed under `memory` are all the daily section exposes.
+today in that zone — the machine's own day while the knob is unset. Entries are
+budgeted: one longer than 1500 characters is cut and flagged `truncated`, and
+once 6000 characters are spent the rest is only counted, as a number in `more`.
+Either outcome names `daily` in `omitted`: a capped body or a counted tail is
+content the section knows about and does not print. Both numbers are code
+defaults, not config keys; the two knobs listed under `memory` are all the
+daily section exposes.
 
 A degraded config says so instead of rendering an empty room, and it says so
 only when the daily section was asked for. A blank `memory.dailyTag` disables
