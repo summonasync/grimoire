@@ -19,8 +19,9 @@ and personal memory for AI coding agents, plus the tooling around it. One binary
   tomes, view settings and stats; also runs the background GC sweep.
 - **CLI** (`grimoire <command>`) — management and scripting: `init` (with `--agent` to claim
   a directory), `install` (upsert the managed routing block into agent home memory files),
-  `remember`, `recall`, `brief`, `scry`, `list`, `forget`, `gc`, `persona`,
-  `stats`, `config`, `projects` (the project registry behind project tags).
+  `remember`, `recall`, `brief`, `report` (the evening read of the day's daily notes), `scry`,
+  `list`, `forget`, `gc`, `persona`, `stats`, `config`, `projects` (the project registry behind
+  project tags).
 
 The MCP tool surface is frozen by contract snapshots: `tests/Grimoire.Mcp.Tests/TestData/snapshots/<tool>.json`
 pins each tool's title, description, annotations, input schema and the output shape observed
@@ -97,6 +98,20 @@ a payload. Two orthogonal dimensions:
   own and `memory_scry` are the deliberate doors (ADR-007). Session scope never crosses
   tomes at all.
 - **Explicit writes only** in v1 — no auto-extraction from transcripts (ADR-003).
+- **Daily notes: write-once.** A daily note is written once, by one call, into grimoire — tagged
+  `daily-notes`, actor = the writing session's alias. The evening read (`grimoire report`) is a
+  read, not a second write; the same note never lands in two surfaces. `report` reads the engine
+  default tome — `MemoryService.ResolveTome` with no explicit tome, so the configured default —
+  and ships no `--tome` flag, which is why the printed tome is what tells "no notes yet / wrong
+  tome" apart from a broken tool. Overmind keeps decisions, guards, gates and park notes — not
+  the note bodies.
+- **Board and memory link, they don't duplicate.** A board entity points at the durable fact with
+  `pointer: grimoire://memory/<id>` in its body; the grimoire record points back with the tag
+  `overmind://entry/<uuid>`.
+- **Two memories, one truth.** Durable truth lives in grimoire only. A runtime's own file memory
+  (auto-memory and analogues) is an ephemeral cache that LINKS instead of copying fact content;
+  on conflict, grimoire wins. (Owner ruling 2026-11-03 — an unrecorded contract, not a
+  duplication bug; folded into feature 048 on 2026-11-12.)
 - **The core never runs an LLM.** Journal → knowledge compaction works as: the core detects
   candidates (`memory_compact_candidates` — clustering + staleness over stored embeddings,
   pure math), an agent client distills them into `kind=fact` records (`sources` provenance)

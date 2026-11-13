@@ -29,6 +29,9 @@ internal static class CommandCatalog
     private static readonly FlagSpec Tag = new(
         "tag", "a,b,c", "Comma-separated tags to filter by.");
 
+    private static readonly FlagSpec Date = new(
+        "date", "yyyy-MM-dd", "Calendar day to report, resolved in the local zone. Default: today.");
+
     private static readonly FlagSpec Status = new(
         "status", "status", "Record status: active (default), superseded or tombstoned.");
 
@@ -168,6 +171,14 @@ internal static class CommandCatalog
             Summary = "List memories. Defaults to active records.",
             Syntax = "list",
             Flags = [Scope, Tag, Status, Limit],
+        },
+        new CommandSpec
+        {
+            Name = "report",
+            Summary = "Evening report of daily notes: active records of one local day, grouped by actor. " +
+                      "Default --date today, default --tag daily-notes.",
+            Syntax = "report [--date <yyyy-MM-dd>] [--project <id>] [--tag <a,b>] [--json]",
+            Flags = [Date, ProjectFilter, Tag, Json],
         },
         new CommandSpec
         {

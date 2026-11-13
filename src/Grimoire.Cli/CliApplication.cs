@@ -105,6 +105,7 @@ internal static class CliApplication
             "remember" => new Commands.RememberCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "recall" => new Commands.RecallCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "list" => new Commands.ListCommand(env).RunAsync(invocation, config, services, cancellationToken),
+            "report" => new Commands.ReportCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "brief" => new Commands.BriefCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "scry" => new Commands.ScryCommand(env).RunAsync(invocation, config, services, cancellationToken),
             "forget" => new Commands.ForgetCommand(env).RunAsync(invocation, config, services, cancellationToken),
