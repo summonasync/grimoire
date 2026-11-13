@@ -207,14 +207,8 @@ public sealed class RecordingMemoryStore : IMemoryStore
             query = query.Where(point => point.Record.Kind == filter.Kind);
         }
 
-        if (filter.Statuses.Count > 0)
-        {
-            query = query.Where(point => filter.Statuses.Contains(point.Record.Status));
-        }
-        else if (filter.Status is not null)
-        {
-            query = query.Where(point => point.Record.Status == filter.Status);
-        }
+        var statuses = MemoryStatuses.Effective(filter);
+        query = query.Where(point => statuses.Contains(point.Record.Status));
 
         if (filter.Tags.Count > 0)
         {

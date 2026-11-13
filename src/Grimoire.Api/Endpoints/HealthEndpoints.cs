@@ -11,7 +11,10 @@ internal static class HealthEndpoints
     {
         app.MapGet("/health", async (CancellationToken cancellationToken) =>
         {
-            var storeHealth = await ProbeAsync(() => store.CountAsync(new MemoryFilter(), cancellationToken), cancellationToken);
+            // Named rather than inherited: this count used to lean on the store's silent default.
+            var storeHealth = await ProbeAsync(
+                () => store.CountAsync(new MemoryFilter { Status = MemoryStatus.Active }, cancellationToken),
+                cancellationToken);
             var embeddingHealth = await ProbeAsync(() => ProbeEmbeddingsAsync(embeddings, cancellationToken), cancellationToken);
             var status = storeHealth.Reachable && embeddingHealth.Reachable
                 ? HealthResponse.Healthy

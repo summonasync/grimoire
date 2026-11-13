@@ -142,12 +142,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
             return false;
         }
 
-        if (filter.Status is not null && record.Status != filter.Status)
-        {
-            return false;
-        }
-
-        if (filter.Statuses.Count > 0 && !filter.Statuses.Contains(record.Status))
+        if (!MemoryStatuses.Effective(filter).Contains(record.Status))
         {
             return false;
         }

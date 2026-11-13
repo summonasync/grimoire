@@ -8,15 +8,19 @@ internal static class MemoryFilterTranslator
     internal static Filter Translate(MemoryFilter filter)
     {
         var translated = new Filter();
+        // Which statuses are meant comes from Core; which wire shape they take stays here, so an
+        // explicit one-element list keeps rendering as any-of and an omitted clause keeps
+        // rendering as the single Active keyword. Same bytes, one home for the meaning.
+        var statuses = MemoryStatuses.Effective(filter);
         if (filter.Statuses.Count > 0)
         {
-            translated.Must.Add(StatusAnyCondition(filter.Statuses));
+            translated.Must.Add(StatusAnyCondition(statuses));
         }
         else
         {
             translated.Must.Add(Conditions.MatchKeyword(
                 MemoryPayloadFields.Status,
-                (filter.Status ?? MemoryStatus.Active).ToString()));
+                statuses[0].ToString()));
         }
 
         if (filter.Scopes.Count > 0)
