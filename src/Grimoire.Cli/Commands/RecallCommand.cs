@@ -14,24 +14,24 @@ internal sealed class RecallCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var memories = services.GetRequiredService<MemoryService>();
-        var matches = (await memories.RecallAsync(new RecallQuery
+        var recall = await memories.RecallAsync(new RecallQuery
         {
             Text = invocation.JoinedPositional(),
             Scopes = CliValues.ScopeList(invocation.Spec, invocation.Value("scope")),
             Limit = invocation.Value("limit") is { } raw ? CliValues.PositiveInt(invocation.Spec, "limit", raw) : 5,
-        }, cancellationToken)).Matches;
+        }, cancellationToken);
 
-        if (matches.Count == 0)
+        if (recall.Matches.Count == 0)
         {
             environment.Output.WriteLine("No matching memories.");
-            return ExitCodes.Ok;
         }
 
-        foreach (var match in matches)
+        foreach (var match in recall.Matches)
         {
             MemoryFormatter.WriteMatch(environment.Output, match);
         }
 
+        MemoryFormatter.WriteWarnings(environment.Output, recall.Warnings);
         return ExitCodes.Ok;
     }
 }

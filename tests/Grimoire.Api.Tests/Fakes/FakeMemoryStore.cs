@@ -15,6 +15,10 @@ public class FakeMemoryStore : IMemoryStore
 
     public int GetCount { get; set; }
 
+    public int SearchCallCount { get; set; }
+
+    public List<int> SearchWindows { get; } = [];
+
     public Action? OnGetAsync { get; set; }
 
     public Action<MemoryFilter>? OnFetchAsync { get; set; }
@@ -76,6 +80,8 @@ public class FakeMemoryStore : IMemoryStore
 
     public virtual Task<IReadOnlyList<VectorMatch>> SearchAsync(ReadOnlyMemory<float> vector, MemoryFilter filter, int limit, CancellationToken cancellationToken)
     {
+        SearchCallCount++;
+        SearchWindows.Add(limit);
         IReadOnlyList<VectorMatch> matches = Matching(filter)
             .Select(point => new VectorMatch
             {

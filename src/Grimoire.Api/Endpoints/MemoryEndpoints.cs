@@ -36,13 +36,16 @@ internal static class MemoryEndpoints
 
             var requestedTome = parsed.Filter.Tome;
             var tome = requestedTome ?? await tomes.ResolveAsync(null, cancellationToken);
-            var records = await queryRunner.RunAsync(
+            var result = await queryRunner.RunAsync(
                 query.Query,
                 parsed with { Filter = parsed.Filter with { Tome = tome } },
                 cancellationToken);
+            var records = result.Records;
 
-            var warnings = await EmptyTomeWarning.BuildAsync(
-                store, records.Count == 0, requestedTome, tome, cancellationToken);
+            var warnings = WarningMerge.Merge(
+                result.Warnings,
+                await EmptyTomeWarning.BuildAsync(
+                    store, records.Count == 0, requestedTome, tome, cancellationToken));
 
             object response = parsed.ProjectedKeys is { } keys
                 ? new ProjectedMemoryListResponse(

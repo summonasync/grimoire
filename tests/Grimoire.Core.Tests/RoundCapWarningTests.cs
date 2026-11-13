@@ -25,7 +25,8 @@ public sealed class RoundCapWarningTests
         warnings!.ShouldHaveSingleItem();
         warnings[0].ShouldBe(
             "recall page came up short after 4 rounds of window doubling: " +
-            "1 of limit 2 matches, last window 48 points — narrow the query or raise limit");
+            "1 of limit 2 matches, last window 48 points — narrow the query; " +
+            "a wider limit only widens the searched window, it cannot fill the page");
     }
 
     private static RecallEscalationResult Scan(RecallStopReason stoppedBy, int rounds, int lastWindow) => new()

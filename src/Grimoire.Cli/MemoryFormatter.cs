@@ -30,6 +30,19 @@ internal static class MemoryFormatter
         WriteLines(output, match.Record.Content, "  ");
     }
 
+    public static void WriteWarnings(TextWriter output, IReadOnlyList<string>? warnings)
+    {
+        if (warnings is null)
+        {
+            return;
+        }
+
+        foreach (var warning in warnings)
+        {
+            output.WriteLine($"Warning: {warning}");
+        }
+    }
+
     public static void WriteBrief(TextWriter output, BriefResult brief, bool daily)
     {
         output.WriteLine(Heading("persona", brief.PersonaState));
@@ -115,13 +128,7 @@ internal static class MemoryFormatter
             output.WriteLine($"  (+{brief.DailyMore} more)");
         }
 
-        if (brief.Warnings is { } warnings)
-        {
-            foreach (var warning in warnings)
-            {
-                output.WriteLine($"Warning: {warning}");
-            }
-        }
+        WriteWarnings(output, brief.Warnings);
     }
 
     private static string Heading(string name, BriefSectionState state) => state switch

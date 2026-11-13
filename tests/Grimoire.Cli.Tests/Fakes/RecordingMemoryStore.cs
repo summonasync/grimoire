@@ -25,6 +25,11 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     public Exception? ListFailure { get; set; }
 
+    // Models a store clause looser than MemoryFilterExtensions.Matches: search answers come from
+    // this list instead of the filter, so windows can come back full of rows the post-filter drops.
+    // Production reaches that shape on the `alias+` actor grammar and through ANN non-nestedness.
+    public IReadOnlyList<MemoryRecord>? RejectingWindow { get; set; }
+
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
     public MemoryRecord Add(
@@ -124,6 +129,21 @@ public sealed class RecordingMemoryStore : IMemoryStore
     public Task<IReadOnlyList<VectorMatch>> SearchAsync(ReadOnlyMemory<float> vector, MemoryFilter filter, int limit, CancellationToken cancellationToken)
     {
         Searched.Add((vector, filter, limit));
+
+        if (RejectingWindow is { } flooded)
+        {
+            IReadOnlyList<VectorMatch> window = [.. flooded
+                .Select(record => new VectorMatch
+                {
+                    Record = record,
+                    Similarity = VectorMath.CosineSimilarity(vector.Span, _points[record.Id].Vector),
+                })
+                .OrderByDescending(match => match.Similarity)
+                .ThenBy(match => match.Record.Id)
+                .Take(limit)];
+            return Task.FromResult(window);
+        }
+
         IReadOnlyList<VectorMatch> matches = Matching(filter)
             .Select(point => new VectorMatch
             {

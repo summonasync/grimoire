@@ -78,6 +78,8 @@ public sealed class GrimoireApiFactory : IDisposable
         Store.UpsertCount = 0;
         Store.UpdateCount = 0;
         Store.GetCount = 0;
+        Store.SearchCallCount = 0;
+        Store.SearchWindows.Clear();
         Store.OnGetAsync = null;
         Store.OnFetchAsync = null;
         Store.OnListAsync = null;
