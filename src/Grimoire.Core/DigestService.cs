@@ -122,7 +122,9 @@ public sealed class DigestService(
         CancellationToken cancellationToken)
     {
         var hits = new Dictionary<Guid, TopicHit>();
-        var tagged = await store.ListAsync(filter with { Tags = [topicTag] }, cancellationToken);
+        var tagged = await store.ListAsync(
+            filter with { Tags = [topicTag, topicTag[ITopicClassifier.TopicPrefix.Length..]] },
+            cancellationToken);
         foreach (var record in tagged)
         {
             hits[record.Id] = new TopicHit(record, DigestMatch.Tag, null);

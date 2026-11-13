@@ -275,6 +275,106 @@ public sealed class NoteToolTests
         session.Embeddings.Requests.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Note_VotedTopic_ReportsWhoAgreedAndHowStrongly()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("theme note one", [1f, 0.7f, 0]);
+        session.Embeddings.Register("theme note two", [1f, 0, 0.7f]);
+        session.Embeddings.Register("theme note three", [1f, 0, 0]);
+        await Note(session, "theme note one", topic: "onnx");
+        await Note(session, "theme note two", topic: "onnx");
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "theme note three",
+            ["projectId"] = "grimoire",
+        });
+
+        var payload = result.Payload();
+        payload.GetProperty("topicTag").GetString().ShouldBe("topic:onnx");
+        payload.GetProperty("topicDecision").GetString().ShouldBe("Voted");
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
+        rationale.ShouldContain("2 neighbors");
+        rationale.ShouldContain("topic:onnx");
+    }
+
+    [Fact]
+    public async Task Note_WeakConsensus_SaysWhyNothingWasStamped()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("fuzzy note one", [1f, 0.85f, 0]);
+        session.Embeddings.Register("fuzzy note two", [1f, 0, 0.85f]);
+        session.Embeddings.Register("fuzzy note three", [1f, 0, 0]);
+        await Note(session, "fuzzy note one", topic: "onnx");
+        await Note(session, "fuzzy note two", topic: "onnx");
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "fuzzy note three",
+            ["projectId"] = "grimoire",
+        });
+
+        var payload = result.Payload();
+        payload.TryGetProperty("topicTag", out _).ShouldBeFalse("a below-confidence vote must not stamp");
+        payload.GetProperty("topicDecision").GetString().ShouldBe("BelowConfidence");
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
+        rationale.ShouldContain("topic:onnx");
+        rationale.ShouldContain("nothing was stamped");
+    }
+
+    [Fact]
+    public async Task Note_ExplicitTopic_RationaleSaysTheNeighborsWereNotConsulted()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("hinted note", [1f, 0, 0]);
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "hinted note",
+            ["projectId"] = "grimoire",
+            ["topic"] = "onnx",
+        });
+
+        var payload = result.Payload();
+        payload.GetProperty("topicDecision").GetString().ShouldBe("Explicit");
+        payload.GetProperty("topicRationale").GetString()!.ShouldContain("not consulted");
+    }
+
+    [Fact]
+    public async Task Note_OnlyBareTagsOnNeighbors_RefusesAndNamesThem()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("bare one", [1f, 0.7f, 0]);
+        session.Embeddings.Register("bare two", [1f, 0, 0.7f]);
+        session.Embeddings.Register("bare query", [1f, 0, 0]);
+        await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare one",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "deploy" },
+        });
+        await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare two",
+            ["projectId"] = "grimoire",
+            ["tags"] = new[] { "deploy" },
+        });
+
+        var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>
+        {
+            ["content"] = "bare query",
+            ["projectId"] = "grimoire",
+        });
+
+        var payload = result.Payload();
+        payload.TryGetProperty("topicTag", out _).ShouldBeFalse();
+        payload.GetProperty("topicDecision").GetString().ShouldBe("NoConsensus");
+        var rationale = payload.GetProperty("topicRationale").GetString()!;
+        rationale.ShouldContain("no neighbor carried a topic:<value> tag");
+        rationale.ShouldContain("bare tags do not vote: deploy");
+    }
+
     private static async Task Note(McpTestSession session, string content, string topic)
     {
         var result = await session.Client.CallToolAsync("memory_note", new Dictionary<string, object?>

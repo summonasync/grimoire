@@ -404,6 +404,7 @@ Standing rules, enforced from day one:
 | `memory_history` | walk a memory's full supersede chain before trusting or overwriting it |
 | `memory_restore` | reverse a correction that was itself a mistake — the record returns, the superseder is tombstoned |
 | `memory_list` | browse recent active memories |
+| `memory_note` | write a journal note; without an explicit `topic` the embedding neighbors vote — two agreeing at ≥ 0.75 nominate their topic, but the nomination is stamped only when the winner's best similarity also reaches `TopicConfidenceThreshold` (0.8), otherwise nothing is tagged — the response says which (`topicDecision`, `topicRationale`), so pass an explicit topic for anything you will later ask about by topic |
 | `memory_persona_get` | read the tome's persona document |
 | `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
 | `memory_remember` | write a memory (journal vs fact routing, scope choice); Project scope demands a registered projectId or auto-tags one from the working directory |

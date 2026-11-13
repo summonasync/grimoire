@@ -21,7 +21,7 @@ public interface ITopicClassifier
         return slug.Length == 0 ? null : string.Concat(TopicPrefix, slug);
     }
 
-    Task<string?> ClassifyAsync(
+    Task<TopicVote> ClassifyAsync(
         ReadOnlyMemory<float> vector,
         string tome,
         MemoryScope scope,

@@ -35,6 +35,54 @@ public sealed class DigestServiceTests
     }
 
     [Fact]
+    public async Task Digest_PlainTaggedRecord_MatchesThePrefixedTopic()
+    {
+        SeedFact("daily notes rollup", [0f, 0f, 1f], kind: MemoryKind.Journal, tags: ["deploy"]);
+
+        var digest = await Service().DigestAsync(Query(), CancellationToken.None);
+
+        digest.Recent.Select(hit => hit.Content).ShouldBe(["daily notes rollup"]);
+        digest.Recent[0].Match.ShouldBe(DigestMatch.Tag);
+        digest.Recent[0].Similarity.ShouldBeNull();
+        digest.Topic.ShouldBe("topic:deploy");
+    }
+
+    [Fact]
+    public async Task Digest_RecordCarryingBothTagForms_YieldsOneEntry()
+    {
+        SeedFact("deploy runbook", [0f, 0f, 1f], kind: MemoryKind.Journal, tags: ["deploy", "topic:deploy"]);
+
+        var digest = await Service().DigestAsync(Query(), CancellationToken.None);
+
+        digest.Recent.Select(hit => hit.Content).ShouldBe(["deploy runbook"]);
+        digest.Recent[0].Match.ShouldBe(DigestMatch.Tag);
+        _store.ListCallCount.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Digest_TagAttributionSurvivesAStrongSimilarityHit()
+    {
+        SeedFact("both arms", [1f, 0f, 0f], kind: MemoryKind.Journal, tags: ["deploy"]);
+
+        var digest = await Service().DigestAsync(Query(), CancellationToken.None);
+
+        var hit = digest.Recent.Single(entry => entry.Content == "both arms");
+        hit.Match.ShouldBe(DigestMatch.Tag);
+        hit.Similarity.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Digest_EmbeddingTextStillDerivesFromThePrefixedTag()
+    {
+        SeedFact("daily notes rollup", [0f, 0f, 1f], kind: MemoryKind.Journal, tags: ["deploy"]);
+
+        await Service().DigestAsync(Query(), CancellationToken.None);
+
+        _embeddings.Requests.ShouldContain("deploy");
+        _embeddings.Requests.ShouldNotContain("topic:deploy");
+    }
+
+    [Fact]
     public async Task Digest_TaggedRecords_LandInTheMatchingSections()
     {
         SeedFact("ship gates decision", [0f, 0f, 1f], tags: ["topic:deploy"]);
