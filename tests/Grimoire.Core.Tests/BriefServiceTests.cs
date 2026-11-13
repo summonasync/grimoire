@@ -1109,7 +1109,9 @@ public sealed class BriefServiceTests
             .ShouldBe([new string('a', 40), new string('b', 40)]);
         more.ShouldBe(2);
         dropped.Select(record => record.Id).ToList().ShouldBe([notes[2].Id, notes[3].Id]);
-        dropped.Count.ShouldBe(more);
+        // ids is computed upstream of the kept/dropped split, so this counts what the split alone cannot:
+        // nothing was both written and dropped
+        ids.Count.ShouldBe(groups.SelectMany(group => group.Entries).Count() + dropped.Count);
         dropped.Select(record => record.Content).ToList().ShouldBe([new string('c', 40), new string('d', 40)]);
         ids.ShouldContain(notes[3].Id);
     }
