@@ -30,9 +30,15 @@ internal sealed class ReportCommand(CliEnvironment environment)
         var window = DayWindow.Resolve(invocation.Spec, day);
         var tags = EffectiveTags(invocation);
         var project = invocation.Value("project");
+        var identity = await ActorResolver.ResolveAsync(
+            environment, null, null,
+            services.GetRequiredService<MemoryEngineOptions>().DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
 
         var records = await services.GetRequiredService<MemoryService>().ListAsync(new MemoryFilter
         {
+            Tome = identity.Tome,
             CreatedAfter = window.Start,
             CreatedBefore = window.End,
             Tags = tags,
@@ -41,7 +47,7 @@ internal sealed class ReportCommand(CliEnvironment environment)
         }, cancellationToken);
 
         var groups = GroupByActor(records);
-        var tome = RecordedTome(services);
+        var tome = identity.Tome;
 
         if (invocation.Value("json") is not null)
         {
@@ -64,11 +70,6 @@ internal sealed class ReportCommand(CliEnvironment environment)
         var now = services.GetRequiredService<IClock>().UtcNow.LocalDateTime;
         return now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
-
-    // The list call passes no tome, so MemoryService scopes it to this same engine default;
-    // echoing the option it actually reads keeps the printed tome from drifting from the queried one.
-    private static string RecordedTome(IServiceProvider services) =>
-        TomeKey.Normalize(services.GetRequiredService<MemoryEngineOptions>().DefaultTome);
 
     private static IReadOnlyList<ActorGroup> GroupByActor(IReadOnlyList<MemoryRecord> records) =>
         records

@@ -233,6 +233,40 @@ public sealed class ReportCommandTests : IDisposable
         using var document = JsonDocument.Parse(_host.Output.ToString());
         document.RootElement.GetProperty("tome").GetString()
             .ShouldBe(_host.Store.ListedFilters.Last().Tome);
+
+        using var steed = new TestHost(
+            variables: new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "fieldwork" });
+        Seed(steed, "field note", LocalDayStart(steed).AddHours(9), "guldana", "qwen", tome: "fieldwork");
+        Seed(steed, "default-tome note", LocalDayStart(steed).AddHours(10), "guldana", "qwen");
+
+        code = await steed.RunAsync("report", "--date", LocalDay(steed));
+
+        code.ShouldBe(ExitCodes.Ok, steed.Output.ToString());
+        var steedFiltered = steed.Store.ListedFilters.ShouldHaveSingleItem().Tome;
+        steedFiltered.ShouldBe("fieldwork");
+        var steedOutput = steed.Output.ToString();
+        steedOutput.ShouldContain($"Tome: {steedFiltered}", Case.Sensitive);
+        steedOutput.ShouldContain("field note");
+        steedOutput.ShouldNotContain("default-tome note");
+    }
+
+    [Fact]
+    public async Task Report_EnvTomeWinsOverConfigDefaultTome()
+    {
+        using var host = new TestHost(
+            options: new MemoryEngineOptions { DefaultTome = "Crew" },
+            variables: new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "fieldwork" });
+        Seed(host, "fieldwork note", LocalDayStart(host).AddHours(9), "guldana", "qwen", tome: "fieldwork");
+        Seed(host, "crew note", LocalDayStart(host).AddHours(10), "guldana", "qwen", tome: "crew");
+
+        var code = await host.RunAsync("report", "--date", LocalDay(host));
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.ListedFilters.ShouldHaveSingleItem().Tome.ShouldBe("fieldwork");
+        var output = host.Output.ToString();
+        output.ShouldContain("Tome: fieldwork", Case.Sensitive);
+        output.ShouldContain("fieldwork note");
+        output.ShouldNotContain("crew note");
     }
 
     [Fact]

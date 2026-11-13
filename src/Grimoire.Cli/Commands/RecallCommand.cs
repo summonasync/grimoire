@@ -14,8 +14,14 @@ internal sealed class RecallCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var memories = services.GetRequiredService<MemoryService>();
+        var identity = await ActorResolver.ResolveAsync(
+            environment, null, null,
+            services.GetRequiredService<MemoryEngineOptions>().DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
         var matches = await memories.RecallAsync(new RecallQuery
         {
+            Tome = identity.Tome,
             Text = invocation.JoinedPositional(),
             Scopes = CliValues.ScopeList(invocation.Spec, invocation.Value("scope")),
             Limit = invocation.Value("limit") is { } raw ? CliValues.PositiveInt(invocation.Spec, "limit", raw) : 5,

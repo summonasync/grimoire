@@ -130,7 +130,7 @@ public sealed class BriefHookEnvelopeTests
             Env = new CliEnvironment
             {
                 ConfigPath = ConfigPath,
-                Config = new ConfigLoader(ConfigPath),
+                Config = new ConfigLoader(ConfigPath, new Dictionary<string, string>()),
                 Output = Output,
                 Error = Error,
                 Services = Services,

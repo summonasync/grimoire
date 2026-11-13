@@ -20,8 +20,14 @@ internal sealed class BriefCommand(CliEnvironment environment)
         var brief = maxChars is { } cap
             ? BriefBudget.WithMaxTotalChars(services, cap)
             : services.GetRequiredService<BriefService>();
+        var identity = await ActorResolver.ResolveAsync(
+            environment, null, null,
+            services.GetRequiredService<MemoryEngineOptions>().DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
         var result = await brief.BriefAsync(new BriefQuery
         {
+            Tome = identity.Tome,
             ProjectId = invocation.Value("project"),
             Scopes = CliValues.ScopeList(invocation.Spec, invocation.Value("scope")),
             FactsPerScope = Hint(invocation, "facts-per-scope"),

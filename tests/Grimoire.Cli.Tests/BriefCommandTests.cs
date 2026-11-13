@@ -27,6 +27,28 @@ public sealed class BriefCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Brief_EnvTomeLandsTheReadThere()
+    {
+        using var host = new TestHost(
+            variables: new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+        SeedInTome(host.Store, "journal inside the env tome", "platform-work");
+        SeedInTome(host.Store, "journal outside the env tome", "default");
+
+        var code = await host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldContain("journal inside the env tome");
+        output.ShouldNotContain("journal outside the env tome");
+        var filters = host.Store.ListedFilters;
+        filters.Count.ShouldBeGreaterThan(0);
+        foreach (var filter in filters)
+        {
+            filter.Tome.ShouldBe("platform-work");
+        }
+    }
+
+    [Fact]
     public async Task Brief_FormatText_IsTheDefaultRender()
     {
         using var plain = new TestHost();
@@ -631,6 +653,24 @@ public sealed class BriefCommandTests : IDisposable
         output.ShouldContain(new string('x', 1500));
         output.ShouldNotContain(new string('x', 1501));
         LineIndex(output, "      (truncated)").ShouldNotBe(-1);
+    }
+
+    private static void SeedInTome(RecordingMemoryStore store, string content, string tome)
+    {
+        var created = FakeClock.DefaultStart;
+        store.Seed(
+            new MemoryRecord
+            {
+                Id = Guid.NewGuid(),
+                Content = content,
+                Scope = MemoryScope.Project,
+                Kind = MemoryKind.Journal,
+                Actor = MemoryActor.Human,
+                Tome = tome,
+                CreatedAt = created,
+                LastAccessedAt = created,
+            },
+            [1f, 0f]);
     }
 
     private static void SeedPayload(RecordingMemoryStore store)
