@@ -8,9 +8,19 @@ using Xunit;
 
 namespace Grimoire.Api.Tests;
 
-public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<GrimoireApiFactory>
+public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<GrimoireApiFactory>, IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 13, 9, 0, 0, TimeSpan.Zero);
+
+    private readonly string _exportRoot = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_exportRoot))
+        {
+            Directory.Delete(_exportRoot, true);
+        }
+    }
 
     [Fact]
     public async Task Get_ReturnsRowsNewestFirstWithAgesFromPinnedClock()
@@ -147,12 +157,11 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         // SpaHosting installs app.MapFallback and a literal route beats a fallback either way
         // (moving the mapping behind UseSpaFrontend keeps the suite green) — so this pins the
         // route split and dies if the fallback ever swallows /api paths.
-        var exportRoot = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(exportRoot);
+        Directory.CreateDirectory(_exportRoot);
         await File.WriteAllTextAsync(
-            Path.Combine(exportRoot, "index.html"),
+            Path.Combine(_exportRoot, "index.html"),
             "<html><title>grimoire spa shell</title></html>");
-        using var scoped = GrimoireApiFactory.Create(staticRootPath: exportRoot);
+        using var scoped = GrimoireApiFactory.Create(staticRootPath: _exportRoot);
         scoped.Reset();
         scoped.Clock.MoveTo(Now);
         scoped.Sessions.Seed(Entry(Now.AddHours(-4), "qwen", "2026-07-28"));
@@ -170,7 +179,6 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         (await shell.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
         root.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await root.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
-        Directory.Delete(exportRoot, true);
     }
 
     [Theory]
