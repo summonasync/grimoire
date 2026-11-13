@@ -870,6 +870,141 @@ public sealed class BriefServiceTests
         PayloadMatchesSnapshot(brief, "2a7774f2cdff6bd7daa097c00ca6d578d190b69b52670d140c29b3df083ac709");
     }
 
+    [Fact]
+    public async Task Brief_Window_FactExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var until = FakeClock.DefaultStart;
+        Seed("fact in by one tick", kind: MemoryKind.Fact, importance: 1, created: until.AddTicks(-1));
+        Seed("fact exactly on until", kind: MemoryKind.Fact, importance: 1, created: until);
+
+        var brief = await Service().BriefAsync(
+            Query(since: until.AddDays(-1), until: until), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Content).ShouldBe(["fact in by one tick"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_SinceBoundIsInclusiveAndOneTickEarlierIsOut()
+    {
+        var since = FakeClock.DefaultStart.AddDays(-2);
+        Seed("fact exactly on since", kind: MemoryKind.Fact, importance: 1, created: since);
+        Seed("fact one tick before since", kind: MemoryKind.Fact, importance: 1, created: since.AddTicks(-1));
+
+        var brief = await Service().BriefAsync(Query(since: since), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Content).ShouldBe(["fact exactly on since"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_JournalExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var until = FakeClock.DefaultStart;
+        Seed("journal in by one tick", created: until.AddTicks(-1));
+        Seed("journal exactly on until", created: until);
+
+        var brief = await Service().BriefAsync(
+            Query(since: until.AddDays(-1), until: until), CancellationToken.None);
+
+        brief.Journal.Select(entry => entry.Content).ShouldBe(["journal in by one tick"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_PassesTheBoundsToTheFactsAndJournalReads()
+    {
+        var captured = new List<MemoryFilter>();
+        _store.OnListAsync = captured.Add;
+        var since = FakeClock.DefaultStart.AddDays(-1);
+        var until = FakeClock.DefaultStart;
+
+        await Service().BriefAsync(Query(since: since, until: until), CancellationToken.None);
+
+        captured.Count.ShouldBeGreaterThan(0);
+        captured.Count(filter => filter.Kind == MemoryKind.Fact
+            && filter.CreatedAfter == since && filter.CreatedBefore == until).ShouldBe(1);
+
+        // the untagged journal reads are the journal section and the compaction backlog, and only the
+        // section is bounded by the caller's window, hence the exact count rather than a blanket rule
+        captured.Count(filter => filter.Kind == MemoryKind.Journal && filter.Tags.Count == 0
+            && filter.CreatedAfter == since && filter.CreatedBefore == until).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_Window_DailyNoteExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var store = new FakeMemoryStore();
+        var until = Utc(2026, 11, 9, 6);
+        SeedDailyNote(store, "daily in by one tick", until.AddTicks(-1), "medivh", "claude");
+        SeedDailyNote(store, "daily exactly on until", until, "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true, since: Utc(2026, 11, 9, 0), until: until), CancellationToken.None);
+
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.Today);
+        brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["daily in by one tick"]);
+        brief.DailyMore.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_Window_DailyNoteOutsideTheWindowIsNotCountedInMore()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "in window note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "after the until bound", Utc(2026, 11, 9, 7), "medivh", "claude");
+
+        var bounded = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 14))
+            .BriefAsync(Query(daily: true, until: Utc(2026, 11, 9, 6)), CancellationToken.None);
+        var open = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 14))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        bounded.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+        bounded.DailyMore.ShouldBe(0);
+        bounded.Omitted.ShouldNotContain(BriefSection.Daily);
+
+        // the same store and the same purse with no window is what pushes the second note into more;
+        // without this control the assertion above could be green because nothing ever overflowed
+        open.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+        open.DailyMore.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_Window_IntersectsTheDailyBucketsAndSkipsTheReadsItEmpties()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "in window note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "friday note", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+
+        var captured = new List<MemoryFilter>();
+        store.OnListAsync = captured.Add;
+        var since = Utc(2026, 11, 9, 0);
+        var until = Utc(2026, 11, 9, 6);
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true, since: since, until: until), CancellationToken.None);
+
+        var bucketReads = captured.Where(filter => filter.Tags.Contains("daily-notes")).ToArray();
+        bucketReads.ShouldHaveSingleItem();
+        bucketReads[0].CreatedAfter.ShouldBe(since);
+        bucketReads[0].CreatedBefore.ShouldBe(until);
+        brief.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_WindowUnset_NoReadCarriesDateBoundsAndThePayloadIsThePinnedOne()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var captured = new List<MemoryFilter>();
+        _store.OnListAsync = captured.Add;
+
+        var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        captured.Count.ShouldBeGreaterThan(0);
+        captured.ShouldAllBe(filter => filter.CreatedAfter == null && filter.CreatedBefore == null);
+        PayloadMatchesSnapshot(brief, "2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
+    }
+
     private static readonly DateTimeOffset MoscowMondayUtc = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
 
     private static void PayloadMatchesSnapshot(BriefResult brief, string hash)
@@ -980,7 +1115,9 @@ public sealed class BriefServiceTests
         int? factsPerScope = null,
         int? journalPerScope = null,
         int? tombstoneLimit = null,
-        bool daily = false) => new()
+        bool daily = false,
+        DateTimeOffset? since = null,
+        DateTimeOffset? until = null) => new()
         {
             Tome = tome,
             ProjectId = projectId,
@@ -989,6 +1126,8 @@ public sealed class BriefServiceTests
             JournalPerScope = journalPerScope,
             TombstoneLimit = tombstoneLimit,
             Daily = daily,
+            Since = since,
+            Until = until,
         };
 
     private MemoryRecord Seed(

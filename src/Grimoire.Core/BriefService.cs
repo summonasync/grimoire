@@ -85,7 +85,7 @@ public sealed class BriefService(
                 warnings = dailyWarnings;
             }
 
-            var daily = await CollectDailyAsync(zone, scopes, tome, query.ProjectId, cancellationToken);
+            var daily = await CollectDailyAsync(zone, scopes, tome, query, cancellationToken);
             dailyGroups = daily.Groups;
             dailyIds = daily.Ids;
             dailyMore = daily.More;
@@ -159,7 +159,7 @@ public sealed class BriefService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var records = await store.ListAsync(new MemoryFilter
+        var filter = new MemoryFilter
         {
             Scopes = scopes,
             Kind = MemoryKind.Fact,
@@ -167,10 +167,15 @@ public sealed class BriefService(
             Tome = tome,
             ProjectId = query.ProjectId,
             ExcludeTags = [PersonaSectionExtensions.PersonaTag],
-        }, cancellationToken);
+            CreatedAfter = query.Since,
+            CreatedBefore = query.Until,
+        };
+
+        var records = await store.ListAsync(filter, cancellationToken);
 
         var limit = ClampHint(query.FactsPerScope, DefaultFactsPerScope);
         return records
+            .Where(record => filter.Matches(record))
             .Select(record => (Record: record, Score: MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives)))
             .OrderByDescending(pair => pair.Score)
             .ThenByDescending(pair => pair.Record.CreatedAt)
@@ -223,13 +228,13 @@ public sealed class BriefService(
             DailyZoneResolution zone,
             IReadOnlyList<MemoryScope> scopes,
             string tome,
-            string? projectId,
+            BriefQuery query,
             CancellationToken cancellationToken)
     {
         var plan = new DailyWindowResolver(_options, clock).Resolve(zone.Zone);
-        var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, projectId, cancellationToken);
+        var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, query, cancellationToken);
         var (lastWorkingDay, lastWorkingDayRecords) =
-            await FirstCandidateHoldingAsync(plan, scopes, tome, projectId, cancellationToken);
+            await FirstCandidateHoldingAsync(plan, scopes, tome, query, cancellationToken);
 
         var found = lastWorkingDayRecords.Concat(today).ToList();
         if (found.Count == 0)
@@ -319,12 +324,12 @@ public sealed class BriefService(
         DailyWindowPlan plan,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
-        string? projectId,
+        BriefQuery query,
         CancellationToken cancellationToken)
     {
         foreach (var candidate in plan.LastWorkingDayCandidates)
         {
-            var records = await ReadDailyWindowAsync(candidate, scopes, tome, projectId, cancellationToken);
+            var records = await ReadDailyWindowAsync(candidate, scopes, tome, query, cancellationToken);
             if (records.Count > 0)
             {
                 return (candidate, records);
@@ -335,19 +340,24 @@ public sealed class BriefService(
     }
 
     private async Task<IReadOnlyList<MemoryRecord>> ReadDailyWindowAsync(
-        DailyWindow window,
+        DailyWindow bucket,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
-        string? projectId,
+        BriefQuery query,
         CancellationToken cancellationToken)
     {
+        if (Narrow(bucket, query) is not { } window)
+        {
+            return [];
+        }
+
         var filter = new MemoryFilter
         {
             Scopes = scopes,
             Kind = MemoryKind.Journal,
             Status = MemoryStatus.Active,
             Tome = tome,
-            ProjectId = projectId,
+            ProjectId = query.ProjectId,
             Tags = [_options.DailyTag],
             CreatedAfter = window.CreatedAfter,
             CreatedBefore = window.CreatedBefore,
@@ -362,6 +372,17 @@ public sealed class BriefService(
         return [.. records.Where(record => filter.Matches(record))];
     }
 
+    // The caller's window narrows a bucket instead of replacing it, so the half-open pair keeps its
+    // exclusive upper edge. A bucket the window empties comes back null and is never read: no store
+    // sees a range whose lower bound sits on or after its upper one.
+    private static DailyWindow? Narrow(DailyWindow bucket, BriefQuery query)
+    {
+        var after = query.Since is { } since && since > bucket.CreatedAfter ? since : bucket.CreatedAfter;
+        var before = query.Until is { } until && until < bucket.CreatedBefore ? until : bucket.CreatedBefore;
+
+        return after < before ? bucket with { CreatedAfter = after, CreatedBefore = before } : null;
+    }
+
     private async Task<IReadOnlyList<BriefJournalEntry>> CollectJournalAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
@@ -369,17 +390,22 @@ public sealed class BriefService(
         IReadOnlySet<Guid>? excludeIds,
         CancellationToken cancellationToken)
     {
-        var records = await store.ListAsync(new MemoryFilter
+        var filter = new MemoryFilter
         {
             Scopes = scopes,
             Kind = MemoryKind.Journal,
             Status = MemoryStatus.Active,
             Tome = tome,
             ProjectId = query.ProjectId,
-        }, cancellationToken);
+            CreatedAfter = query.Since,
+            CreatedBefore = query.Until,
+        };
+
+        var records = await store.ListAsync(filter, cancellationToken);
 
         var limit = ClampHint(query.JournalPerScope, DefaultJournalPerScope);
         return records
+            .Where(record => filter.Matches(record))
             .Where(record => excludeIds is null || !excludeIds.Contains(record.Id))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
