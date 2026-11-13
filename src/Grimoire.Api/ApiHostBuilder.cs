@@ -4,6 +4,7 @@ using Grimoire.Api.Agents;
 using Grimoire.Api.Editing;
 using Grimoire.Api.Endpoints;
 using Grimoire.Api.Querying;
+using Grimoire.Api.Sessions;
 using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
@@ -64,6 +65,17 @@ public static class ApiHostBuilder
             clock,
             consolidationOptions.SweepInterval,
             consolidationState));
+        // The registry is a serve-side surface: the MCP child writes rows and never prunes
+        // them, so the retention sweep is registered here and nowhere else. A provider
+        // without a registry (hand-built bind and parity hosts) gets neither routes nor sweep.
+        if (services.GetService<ISessionRegistry>() is { } sessionRegistry)
+        {
+            builder.Services.AddHostedService(_ => new SessionRetentionSweeper(
+                sessionRegistry.PruneAsync,
+                clock,
+                TimeSpan.FromHours(options.SessionsRetentionHours),
+                TimeSpan.FromMinutes(options.GcIntervalMinutes)));
+        }
 
         var tomeResolver = new ApiTomeResolver(
             new TomeResolver(engineOptions),
@@ -100,6 +112,13 @@ public static class ApiHostBuilder
         app.MapHealthEndpoints(store, embeddings, clock);
         app.MapVersionEndpoints();
         app.MapAgentEndpoints(new AgentActivityProjection(store, clock));
+        // Hand-built containers (parity and bind tests) resolve no registry; mapping a route
+        // over an absent surface would answer an empty list for a store that is not wired at all.
+        if (services.GetService<ISessionRegistry>() is { } sessions)
+        {
+            app.MapSessionsEndpoints(new SessionHandshakeProjection(
+                sessions, clock, options.SessionsRetentionHours));
+        }
         app.UseSpaFrontend(options);
 
         return app;

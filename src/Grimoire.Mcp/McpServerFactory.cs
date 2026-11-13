@@ -1,3 +1,4 @@
+using Grimoire.Core;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -10,6 +11,12 @@ internal static class McpServerFactory
     {
         var clientInfo = new ClientInfoHolder();
         var sessionIdentity = new SessionIdentityHolder();
+        var actors = ActorProviders.Create(options, services, clientInfo, sessionIdentity);
+        var registry = Require<ISessionRegistry>(services);
+        var clock = Require<IClock>(services);
+        var faults = options.CaptureFault ?? new StderrSessionCaptureFaultSink();
+        var writeBudget = options.SessionWriteBudget ?? SessionCapture.DefaultWriteBudget;
+        var refinement = new SessionActorRefinement(registry, faults, writeBudget);
         var serverOptions = new McpServerOptions
         {
             ServerInfo = new Implementation
@@ -23,13 +30,28 @@ internal static class McpServerFactory
             ToolCollection = new McpServerPrimitiveCollection<McpServerTool>(),
         };
 
-        foreach (var tool in ToolCatalog.CreateTools(options, services, clientInfo, sessionIdentity))
+        foreach (var tool in ToolCatalog.CreateTools(services, sessionIdentity, actors, refinement))
         {
             serverOptions.ToolCollection.Add(tool);
         }
 
+        var capture = new SessionCapture(
+            registry,
+            actors,
+            clock,
+            faults,
+            SessionHandshakeRow.StdioTransport,
+            writeBudget,
+            refinement);
+        serverOptions.Filters.Message.IncomingFilters.Add(capture.Wrap);
+
         var server = McpServer.Create(transport, serverOptions, NullLoggerFactory.Instance, services);
         clientInfo.Bind(server);
+        capture.Bind(server);
         return server;
     }
+
+    private static T Require<T>(IServiceProvider services) where T : class =>
+        services.GetService(typeof(T)) as T
+        ?? throw new InvalidOperationException($"Grimoire MCP host requires {typeof(T).Name} in the service provider.");
 }

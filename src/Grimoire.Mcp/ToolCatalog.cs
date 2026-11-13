@@ -9,10 +9,10 @@ namespace Grimoire.Mcp;
 internal static class ToolCatalog
 {
     public static IReadOnlyList<McpServerTool> CreateTools(
-        McpHostOptions options,
         IServiceProvider services,
-        ClientInfoHolder clientInfo,
-        SessionIdentityHolder sessionIdentity)
+        SessionIdentityHolder sessionIdentity,
+        MemoryActorProvider actors,
+        SessionActorRefinement refinement)
     {
         var store = Require<IMemoryStore>(services);
         var embeddings = Require<IEmbeddingProvider>(services);
@@ -40,21 +40,10 @@ internal static class ToolCatalog
         var digests = new DigestService(store, embeddings, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
-        var claims = Require<IActorClaimProvider>(services);
-        var identityFile = options.IdentityFile ?? new UnsetAgentIdentitySource();
         var registryStore = Require<IProjectRegistryStore>(services);
         var projects = new LiveProjectRegistry(registryStore);
         var projectTags = new ProjectTagResolver(projects);
         var projectSync = new ProjectSyncService(Require<IBoardProjectSource>(services), registryStore);
-        var actors = new MemoryActorProvider(
-            options.Actor,
-            options.EnvTome,
-            options.EnvActor,
-            sessionIdentity,
-            identityFile,
-            clientInfo,
-            claims,
-            new TomeResolver(engineOptions));
 
         return
         [
@@ -73,7 +62,7 @@ internal static class ToolCatalog
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
             Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
             Build(TomeCreateTool.Name, TomeCreateTool.Title, TomeCreateTool.Description, new TomeCreateTool(manifests, actors).Create, readOnly: false, destructive: false, idempotent: false),
-            Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity).Set, readOnly: false, destructive: false, idempotent: true),
+            Build(SessionIdentitySetTool.Name, SessionIdentitySetTool.Title, SessionIdentitySetTool.Description, new SessionIdentitySetTool(sessionIdentity, refinement).Set, readOnly: false, destructive: false, idempotent: true),
         ];
     }
 

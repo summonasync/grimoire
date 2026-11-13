@@ -18,6 +18,7 @@ public sealed class GrimoireApiFactory : IDisposable
     private readonly IReadOnlyList<ProjectAliasRecord>? _projects;
     private readonly string? _callerPath;
     private readonly IAgentIdentitySource? _identityFiles;
+    private readonly double? _sessionsRetentionHours;
     private ServiceProvider? _ports;
     private WebApplication? _app;
 
@@ -32,7 +33,8 @@ public sealed class GrimoireApiFactory : IDisposable
         string? envActor,
         IReadOnlyList<ProjectAliasRecord>? projects,
         string? callerPath,
-        IAgentIdentitySource? identityFiles)
+        IAgentIdentitySource? identityFiles,
+        double? sessionsRetentionHours)
     {
         _engineOptions = engineOptions;
         _staticRootPath = staticRootPath;
@@ -41,6 +43,7 @@ public sealed class GrimoireApiFactory : IDisposable
         _projects = projects;
         _callerPath = callerPath;
         _identityFiles = identityFiles;
+        _sessionsRetentionHours = sessionsRetentionHours;
     }
 
     public static GrimoireApiFactory Create(
@@ -50,8 +53,10 @@ public sealed class GrimoireApiFactory : IDisposable
         string? envActor = null,
         IReadOnlyList<ProjectAliasRecord>? projects = null,
         string? callerPath = null,
-        IAgentIdentitySource? identityFiles = null) =>
-        new(engineOptions, staticRootPath, envTome, envActor, projects, callerPath, identityFiles);
+        IAgentIdentitySource? identityFiles = null,
+        double? sessionsRetentionHours = null) =>
+        new(engineOptions, staticRootPath, envTome, envActor, projects, callerPath, identityFiles,
+            sessionsRetentionHours);
 
     public FakeMemoryStore Store { get; } = new();
 
@@ -64,6 +69,8 @@ public sealed class GrimoireApiFactory : IDisposable
     public FakeGcStateStore GcState { get; } = new();
 
     public FakeConsolidationStateStore ConsolidationState { get; } = new();
+
+    public FakeSessionRegistry Sessions { get; } = new();
 
     public void Reset()
     {
@@ -80,6 +87,8 @@ public sealed class GrimoireApiFactory : IDisposable
         Embeddings.Failure = null;
         GcState.Reset();
         ConsolidationState.Reset();
+        Sessions.Clear();
+        Sessions.DegradationReason = null;
     }
 
     public HttpClient NewClient()
@@ -107,6 +116,7 @@ public sealed class GrimoireApiFactory : IDisposable
         {
             Port = 0,
             GcIntervalMinutes = 60,
+            SessionsRetentionHours = _sessionsRetentionHours ?? 24,
             StaticRootPath = _staticRootPath ?? Path.Combine(Path.GetTempPath(), "grimoire-api-tests", "missing-export"),
             EnvTome = _envTome,
             EnvActor = _envActor,
@@ -126,6 +136,7 @@ public sealed class GrimoireApiFactory : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<IMemoryStore>(Store);
         services.AddSingleton<ITomeManifestStore>(Manifests);
+        services.AddSingleton<ISessionRegistry>(Sessions);
         services.AddSingleton<IEmbeddingProvider>(Embeddings);
         services.AddSingleton<IClock>(Clock);
         services.AddSingleton<IProjectRegistry>(new ProjectRegistry(_projects ?? []));

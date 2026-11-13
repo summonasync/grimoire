@@ -1,3 +1,4 @@
+using System.Globalization;
 using Grimoire.Api;
 using Grimoire.Cli.CommandLine;
 using Grimoire.Core;
@@ -49,11 +50,28 @@ internal sealed class ServeCommand(CliEnvironment environment)
         {
             Port = config.Serve.Port,
             GcIntervalMinutes = Math.Max(1, (int)Math.Round(config.Serve.GcIntervalMinutes)),
+            SessionsRetentionHours = RequireUsableRetention(config),
             StaticRootPath = webRoot ?? DefaultWebRoot(),
             EnvTome = envTome,
             EnvActor = envActor,
             IdentityFile = identityFile,
         };
+
+    // The window is the one number the serve-side retention sweep subtracts from the clock.
+    // A zero or negative value turns the cutoff into now or the future and retires live
+    // handshake rows, so an unusable knob stops serve at startup instead of eating the registry.
+    private static double RequireUsableRetention(GrimoireOptions config)
+    {
+        var hours = config.SessionsRetentionHoursOrDefault;
+        if (!double.IsFinite(hours) || hours <= 0)
+        {
+            throw new ConfigException(
+                $"Session registry retention must be a positive finite number of hours, but sessions.retentionHours " +
+                $"(or its memory.sessionTtlHours fallback) resolves to '{hours.ToString(CultureInfo.InvariantCulture)}'.");
+        }
+
+        return hours;
+    }
 
     internal static string DefaultWebRoot() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

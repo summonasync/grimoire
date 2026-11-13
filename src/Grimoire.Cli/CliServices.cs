@@ -7,6 +7,7 @@ using Grimoire.Infrastructure.Identity;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
+using Grimoire.Infrastructure.Sessions;
 using Grimoire.Infrastructure.Tomes;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,6 +38,9 @@ internal static class CliServices
             options.Qdrant.Collection,
             options.Embedding));
         services.AddSingleton<ITomeManifestStore>(sp => new QdrantManifestStore(
+            sp.GetRequiredService<IQdrantVectorDb>(),
+            options.Qdrant));
+        services.AddSingleton<ISessionRegistry>(sp => new QdrantSessionStore(
             sp.GetRequiredService<IQdrantVectorDb>(),
             options.Qdrant));
         services.AddSingleton<TomeManifestService>();

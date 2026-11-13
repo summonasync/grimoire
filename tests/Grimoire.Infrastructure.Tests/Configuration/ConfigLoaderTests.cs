@@ -47,6 +47,8 @@ public sealed class ConfigLoaderTests : IDisposable
         options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
         options.Serve.Port.ShouldBe(4770);
         options.Serve.GcIntervalMinutes.ShouldBe(30);
+        options.Sessions.RetentionHours.ShouldBeNull();
+        options.SessionsRetentionHoursOrDefault.ShouldBe(24);
         options.Projects.ShouldBeEmpty();
     }
 
@@ -182,6 +184,16 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithNumericLookingApiKeyOverride_StaysAString()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_QDRANT__APIKEY", "12345")]);
+
+        var options = loader.Load();
+
+        options.Qdrant.ApiKey.ShouldBe("12345");
+    }
+
+    [Fact]
     public void Load_WithDailyTagEnvironmentOverride_AppliesValue()
     {
         var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__DAILYTAG", "field-notes")]);
@@ -267,6 +279,39 @@ public sealed class ConfigLoaderTests : IDisposable
         var options = new ConfigLoader(path, EmptyEnvironment).Load();
 
         options.Qdrant.ApiKey.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithSessionsRetentionHours_RoundTripsConfiguredValue()
+    {
+        var path = WriteConfig("""{ "memory": { "sessionTtlHours": 12 }, "sessions": { "retentionHours": 48 } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Sessions.RetentionHours.ShouldBe(48);
+        options.SessionsRetentionHoursOrDefault.ShouldBe(48);
+    }
+
+    [Fact]
+    public void Load_WithoutSessionsRetentionHours_FallsBackToMemorySessionTtl()
+    {
+        var path = WriteConfig("""{ "memory": { "sessionTtlHours": 6 } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Sessions.RetentionHours.ShouldBeNull();
+        options.SessionsRetentionHoursOrDefault.ShouldBe(6);
+    }
+
+    [Fact]
+    public void Load_WithNullableNumberEnvironmentOverride_AppliesSessionsRetentionHours()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SESSIONS__RETENTIONHOURS", "36")]);
+
+        var options = loader.Load();
+
+        options.Sessions.RetentionHours.ShouldBe(36);
+        options.SessionsRetentionHoursOrDefault.ShouldBe(36);
     }
 
     [Fact]

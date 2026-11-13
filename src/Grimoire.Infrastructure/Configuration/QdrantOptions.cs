@@ -11,4 +11,8 @@ public sealed record QdrantOptions
     public string? ManifestCollection { get; init; }
 
     public string ManifestCollectionOrDefault => ManifestCollection ?? $"{Collection}-manifests";
+
+    public string? SessionCollection { get; init; }
+
+    public string SessionCollectionOrDefault => SessionCollection ?? $"{Collection}-sessions";
 }

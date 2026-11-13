@@ -4,7 +4,9 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class SessionIdentitySetTool(SessionIdentityHolder identities)
+internal sealed class SessionIdentitySetTool(
+    SessionIdentityHolder identities,
+    SessionActorRefinement refinement)
 {
     public const string Name = "session_identity_set";
 
@@ -31,6 +33,7 @@ internal sealed class SessionIdentitySetTool(SessionIdentityHolder identities)
         }
 
         identities.Set(actor);
+        refinement.IdentitySet(actor);
 
         return Task.FromResult(ToolResults.Success(new SessionIdentityView
         {
