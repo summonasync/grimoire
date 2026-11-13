@@ -36,6 +36,9 @@ public sealed record BriefResult
 
     public required IReadOnlyList<BriefSection> Omitted { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<BriefSection, BriefSectionOmissions>? OmissionDigest { get; init; }
+
     public BriefCompactionDue? CompactionDue { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

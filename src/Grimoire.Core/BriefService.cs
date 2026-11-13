@@ -9,6 +9,10 @@ public sealed class BriefService(
 {
     private const double NoSimilarity = 1.0;
 
+    private const double NoScore = 0;
+
+    private const int NoGroup = 0;
+
     private const int LimitHintCeiling = 50;
 
     private const int DefaultFactsPerScope = 5;
@@ -51,9 +55,10 @@ public sealed class BriefService(
         var document = await persona.GetAsync(cancellationToken, tome);
         var personaState = Fit(BriefSection.Persona, PersonaChars(document));
 
-        // The collect paths hand back what their limit trims and purse cuts dropped; the next slice
-        // turns these remainders into the omission digest. No payload field carries them yet, so the
-        // factsDropped/tombstonesDropped/journalDropped locals and daily.Dropped are wiring on purpose.
+        // The collect paths hand back what their limits trimmed and the purse dropped. Together with the
+        // records of any section that fell out of budget those remainders become the omission digest —
+        // records that were never in the running (outside the caller's window, already shown as daily
+        // notes, or in buckets the window emptied) are excluded, not lost, and stay out of the digest.
         var (facts, factsDropped) = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
         var factsState = Fit(BriefSection.Facts, facts.Sum(fact => fact.Content.Length));
 
@@ -65,6 +70,7 @@ public sealed class BriefService(
         var dailyMore = 0;
         var dailyFound = false;
         IReadOnlyList<string>? warnings = null;
+        IReadOnlyList<BriefOmissionLine> dailyDropped = [];
 
         if (query.Daily)
         {
@@ -93,6 +99,14 @@ public sealed class BriefService(
             dailyIds = daily.Ids;
             dailyMore = daily.More;
             dailyFound = daily.Found;
+            dailyDropped = [.. daily.Dropped.Select(record => new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                DailyWindowResolver.LocalDay(record.CreatedAt, zone.Zone).DayNumber,
+                NoScore,
+                record.CreatedAt,
+                BriefOmissionReason.DailyPurse,
+                record.Actor.Alias))];
 
             if (daily.Truncated || daily.More > 0)
             {
@@ -107,6 +121,16 @@ public sealed class BriefService(
         var tomesState = tomes.Degraded
             ? BriefSectionState.Empty
             : Fit(BriefSection.Tomes, tomes.Items.Sum(row => row.Key.Length + row.Description.Length + row.CreatedBy.Length));
+
+        // Persona and tomes can also fall out of budget, and they keep their existing faces: the section
+        // name in `omitted` and, for tomes, `TomesMore`. Neither is a set of memory records with ids the
+        // reader can recall by, so no digest line can name what fell out of them.
+        var digest = BriefOmissionDigest.Build(
+            FactOmissions(factsState, facts, factsDropped, scopes, now),
+            TombstoneOmissions(tombstonesState, tombstones, tombstonesDropped),
+            JournalOmissions(journalState, journal, journalDropped, scopes),
+            dailyDropped,
+            _options);
 
         return new BriefResult
         {
@@ -126,9 +150,123 @@ public sealed class BriefService(
             DailyGroups = dailyGroups,
             DailyMore = dailyMore,
             Omitted = omitted,
+            OmissionDigest = digest,
             CompactionDue = await compactionDue,
             Warnings = warnings,
         };
+    }
+
+    private IReadOnlyList<BriefOmissionLine> FactOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefFact> kept,
+        IReadOnlyList<MemoryRecord> trimmed,
+        IReadOnlyList<MemoryScope> scopes,
+        DateTimeOffset now)
+    {
+        var lines = new List<BriefOmissionLine>(
+            // the trimmed remainder comes back as bare records, so the digest re-scores them with the same
+            // call the collect path used; a kept fact already carries its score
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                ScopeRank(scopes, record.Scope),
+                MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives),
+                record.CreatedAt,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from fact in kept
+                select new BriefOmissionLine(
+                    fact.Id,
+                    fact.Content,
+                    ScopeRank(scopes, fact.Scope),
+                    fact.Score,
+                    fact.CreatedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    private static IReadOnlyList<BriefOmissionLine> TombstoneOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefTombstone> kept,
+        IReadOnlyList<MemoryRecord> trimmed)
+    {
+        var lines = new List<BriefOmissionLine>(
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.TombstoneReason ?? record.Content,
+                NoGroup,
+                NoScore,
+                record.TombstonedAt ?? DateTimeOffset.MinValue,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from tombstone in kept
+                select new BriefOmissionLine(
+                    tombstone.Id,
+                    tombstone.Reason ?? string.Empty,
+                    NoGroup,
+                    NoScore,
+                    tombstone.TombstonedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    private static IReadOnlyList<BriefOmissionLine> JournalOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefJournalEntry> kept,
+        IReadOnlyList<MemoryRecord> trimmed,
+        IReadOnlyList<MemoryScope> scopes)
+    {
+        var lines = new List<BriefOmissionLine>(
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                ScopeRank(scopes, record.Scope),
+                NoScore,
+                record.CreatedAt,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from entry in kept
+                select new BriefOmissionLine(
+                    entry.Id,
+                    entry.Content,
+                    ScopeRank(scopes, entry.Scope),
+                    NoScore,
+                    entry.CreatedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    // The digest groups follow the scope list the read was asked for, so a reader meets the dropped
+    // records in the order the sections below them are printed; scopes nobody asked for sort last.
+    private static int ScopeRank(IReadOnlyList<MemoryScope> scopes, MemoryScope scope)
+    {
+        for (var rank = 0; rank < scopes.Count; rank++)
+        {
+            if (scopes[rank] == scope)
+            {
+                return rank;
+            }
+        }
+
+        return scopes.Count + (int)scope;
     }
 
     private async Task<BriefCompactionDue?> MeasureCompactionDueAsync(string tome, DateTimeOffset now, CancellationToken cancellationToken)
@@ -308,7 +446,7 @@ public sealed class BriefService(
                         continue;
                     }
 
-                    var capped = record.Content.Length > entryCap;
+                    var capped = Cuts(record.Content.Length, entryCap);
                     var content = capped ? record.Content[..entryCap] : record.Content;
                     if (spend + content.Length > totalCap)
                     {
@@ -489,7 +627,7 @@ public sealed class BriefService(
 
     private BriefJournalEntry CapEntry(MemoryRecord record)
     {
-        var truncated = record.Content.Length > _options.BriefMaxEntryChars;
+        var truncated = Cuts(record.Content.Length, _options.BriefMaxEntryChars);
         return new BriefJournalEntry
         {
             Id = record.Id,
@@ -499,6 +637,11 @@ public sealed class BriefService(
             CreatedAt = record.CreatedAt,
         };
     }
+
+    // The never-truncate floor is a guarantee, not a cap: a record at or under it stays whole no matter
+    // how tight the section cap gets, so a long note is only ever cut when it is too long to be short.
+    private bool Cuts(int length, int cap) =>
+        length > cap && length > Math.Max(0, _options.BriefNeverTruncateChars);
 
     private static IReadOnlyList<MemoryScope> NormalizeScopes(IReadOnlyList<MemoryScope> scopes)
     {

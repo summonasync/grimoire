@@ -60,7 +60,7 @@ public sealed class DailyWindowResolver(MemoryEngineOptions options, IClock cloc
         CreatedBefore = LocalMidnight(day.AddDays(1), zone),
     };
 
-    private static DateOnly LocalDay(DateTimeOffset instant, TimeZoneInfo zone)
+    internal static DateOnly LocalDay(DateTimeOffset instant, TimeZoneInfo zone)
     {
         var local = TimeZoneInfo.ConvertTime(instant, zone);
         return new DateOnly(local.Year, local.Month, local.Day);

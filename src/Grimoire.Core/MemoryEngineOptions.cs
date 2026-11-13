@@ -2,6 +2,10 @@ namespace Grimoire.Core;
 
 public sealed record MemoryEngineOptions
 {
+    public const int DefaultBriefDigestExcerptChars = 80;
+
+    public const int DefaultBriefNeverTruncateChars = 300;
+
     public string DefaultTome { get; init; } = TomeKey.DefaultTome;
 
     public double SessionTtlHours { get; init; } = 24;
@@ -33,6 +37,10 @@ public sealed record MemoryEngineOptions
     public int BriefMaxTotalChars { get; init; } = 8000;
 
     public int BriefMaxEntryChars { get; init; } = 400;
+
+    public int BriefDigestExcerptChars { get; init; } = DefaultBriefDigestExcerptChars;
+
+    public int BriefNeverTruncateChars { get; init; } = DefaultBriefNeverTruncateChars;
 
     public string DailyTag { get; init; } = "daily-notes";
 
