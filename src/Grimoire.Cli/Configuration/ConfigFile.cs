@@ -89,11 +89,27 @@ internal static class ConfigFile
         }
 
         var targetName = Resolve(node, segments[^1]) ?? leafName;
-        node[targetName] = Coerce(schemaNode[leafName], key, value);
+        node[targetName] = Coerce(schemaNode[leafName], segments, key, value);
     }
 
-    private static JsonValue Coerce(JsonNode? schema, string key, string value)
+    private static JsonValue Coerce(JsonNode? schema, string[] segments, string key, string value)
     {
+        if (schema is null || (schema is JsonValue nullish && nullish.GetValueKind() == JsonValueKind.Null))
+        {
+            return ConfigSchema.KindOf(segments) switch
+            {
+                ConfigValueKind.Number when double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var nullableNumber)
+                    => JsonValue.Create(nullableNumber)!,
+                ConfigValueKind.Number => throw new CommandException(
+                    "config", $"Configuration property '{key}' must be a number, got '{value}'.", ExitCodes.Config),
+                ConfigValueKind.Boolean when bool.TryParse(value, out var nullableFlag)
+                    => JsonValue.Create(nullableFlag)!,
+                ConfigValueKind.Boolean => throw new CommandException(
+                    "config", $"Configuration property '{key}' must be a boolean, got '{value}'.", ExitCodes.Config),
+                _ => JsonValue.Create(value)!,
+            };
+        }
+
         if (schema is JsonValue box && box.TryGetValue<decimal>(out _))
         {
             return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)

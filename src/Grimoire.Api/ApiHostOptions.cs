@@ -8,6 +8,8 @@ public sealed record ApiHostOptions
 
     public int GcIntervalMinutes { get; init; } = 30;
 
+    public double SessionsRetentionHours { get; init; } = 24;
+
     public required string StaticRootPath { get; init; }
 
     public string? EnvTome { get; init; }

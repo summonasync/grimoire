@@ -14,5 +14,9 @@ public sealed record GrimoireOptions
 
     public ServeOptions Serve { get; init; } = new();
 
+    public SessionsOptions Sessions { get; init; } = new();
+
+    public double SessionsRetentionHoursOrDefault => Sessions.RetentionHours ?? Memory.SessionTtlHours;
+
     public IReadOnlyList<ProjectAliasRecord> Projects { get; init; } = [];
 }

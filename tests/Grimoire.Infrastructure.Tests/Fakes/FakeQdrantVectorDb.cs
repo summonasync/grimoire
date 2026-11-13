@@ -15,6 +15,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public RpcException? UpsertFailure { get; set; }
 
+    public RpcException? SetPayloadFailure { get; set; }
+
     public int CreateCollectionCount { get; private set; }
 
     public int DroppedCount { get; private set; }
@@ -26,6 +28,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
     public int? CollectionDimensions { get; set; }
 
     public List<(string Field, PayloadSchemaType Type)> CreatedIndexes { get; } = [];
+
+    public List<string> UsedCollections { get; } = [];
 
     public List<Filter> ScrolledFilters { get; } = [];
 
@@ -124,6 +128,7 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
         }
 
         UpsertCount++;
+        UsedCollections.Add(collection);
 
         foreach (var point in points)
         {
@@ -144,6 +149,11 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public Task SetPayloadAsync(string collection, IReadOnlyDictionary<string, Value> payload, Guid id, CancellationToken cancellationToken)
     {
+        if (SetPayloadFailure is { } failure)
+        {
+            return Task.FromException(failure);
+        }
+
         SetPayloads.Add(new Dictionary<string, Value>(payload));
 
         if (_points.TryGetValue(id, out var stored))

@@ -35,5 +35,9 @@ public sealed record McpHostOptions
 
     public IAgentIdentitySource? IdentityFile { get; init; }
 
+    public ISessionCaptureFaultSink? CaptureFault { get; init; }
+
+    public TimeSpan? SessionWriteBudget { get; init; }
+
     public string Instructions { get; init; } = DefaultInstructions;
 }

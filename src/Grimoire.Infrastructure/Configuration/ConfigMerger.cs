@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Grimoire.Infrastructure.Configuration;
@@ -59,7 +60,7 @@ internal static class ConfigMerger
         }
 
         var leaf = ResolveName(current, segments[^1], fullName);
-        current[leaf] = Coerce(leaf, fullName, value, current[leaf]);
+        current[leaf] = Coerce(leaf, fullName, value, current[leaf], segments);
     }
 
     private static string ResolveName(JsonObject section, string segment, string fullName)
@@ -75,8 +76,24 @@ internal static class ConfigMerger
         throw new ConfigException($"Environment override '{fullName}' does not match any configuration property.");
     }
 
-    private static JsonNode Coerce(string property, string fullName, string value, JsonNode? existing)
+    private static JsonNode Coerce(string property, string fullName, string value, JsonNode? existing, string[] segments)
     {
+        if (IsNullValue(existing))
+        {
+            return ConfigSchema.KindOf(segments) switch
+            {
+                ConfigValueKind.Number when double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var nullableNumber)
+                    => JsonValue.Create(nullableNumber),
+                ConfigValueKind.Number => throw new ConfigException(
+                    $"Environment override '{fullName}' must be a number for '{property}'."),
+                ConfigValueKind.Boolean when bool.TryParse(value, out var nullableFlag)
+                    => JsonValue.Create(nullableFlag),
+                ConfigValueKind.Boolean => throw new ConfigException(
+                    $"Environment override '{fullName}' must be a boolean for '{property}'."),
+                _ => JsonValue.Create(value),
+            };
+        }
+
         if (existing is JsonValue candidate && candidate.TryGetValue<decimal>(out _))
         {
             if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
@@ -99,4 +116,9 @@ internal static class ConfigMerger
 
         return JsonValue.Create(value);
     }
+
+    // A nullable option serializes its null default; the node kind carries no type hint,
+    // so a numeric-looking override becomes a number and everything else stays a string.
+    private static bool IsNullValue(JsonNode? node) =>
+        node is null || (node is JsonValue value && value.GetValueKind() == JsonValueKind.Null);
 }

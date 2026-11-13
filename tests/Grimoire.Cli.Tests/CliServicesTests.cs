@@ -4,6 +4,7 @@ using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
 using Grimoire.Infrastructure.Network;
 using Grimoire.Infrastructure.Processes;
+using Grimoire.Infrastructure.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -45,6 +46,16 @@ public sealed class CliServicesTests
 
         provider.GetRequiredService<MemoryService>().ShouldBeSameAs(provider.GetRequiredService<MemoryService>());
         provider.GetRequiredService<PersonaService>().ShouldBeSameAs(provider.GetRequiredService<PersonaService>());
+    }
+
+    [Fact]
+    public void Build_ResolvesSessionRegistryAsOneSharedSingleton()
+    {
+        using var provider = CliServices.Build(Options());
+
+        var registry = provider.GetRequiredService<ISessionRegistry>();
+        registry.ShouldBeOfType<QdrantSessionStore>();
+        provider.GetRequiredService<ISessionRegistry>().ShouldBeSameAs(registry);
     }
 
     [Fact]
