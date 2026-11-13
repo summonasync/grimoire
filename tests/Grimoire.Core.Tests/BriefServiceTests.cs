@@ -1005,6 +1005,143 @@ public sealed class BriefServiceTests
         PayloadMatchesSnapshot(brief, "2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
     }
 
+    [Fact]
+    public async Task CollectFacts_PerScopeTrimHandsBackTheDroppedRemainder()
+    {
+        var one = Seed("fact one", kind: MemoryKind.Fact, importance: 1);
+        var two = Seed("fact two", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-1));
+        var three = Seed("fact three", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-2));
+        var four = Seed("fact four", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-3));
+        var global = Seed("global fact", kind: MemoryKind.Fact, scope: MemoryScope.Global, importance: 1);
+
+        var (kept, dropped) = await Service().CollectFactsAsync(
+            Query(factsPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            FakeClock.DefaultStart,
+            CancellationToken.None);
+
+        // one and global tie at score 1.0 and the final fact order breaks the tie by Id,
+        // so the kept list pins the set; the dropped tail lives inside one scope group and is ordered
+        kept.Select(fact => fact.Id).OrderBy(id => id).ShouldBe(new[] { one.Id, global.Id, two.Id }.OrderBy(id => id));
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id, four.Id]);
+        dropped.Select(record => record.Content).ToList().ShouldBe(["fact three", "fact four"]);
+        kept.Select(fact => fact.Id).ToHashSet().Overlaps(dropped.Select(record => record.Id).ToHashSet()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task CollectTombstones_LimitCutHandsBackTheRemainderInCutOrder()
+    {
+        var fresh = Seed("fresh decision", status: MemoryStatus.Tombstoned, tombstoneReason: "wrong fact", tombstonedAt: FakeClock.DefaultStart.AddDays(-1));
+        var middle = Seed("middle decision", status: MemoryStatus.Tombstoned, tombstoneReason: "retracted", tombstonedAt: FakeClock.DefaultStart.AddDays(-2));
+        var stale = Seed("stale decision", status: MemoryStatus.Tombstoned, tombstoneReason: "superseded by vote", tombstonedAt: FakeClock.DefaultStart.AddDays(-5));
+
+        var (kept, dropped) = await Service().CollectTombstonesAsync(
+            Query(tombstoneLimit: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            CancellationToken.None);
+
+        kept.Select(tombstone => tombstone.Id).ToList().ShouldBe([fresh.Id, middle.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([stale.Id]);
+        dropped[0].TombstoneReason.ShouldBe("superseded by vote");
+    }
+
+    [Fact]
+    public async Task CollectJournal_PerScopeTrimHandsBackTheDroppedRemainder()
+    {
+        var one = Seed("journal one", created: FakeClock.DefaultStart);
+        var two = Seed("journal two", created: FakeClock.DefaultStart.AddHours(-1));
+        var three = Seed("journal three", created: FakeClock.DefaultStart.AddHours(-2));
+        var global = Seed("global journal", scope: MemoryScope.Global, created: FakeClock.DefaultStart.AddHours(-3));
+
+        var (kept, dropped) = await Service().CollectJournalAsync(
+            Query(journalPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            null,
+            CancellationToken.None);
+
+        kept.Select(entry => entry.Id).ToList().ShouldBe([one.Id, two.Id, global.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id]);
+        dropped[0].Content.ShouldBe("journal three");
+    }
+
+    [Fact]
+    public async Task CollectJournal_DailyExcludedIdsAreNotHandedBackAsDropped()
+    {
+        var excluded = Seed("journal excluded by daily", created: FakeClock.DefaultStart);
+        var one = Seed("journal one", created: FakeClock.DefaultStart.AddHours(-1));
+        var two = Seed("journal two", created: FakeClock.DefaultStart.AddHours(-2));
+        var three = Seed("journal three", created: FakeClock.DefaultStart.AddHours(-3));
+
+        var (kept, dropped) = await Service().CollectJournalAsync(
+            Query(journalPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            new HashSet<Guid>([excluded.Id]),
+            CancellationToken.None);
+
+        kept.Select(entry => entry.Id).ToList().ShouldBe([one.Id, two.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id]);
+        dropped.Select(record => record.Id).ShouldNotContain(excluded.Id);
+    }
+
+    [Fact]
+    public async Task CollectDaily_PurseTailHandsBackTheUnwrittenRecords()
+    {
+        var store = new FakeMemoryStore();
+        var notes = new List<MemoryRecord>();
+        for (var index = 0; index < 4; index++)
+        {
+            notes.Add(SeedDailyNote(store, new string((char)('a' + index), 40), Utc(2026, 11, 9, 3 + index), "medivh", "claude"));
+        }
+
+        var (groups, ids, more, _, _, dropped) = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 100))
+            .CollectDailyAsync(
+                DailyWindowResolver.ResolveZone("Europe/Moscow"),
+                [MemoryScope.Project, MemoryScope.Global],
+                TomeKey.DefaultTome,
+                Query(daily: true),
+                CancellationToken.None);
+
+        groups.SelectMany(group => group.Entries).Select(entry => entry.Content).ToList()
+            .ShouldBe([new string('a', 40), new string('b', 40)]);
+        more.ShouldBe(2);
+        dropped.Select(record => record.Id).ToList().ShouldBe([notes[2].Id, notes[3].Id]);
+        dropped.Count.ShouldBe(more);
+        dropped.Select(record => record.Content).ToList().ShouldBe([new string('c', 40), new string('d', 40)]);
+        ids.ShouldContain(notes[3].Id);
+    }
+
+    [Fact]
+    public async Task Brief_Window_LandsOnAnEarlierCandidateWhenTheNewestOneHoldsNothingInsideTheWindow()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "note outside the window", MoscowMidnightUtc(new DateOnly(2026, 11, 8)).AddHours(5), "medivh", "claude");
+        SeedDailyNote(store, "note inside the window", MoscowMidnightUtc(new DateOnly(2026, 11, 7)).AddHours(5), "kelthuzad", "claude");
+
+        var bounded = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true,
+                since: MoscowMidnightUtc(new DateOnly(2026, 11, 7)),
+                until: MoscowMidnightUtc(new DateOnly(2026, 11, 8))), CancellationToken.None);
+
+        bounded.DailyGroups.ShouldHaveSingleItem();
+        bounded.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.LastWorkingDay);
+        bounded.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 7));
+        bounded.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["note inside the window"]);
+
+        // the same store without the window lands on the newest holding candidate, so the
+        // assertion above measures the window moving the loop and not an unrelated fixture quirk
+        var open = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        open.DailyGroups.ShouldHaveSingleItem();
+        open.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.LastWorkingDay);
+        open.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 8));
+        open.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["note outside the window"]);
+    }
+
     private static readonly DateTimeOffset MoscowMondayUtc = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
 
     private static void PayloadMatchesSnapshot(BriefResult brief, string hash)
@@ -1042,7 +1179,7 @@ public sealed class BriefServiceTests
         return new DateOnly(local.Year, local.Month, local.Day);
     }
 
-    private static void SeedDailyNote(
+    private static MemoryRecord SeedDailyNote(
         FakeMemoryStore store,
         string content,
         DateTimeOffset created,

@@ -51,10 +51,13 @@ public sealed class BriefService(
         var document = await persona.GetAsync(cancellationToken, tome);
         var personaState = Fit(BriefSection.Persona, PersonaChars(document));
 
-        var facts = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
+        // The collect paths hand back what their limit trims and purse cuts dropped; the next slice
+        // turns these remainders into the omission digest. No payload field carries them yet, so the
+        // factsDropped/tombstonesDropped/journalDropped locals and daily.Dropped are wiring on purpose.
+        var (facts, factsDropped) = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
         var factsState = Fit(BriefSection.Facts, facts.Sum(fact => fact.Content.Length));
 
-        var tombstones = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
+        var (tombstones, tombstonesDropped) = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
         var tombstonesState = Fit(BriefSection.Tombstones, tombstones.Sum(tombstone => tombstone.Reason?.Length ?? 0));
 
         IReadOnlyList<BriefDailyGroup> dailyGroups = [];
@@ -97,7 +100,7 @@ public sealed class BriefService(
             }
         }
 
-        var journal = await CollectJournalAsync(query, scopes, tome, dailyIds, cancellationToken);
+        var (journal, journalDropped) = await CollectJournalAsync(query, scopes, tome, dailyIds, cancellationToken);
         var journalState = Fit(BriefSection.Journal, journal.Sum(entry => entry.Content.Length));
 
         var tomes = await CollectTomesAsync(cancellationToken);
@@ -152,7 +155,7 @@ public sealed class BriefService(
             : new BriefCompactionDue { PendingEntries = groups.Sum(group => group.MemoryIds.Count) };
     }
 
-    private async Task<IReadOnlyList<BriefFact>> CollectFactsAsync(
+    internal async Task<(IReadOnlyList<BriefFact> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectFactsAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
@@ -175,13 +178,16 @@ public sealed class BriefService(
 
         var limit = ClampHint(query.FactsPerScope, DefaultFactsPerScope);
         // Matches re-checks the window for the reason spelled out in ReadDailyWindowAsync.
-        return records
+        var byScope = records
             .Where(record => filter.Matches(record))
             .Select(record => (Record: record, Score: MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives)))
             .OrderByDescending(pair => pair.Score)
             .ThenByDescending(pair => pair.Record.CreatedAt)
             .ThenBy(pair => pair.Record.Id)
             .GroupBy(pair => pair.Record.Scope)
+            .ToArray();
+
+        var items = byScope
             .SelectMany(group => group.Take(limit))
             .OrderByDescending(pair => pair.Score)
             .ThenBy(pair => pair.Record.Id)
@@ -194,9 +200,16 @@ public sealed class BriefService(
                 CreatedAt = pair.Record.CreatedAt,
             })
             .ToArray();
+
+        var dropped = byScope
+            .SelectMany(group => group.Skip(limit))
+            .Select(pair => pair.Record)
+            .ToArray();
+
+        return (items, dropped);
     }
 
-    private async Task<IReadOnlyList<BriefTombstone>> CollectTombstonesAsync(
+    internal async Task<(IReadOnlyList<BriefTombstone> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectTombstonesAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
@@ -211,9 +224,12 @@ public sealed class BriefService(
         }, cancellationToken);
 
         var limit = ClampHint(query.TombstoneLimit, DefaultTombstoneLimit);
-        return records
+        var ranked = records
             .OrderByDescending(record => record.TombstonedAt ?? DateTimeOffset.MinValue)
             .ThenBy(record => record.Id)
+            .ToArray();
+
+        var items = ranked
             .Take(limit)
             .Select(record => new BriefTombstone
             {
@@ -222,10 +238,17 @@ public sealed class BriefService(
                 TombstonedAt = record.TombstonedAt ?? DateTimeOffset.MinValue,
             })
             .ToArray();
+
+        return (items, [.. ranked.Skip(limit)]);
     }
 
-    private async Task<(IReadOnlyList<BriefDailyGroup> Groups, IReadOnlySet<Guid> Ids, int More, bool Truncated, bool Found)>
-        CollectDailyAsync(
+    internal async Task<(
+        IReadOnlyList<BriefDailyGroup> Groups,
+        IReadOnlySet<Guid> Ids,
+        int More,
+        bool Truncated,
+        bool Found,
+        IReadOnlyList<MemoryRecord> Dropped)> CollectDailyAsync(
             DailyZoneResolution zone,
             IReadOnlyList<MemoryScope> scopes,
             string tome,
@@ -240,7 +263,7 @@ public sealed class BriefService(
         var found = lastWorkingDayRecords.Concat(today).ToList();
         if (found.Count == 0)
         {
-            return ([], new HashSet<Guid>(), 0, false, false);
+            return ([], new HashSet<Guid>(), 0, false, false, []);
         }
 
         var buckets = new List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)>();
@@ -252,19 +275,19 @@ public sealed class BriefService(
         buckets.Add((BriefDailyBucket.Today, plan.Today.Day, today));
 
         var shaped = ShapeGroups(buckets);
-        return (shaped.Groups, found.Select(record => record.Id).ToHashSet(), shaped.More, shaped.Truncated, true);
+        return (shaped.Groups, found.Select(record => record.Id).ToHashSet(), shaped.More, shaped.Truncated, true, shaped.Dropped);
     }
 
-    private (IReadOnlyList<BriefDailyGroup> Groups, int More, bool Truncated) ShapeGroups(
+    private (IReadOnlyList<BriefDailyGroup> Groups, int More, bool Truncated, IReadOnlyList<MemoryRecord> Dropped) ShapeGroups(
         List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)> buckets)
     {
         var entryCap = Math.Max(0, _options.BriefDailyMaxEntryChars);
         var totalCap = Math.Max(0, _options.BriefDailyMaxTotalChars);
         var groups = new List<BriefDailyGroup>();
         var spend = 0;
-        var more = 0;
         var truncated = false;
         var exhausted = false;
+        var dropped = new List<MemoryRecord>();
 
         foreach (var bucket in buckets)
         {
@@ -281,7 +304,7 @@ public sealed class BriefService(
                 {
                     if (exhausted)
                     {
-                        more++;
+                        dropped.Add(record);
                         continue;
                     }
 
@@ -290,7 +313,7 @@ public sealed class BriefService(
                     if (spend + content.Length > totalCap)
                     {
                         exhausted = true;
-                        more++;
+                        dropped.Add(record);
                         continue;
                     }
 
@@ -318,7 +341,7 @@ public sealed class BriefService(
             }
         }
 
-        return (groups, more, truncated);
+        return (groups, dropped.Count, truncated, dropped);
     }
 
     private async Task<(DailyWindow? Window, IReadOnlyList<MemoryRecord> Records)> FirstCandidateHoldingAsync(
@@ -385,7 +408,7 @@ public sealed class BriefService(
         return after < before ? bucket with { CreatedAfter = after, CreatedBefore = before } : null;
     }
 
-    private async Task<IReadOnlyList<BriefJournalEntry>> CollectJournalAsync(
+    internal async Task<(IReadOnlyList<BriefJournalEntry> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectJournalAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
@@ -406,17 +429,27 @@ public sealed class BriefService(
         var records = await store.ListAsync(filter, cancellationToken);
 
         var limit = ClampHint(query.JournalPerScope, DefaultJournalPerScope);
-        return records
+        // Matches re-checks the window for the reason spelled out in ReadDailyWindowAsync.
+        var byScope = records
             .Where(record => filter.Matches(record))
             .Where(record => excludeIds is null || !excludeIds.Contains(record.Id))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
             .GroupBy(record => record.Scope)
+            .ToArray();
+
+        var items = byScope
             .SelectMany(group => group.Take(limit))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
             .Select(CapEntry)
             .ToArray();
+
+        var dropped = byScope
+            .SelectMany(group => group.Skip(limit))
+            .ToArray();
+
+        return (items, dropped);
     }
 
     private async Task<(bool Degraded, string? Note, IReadOnlyList<BriefTome> Items, int More)> CollectTomesAsync(
