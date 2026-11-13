@@ -31,11 +31,40 @@ public sealed class SessionRetentionRegistrationTests
             .ShouldNotContain(service => service is SessionRetentionSweeper);
     }
 
-    private static ApiHostOptions Options() => new()
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Build_WithNonFiniteRetentionHours_CannotMaterialiseASweep(double hours)
+    {
+        using var app = ApiHostBuilder.Build(Options(hours), Ports(withRegistry: true));
+
+        // The knob reaches the sweep as a TimeSpan, and a TimeSpan refuses a non-finite hour count
+        // out of the box — ArgumentException for NaN, OverflowException for infinity, both measured
+        // here rather than assumed. The host cannot resolve its background services at all, so such
+        // a window never reaches the cutoff arithmetic, where it would silently mean 'retire all'.
+        var failure = Should.Throw<Exception>(() => app.Services.GetServices<IHostedService>().ToList());
+
+        failure.GetType().ShouldBeOneOf(typeof(ArgumentException), typeof(OverflowException));
+    }
+
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(-5d)]
+    public void Build_WithANonPositiveRetentionHours_RejectsTheSweepAtConstruction(double hours)
+    {
+        using var app = ApiHostBuilder.Build(Options(hours), Ports(withRegistry: true));
+
+        var failure = Should.Throw<ArgumentOutOfRangeException>(
+            () => app.Services.GetServices<IHostedService>().ToList());
+
+        failure.ParamName.ShouldBe("retention");
+    }
+
+    private static ApiHostOptions Options(double? retentionHours = null) => new()
     {
         Port = 0,
         GcIntervalMinutes = 60,
-        SessionsRetentionHours = 24,
+        SessionsRetentionHours = retentionHours ?? 24,
         StaticRootPath = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", "retention-registration"),
     };
 
