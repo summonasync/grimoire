@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Grimoire.Infrastructure.Configuration;
 
 public enum ConfigValueKind
@@ -5,6 +7,18 @@ public enum ConfigValueKind
     Text,
     Number,
     Boolean,
+}
+
+/// <summary>
+/// Outcome of reading override text against the numeric grammar both config doors share.
+/// Only <see cref="Finite"/> may reach the options tree: a value that parses but is not
+/// finite aborts the later deserialization as an unclassified runtime failure.
+/// </summary>
+public enum NumberVerdict
+{
+    Finite,
+    NotNumber,
+    NonFinite,
 }
 
 /// <summary>
@@ -38,5 +52,20 @@ public static class ConfigSchema
             not null when current == typeof(bool) => ConfigValueKind.Boolean,
             _ => ConfigValueKind.Text,
         };
+    }
+
+    /// <summary>
+    /// The numeric grammar both config doors read through: invariant-culture parse, then finite.
+    /// <paramref name="number"/> is only worth reading when the verdict is
+    /// <see cref="NumberVerdict.Finite"/>.
+    /// </summary>
+    public static NumberVerdict ClassifyNumber(string value, out double number)
+    {
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+        {
+            return NumberVerdict.NotNumber;
+        }
+
+        return double.IsFinite(number) ? NumberVerdict.Finite : NumberVerdict.NonFinite;
     }
 }

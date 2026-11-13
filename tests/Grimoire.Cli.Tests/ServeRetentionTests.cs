@@ -86,13 +86,16 @@ public sealed class ServeRetentionTests
     [InlineData("-Infinity")]
     public void RetentionFromTheEnvironment_NonFiniteLiterals_NeverBecomeOptions(string literal)
     {
-        // The override parser reads a literal number, then the json node cannot carry it:
-        // the value dies at load, so a non-finite window never reaches the sweep's arithmetic.
+        // The load door refuses the literal itself, so a non-finite window never reaches the
+        // sweep's arithmetic and the operator gets the config class instead of a runtime one.
         var loader = new ConfigLoader(
             MissingPath(),
             new Dictionary<string, string> { ["GRIMOIRE_SESSIONS__RETENTIONHOURS"] = literal });
 
-        Should.Throw<ArgumentException>(() => loader.Load());
+        var failure = Should.Throw<ConfigException>(() => loader.Load());
+
+        failure.Message.ShouldContain("finite number");
+        failure.Message.ShouldContain(literal);
     }
 
     [Fact]

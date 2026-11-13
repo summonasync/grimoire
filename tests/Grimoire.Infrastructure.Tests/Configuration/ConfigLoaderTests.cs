@@ -255,6 +255,59 @@ public sealed class ConfigLoaderTests : IDisposable
         exception.Message.ShouldContain("number");
     }
 
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public void Load_WithNonFiniteOverrideOfNullableNumber_Throws(string value)
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SESSIONS__RETENTIONHOURS", value)]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            $"Environment override 'GRIMOIRE_SESSIONS__RETENTIONHOURS' must be a finite number for 'retentionHours'; '{value}' is not.");
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public void Load_WithNonFiniteOverrideOfNumberedDefault_Throws(string value)
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORT", value)]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            $"Environment override 'GRIMOIRE_SERVE__PORT' must be a finite number for 'port'; '{value}' is not.");
+    }
+
+    [Theory]
+    [InlineData("GRIMOIRE_SESSIONS__RETENTIONHOURS", "retentionHours")]
+    [InlineData("GRIMOIRE_SERVE__PORT", "port")]
+    public void Load_WithNonNumericEnvironmentOverride_KeepsThePlainNumberMessage(string name, string property)
+    {
+        var loader = Loader(MissingPath(), [(name, "banana")]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe($"Environment override '{name}' must be a number for '{property}'.");
+    }
+
+    [Fact]
+    public void Load_WithExponentOrFractionEnvironmentOverride_StillCoercesToNumber()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORT", "1e3"), ("GRIMOIRE_SESSIONS__RETENTIONHOURS", "0.5")]);
+
+        var options = loader.Load();
+
+        options.Serve.Port.ShouldBe(1000);
+        options.Sessions.RetentionHours.ShouldBe(0.5);
+    }
+
     [Fact]
     public void Load_WithExplicitNullSection_Throws()
     {
