@@ -174,6 +174,7 @@ public sealed class BriefService(
         var records = await store.ListAsync(filter, cancellationToken);
 
         var limit = ClampHint(query.FactsPerScope, DefaultFactsPerScope);
+        // Matches re-checks the window for the reason spelled out in ReadDailyWindowAsync.
         return records
             .Where(record => filter.Matches(record))
             .Select(record => (Record: record, Score: MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives)))
@@ -363,18 +364,19 @@ public sealed class BriefService(
             CreatedBefore = window.CreatedBefore,
         };
 
-        // CreatedBefore has been enforced by the store since feature 055: MemoryFilterTranslator maps it
-        // as an exclusive lt bound, the same edge MemoryFilter.Matches uses, so the re-check below is
-        // defensive rather than load-bearing now. It stays because every other bounded reader in the
-        // codebase re-checks the same way (MemoryService.ListAsync, DigestService) and deleting it is
-        // 055's decision, not this one's.
+        // Two faces, two answers about this re-check. Qdrant has enforced CreatedBefore as an exclusive lt
+        // bound since feature 055, so in production this is defensive. The in-memory fakes are not that
+        // store: FakeMemoryStore.Matching applies CreatedAfter and never consults CreatedBefore, which makes
+        // the line below load-bearing for every boundary test in Core and Cli. Deleting it keeps production
+        // correct and reddens the suite — the root fix is teaching the doubles the bound, and that call is
+        // feature 055's, not this one's.
         var records = await store.ListAsync(filter, cancellationToken);
         return [.. records.Where(record => filter.Matches(record))];
     }
 
     // The caller's window narrows a bucket instead of replacing it, so the half-open pair keeps its
-    // exclusive upper edge. A bucket the window empties comes back null and is never read: no store
-    // sees a range whose lower bound sits on or after its upper one.
+    // exclusive upper edge. A bucket the window empties comes back null and is never read: no bucket read
+    // sends a range whose lower bound sits on or after its upper one.
     private static DailyWindow? Narrow(DailyWindow bucket, BriefQuery query)
     {
         var after = query.Since is { } since && since > bucket.CreatedAfter ? since : bucket.CreatedAfter;
