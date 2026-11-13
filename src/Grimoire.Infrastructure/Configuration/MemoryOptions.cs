@@ -19,4 +19,8 @@ public sealed record MemoryOptions
     public double TombstoneRetentionDays { get; init; } = 30;
 
     public int ReindexBatchSize { get; init; } = 64;
+
+    public string DailyTag { get; init; } = "daily-notes";
+
+    public string? DailyTimeZone { get; init; }
 }

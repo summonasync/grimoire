@@ -39,9 +39,10 @@ One binary, three faces:
 
 **Status**: the MVP plus honest-writes, startup-brief and the tome model are
 landed and acceptance-verified end to end — all three faces (CLI, MCP stdio,
-loopback web console) round-trip against a live Qdrant + Ollama, 1889 tests
-green. Live work tracking happens on the Overmind board; this README
-describes the shipped shape plus the frozen contracts.
+loopback web console) round-trip against a live Qdrant + Ollama. Test counts
+live in git, the CI run and the board — not in this paragraph, because a number
+here goes stale on every merge. Live work tracking happens on the Overmind
+board; this README describes the shipped shape plus the frozen contracts.
 
 ## Why it exists
 
@@ -95,7 +96,8 @@ grimoire ui       # opens http://grimoire.localhost:4770 in the default browser,
                   # starting the systemd user unit first when nothing is serving
 
 # 5. Or read the crew's day back
-grimoire report   # evening report of daily notes: today's active records, grouped by actor
+grimoire report           # evening report of daily notes: today's active records, grouped by actor
+grimoire brief --daily    # the same day folded into the startup brief
 ```
 
 `grimoire ui` probes `http://127.0.0.1:<serve.port>/health`; when nothing
@@ -131,6 +133,52 @@ reads the engine's default tome and has no `--tome` flag, so a day that
 looks empty may simply live in another tome. `--project` shares its help
 text with `brief` (where the same filter is described as "the brief"); for
 `report` it filters the reported day's records to that project.
+
+The same notes have a second read, folded into the startup brief: `grimoire
+brief --daily` and `memory_brief` with `daily: true` add a `daily` section —
+active journal records tagged `daily-notes` within the brief's scope filter
+(`Session` is never briefed), in two buckets: today and the first day behind
+it that holds a note (up to a week back), grouped by actor,
+oldest entry first. The tag is the write side's convention, not this read's
+invention: daily notes are written once, tagged `daily-notes` by the session
+that wrote them (the rule in `CONTEXT.md`), and the daily section is the other
+end of that deal. A record that lands in the daily section is dropped from the
+brief's `journal` section, so the same note is never paid for twice. `report`
+and `--daily` differ in shape — and, when `memory.dailyTimeZone` names a zone
+other than the machine's, in which calendar day each one calls today: `report`
+is always machine-local, `--daily` cuts its day in the configured zone.
+
+Two windows and a purse decide what the section shows. The day is cut at
+local midnight in the zone `memory.dailyTimeZone` names, so "today" means
+today in that zone — the machine's own day while the knob is unset. Entries are
+budgeted: one longer than 1500 characters is cut and flagged `truncated`, and
+once 6000 characters are spent the rest is only counted, as a number in `more`.
+Either outcome names `daily` in `omitted`: a capped body or a counted tail is
+content the section knows about and does not print. Both numbers are code
+defaults, not config keys; the two knobs listed under `memory` are all the
+daily section exposes.
+
+A degraded config says so instead of rendering an empty room, and it says so
+only when the daily section was asked for. A blank `memory.dailyTag` disables
+the section and warns naming the key: an empty value is used as given and
+matches no record, so the payload shows an empty section plus that warning —
+it is not a reset to `daily-notes`. An unset or blank
+`memory.dailyTimeZone` means the machine-local day and stays silent, because
+that is the default, not a failure; only an id that does not resolve falls
+back to UTC, and then it warns naming the id. Both lines arrive in the
+payload's `warnings` field, disabled-section first and zone second, and the
+CLI prints the same two after the section as `Warning:` lines.
+
+What does not cross to the CLI is the tome-level warning: `grimoire brief`
+never prints `tome '…' is empty or does not exist` while `memory_brief` does.
+That asymmetry predates the daily section and is not something to align. The
+tome warning is narrower than the hint beside it, too: it fires only for a
+tome requested by name that holds no record at all anywhere in the store —
+`KnownTomeKeys` collects the tome of every Active and Tombstoned record — so a
+tome with a single daily note in it is known and never warned about, and since
+the daily section counts toward emptiness, a daily-only tome no longer gets a
+`hint` preaching "tome is empty". Hint and warning are two signals with
+different reach, not one switch.
 
 Wire an agent to the memory (stdio MCP):
 
@@ -351,7 +399,7 @@ Standing rules, enforced from day one:
 
 | Tool | Teaches the agent to… |
 |---|---|
-| `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest |
+| `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest; `daily: true` folds in the day's `daily-notes` section |
 | `memory_compact_candidates` | get journal clusters worth distilling into facts |
 | `memory_forget` | retract with a reason (tombstone, never delete) |
 | `memory_history` | walk a memory's full supersede chain before trusting or overwriting it |
@@ -379,10 +427,14 @@ as `GRIMOIRE_DEFAULTTOME`:
 | *(root)* | `defaultTome` (`default`) |
 | `qdrant` | `endpoint` (`http://localhost:6334`), `apiKey?`, `collection` (`grimoire`) |
 | `embedding` | `provider` (`ollama`), `model` (`qwen3-embedding`), `endpoint` (`http://localhost:11434`), `dimensions` (1024) |
-| `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30) |
+| `memory` | `sessionTtlHours` (24), `dedupSimilarityThreshold` (0.92), `recencyHalfLifeDays` per scope (0.5/30/90/180), `tombstoneRetentionDays` (30), `dailyTag` (`daily-notes`), `dailyTimeZone` (unset = machine-local day) |
 | `serve` | `port` (4770), `gcIntervalMinutes` (30) |
 
-Unknown keys are rejected — typos in a hand-edited file fail loudly.
+Unknown keys are rejected — typos in a hand-edited file fail loudly. The
+same strictness guards the environment: the daily knobs are overridable as
+`GRIMOIRE_MEMORY__DAILYTAG` and `GRIMOIRE_MEMORY__DAILYTIMEZONE`, and a name
+that matches no property — `GRIMOIRE_MEMORY__DAILYZONETIMEZONE`, say — fails
+the load instead of being silently ignored.
 `grimoire config set` addresses `section.property` pairs, so a root-level key
 like `defaultTome` is edited directly in the file. That key is also the tome
 the CLI `report` reads: `GRIMOIRE_TOME` steers the MCP and web faces and the

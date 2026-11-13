@@ -1,3 +1,4 @@
+using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Shouldly;
 using Xunit;
@@ -194,6 +195,234 @@ public sealed class BriefCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         _host.Output.ToString().ShouldContain("unreachable");
     }
+
+    [Fact]
+    public async Task Brief_DailyFlag_RendersTheSameGroupsTheMcpFaceReturns()
+    {
+        // Mirrors BriefToolTests.Brief_DailyFlag_ReturnsGroupsByActorWithEntriesOldestFirst:
+        // same clock instant (FakeClock.DefaultStart == the MCP fixture's BriefClockInstant),
+        // same three notes, same actors. The two doors are pinned by the same fixture script;
+        // reseeding one side must reseed the other.
+        SeedDaily(_host.Store, "medivh opened the board", 0, "medivh", "claude");
+        SeedDaily(_host.Store, "medivh pushed the seam", 30, "medivh", "qwen");
+        SeedDaily(_host.Store, "thrall wired the door", 10, "thrall", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        var day = ExpectedLocalDay();
+        output.ShouldContain("daily:");
+        LineIndex(output, $"  {day} today medivh (2)").ShouldNotBe(-1);
+        LineIndex(output, $"  {day} today thrall (1)").ShouldNotBe(-1);
+        LineIndex(output, " today medivh (2)").ShouldBeLessThan(LineIndex(output, " today thrall (1)"));
+        LineIndex(output, "medivh opened the board")
+            .ShouldBeLessThan(LineIndex(output, "medivh pushed the seam"));
+        LineIndex(output, "  (+").ShouldBe(-1);
+        WarningLines(output).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_LastWorkingDayGroupPrintsAheadOfToday()
+    {
+        SeedDaily(_host.Store, "friday seam landed", -24 * 60, "medivh", "claude");
+        SeedDaily(_host.Store, "saturday note on the door", 0, "radim", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        var today = ExpectedLocalDay();
+        var lastWorkingDay = ExpectedLocalDay(-24 * 60);
+        lastWorkingDay.ShouldNotBe(today);
+        LineIndex(output, $"  {lastWorkingDay} last-working-day medivh (1)").ShouldNotBe(-1);
+        LineIndex(output, $"  {today} today radim (1)").ShouldNotBe(-1);
+        LineIndex(output, " last-working-day medivh").ShouldBeLessThan(LineIndex(output, " today radim"));
+        WarningLines(output).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Brief_WithoutDailyFlag_RendersNoDailySection()
+    {
+        var note = SeedDaily(_host.Store, "a daily note plain brief must not announce", 0, "medivh", "claude");
+
+        var plain = await _host.RunAsync("brief");
+
+        plain.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldNotContain("daily:");
+        _host.Output.ToString().ShouldContain(note.Id.ToString());
+
+        var declined = await _host.RunAsync("brief", "--daily=false");
+
+        declined.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldNotContain("daily:");
+    }
+
+    [Fact]
+    public async Task Brief_WithoutDailyFlag_StaysSilentOnWarningsEvenWhenTheZoneIsDead()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { DailyTimeZone = "Not/AZone" });
+        var note = SeedDaily(host.Store, "a note the journal path can still show", 0, "medivh", "claude");
+
+        var code = await host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldNotContain("daily:");
+        WarningLines(output).ShouldBeEmpty();
+        output.ShouldContain(note.Id.ToString(),
+            customMessage: "the note is renderable on this seam, so the silence below is earned and not a cold store");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_AppearsInHelp()
+    {
+        var code = await _host.RunAsync("help", "brief");
+
+        code.ShouldBe(ExitCodes.Ok);
+        _host.Output.ToString().ShouldContain("--daily");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NoNotesYet_RendersEmptyState()
+    {
+        var code = await _host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("daily: (empty)");
+        LineIndex(output, "  (+").ShouldBe(-1);
+        WarningLines(output).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_UnresolvableZone_PrintsTheZoneWarningAlone()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { DailyTimeZone = "Not/AZone" });
+
+        var code = await host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        WarningLines(host.Output.ToString()).ShouldBe(
+            ["Warning: DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC."]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_EmptyTag_PrintsTheDisabledSentenceVerbatim()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { DailyTag = "" });
+
+        var code = await host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var warnings = WarningLines(host.Output.ToString());
+        warnings.ShouldHaveSingleItem();
+        warnings[0].ShouldBe("Warning: DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.");
+        warnings[0].ShouldNotContain("DailyTimeZone");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_BothDegraded_PrintsTwoLinesTagFirst()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions
+        {
+            DailyTag = "",
+            DailyTimeZone = "Not/AZone",
+        });
+
+        var code = await host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        WarningLines(host.Output.ToString()).ShouldBe(
+        [
+            "Warning: DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.",
+            "Warning: DailyTimeZone 'Not/AZone' did not resolve; daily buckets use UTC.",
+        ]);
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_ResolvableZoneWithConfiguredTag_PrintsNoWarnings()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" });
+        SeedDaily(host.Store, "moscow note under a healthy config", 0, "medivh", "claude");
+
+        var code = await host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        WarningLines(host.Output.ToString()).ShouldBeEmpty();
+        host.Output.ToString().ShouldContain("daily:");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OverBudgetTail_PrintsKeptEntriesAndMoreLine()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { BriefDailyMaxTotalChars = 100 });
+        var kept = SeedDaily(host.Store, new string('a', 40), 0, "medivh", "claude");
+        var alsoKept = SeedDaily(host.Store, new string('b', 40), 10, "medivh", "claude");
+        var swallowed = SeedDaily(host.Store, new string('c', 40), 20, "medivh", "claude");
+
+        var code = await host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldContain($"  {ExpectedLocalDay()} today medivh (2)");
+        output.ShouldContain(kept.Id.ToString());
+        output.ShouldContain(alsoKept.Id.ToString());
+        output.ShouldNotContain(swallowed.Id.ToString());
+        output.ShouldContain("  (+1 more)");
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_OversizedEntry_PrintsCapAndMarker()
+    {
+        SeedDaily(_host.Store, new string('x', 2000), 0, "medivh", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain(new string('x', 1500));
+        output.ShouldNotContain(new string('x', 1501));
+        LineIndex(output, "      (truncated)").ShouldNotBe(-1);
+    }
+
+    private static MemoryRecord SeedDaily(
+        RecordingMemoryStore store,
+        string content,
+        int minutesFromClockStart,
+        string alias,
+        string vendor)
+    {
+        var created = FakeClock.DefaultStart.AddMinutes(minutesFromClockStart);
+        var record = new MemoryRecord
+        {
+            Id = Guid.NewGuid(),
+            Content = content,
+            Scope = MemoryScope.Project,
+            Kind = MemoryKind.Journal,
+            Actor = MemoryActor.Agent(alias, vendor),
+            Tags = ["daily-notes"],
+            CreatedAt = created,
+            LastAccessedAt = created,
+        };
+        store.Seed(record, [1f, 0f]);
+        return record;
+    }
+
+    private static string ExpectedLocalDay(int minutesFromClockStart = 0) =>
+        TimeZoneInfo.ConvertTime(FakeClock.DefaultStart.AddMinutes(minutesFromClockStart), TimeZoneInfo.Local)
+            .ToString("yyyy-MM-dd");
+
+    private static int LineIndex(string output, string needle) =>
+        Array.FindIndex(
+            output.Split('\n'),
+            line => line.TrimEnd('\r').Contains(needle, StringComparison.Ordinal));
+
+    private static string[] WarningLines(string output) =>
+        output.Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.StartsWith("Warning: ", StringComparison.Ordinal))
+            .ToArray();
 
     private static TomeManifest Manifest(string key, string description) => new()
     {

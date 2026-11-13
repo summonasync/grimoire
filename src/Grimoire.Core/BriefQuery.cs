@@ -13,4 +13,6 @@ public sealed record BriefQuery
     public int? JournalPerScope { get; init; }
 
     public int? TombstoneLimit { get; init; }
+
+    public bool Daily { get; init; }
 }

@@ -57,7 +57,47 @@ public sealed class BriefService(
         var tombstones = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
         var tombstonesState = Fit(BriefSection.Tombstones, tombstones.Sum(tombstone => tombstone.Reason?.Length ?? 0));
 
-        var journal = await CollectJournalAsync(query, scopes, tome, cancellationToken);
+        IReadOnlyList<BriefDailyGroup> dailyGroups = [];
+        IReadOnlySet<Guid>? dailyIds = null;
+        var dailyMore = 0;
+        var dailyFound = false;
+        IReadOnlyList<string>? warnings = null;
+
+        if (query.Daily)
+        {
+            var zone = DailyWindowResolver.ResolveZone(_options.DailyTimeZone);
+            List<string> dailyWarnings = [];
+
+            // Ordered by the config key each warning names: the disabled section first, then the zone
+            // its buckets would have used. T5 prints this list as-is, so this order is the CLI's order.
+            if (string.IsNullOrWhiteSpace(_options.DailyTag))
+            {
+                dailyWarnings.Add("DailyTag is empty; the daily section is disabled. Set DailyTag to enable it.");
+            }
+
+            if (zone.Source == DailyZoneSource.UtcFallback)
+            {
+                dailyWarnings.Add($"DailyTimeZone '{_options.DailyTimeZone}' did not resolve; daily buckets use UTC.");
+            }
+
+            if (dailyWarnings.Count > 0)
+            {
+                warnings = dailyWarnings;
+            }
+
+            var daily = await CollectDailyAsync(zone, scopes, tome, query.ProjectId, cancellationToken);
+            dailyGroups = daily.Groups;
+            dailyIds = daily.Ids;
+            dailyMore = daily.More;
+            dailyFound = daily.Found;
+
+            if (daily.Truncated || daily.More > 0)
+            {
+                omitted.Add(BriefSection.Daily);
+            }
+        }
+
+        var journal = await CollectJournalAsync(query, scopes, tome, dailyIds, cancellationToken);
         var journalState = Fit(BriefSection.Journal, journal.Sum(entry => entry.Content.Length));
 
         var tomes = await CollectTomesAsync(cancellationToken);
@@ -79,8 +119,12 @@ public sealed class BriefService(
             Tomes = tomesState == BriefSectionState.Populated ? tomes.Items : [],
             TomesMore = tomesState == BriefSectionState.Populated ? tomes.More : 0,
             TomesNote = tomes.Degraded ? tomes.Note : null,
+            DailyState = dailyFound ? BriefSectionState.Populated : BriefSectionState.Empty,
+            DailyGroups = dailyGroups,
+            DailyMore = dailyMore,
             Omitted = omitted,
             CompactionDue = await compactionDue,
+            Warnings = warnings,
         };
     }
 
@@ -174,10 +218,155 @@ public sealed class BriefService(
             .ToArray();
     }
 
+    private async Task<(IReadOnlyList<BriefDailyGroup> Groups, IReadOnlySet<Guid> Ids, int More, bool Truncated, bool Found)>
+        CollectDailyAsync(
+            DailyZoneResolution zone,
+            IReadOnlyList<MemoryScope> scopes,
+            string tome,
+            string? projectId,
+            CancellationToken cancellationToken)
+    {
+        var plan = new DailyWindowResolver(_options, clock).Resolve(zone.Zone);
+        var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, projectId, cancellationToken);
+        var (lastWorkingDay, lastWorkingDayRecords) =
+            await FirstCandidateHoldingAsync(plan, scopes, tome, projectId, cancellationToken);
+
+        var found = lastWorkingDayRecords.Concat(today).ToList();
+        if (found.Count == 0)
+        {
+            return ([], new HashSet<Guid>(), 0, false, false);
+        }
+
+        var buckets = new List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)>();
+        if (lastWorkingDay is { } window)
+        {
+            buckets.Add((BriefDailyBucket.LastWorkingDay, window.Day, lastWorkingDayRecords));
+        }
+
+        buckets.Add((BriefDailyBucket.Today, plan.Today.Day, today));
+
+        var shaped = ShapeGroups(buckets);
+        return (shaped.Groups, found.Select(record => record.Id).ToHashSet(), shaped.More, shaped.Truncated, true);
+    }
+
+    private (IReadOnlyList<BriefDailyGroup> Groups, int More, bool Truncated) ShapeGroups(
+        List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)> buckets)
+    {
+        var entryCap = Math.Max(0, _options.BriefDailyMaxEntryChars);
+        var totalCap = Math.Max(0, _options.BriefDailyMaxTotalChars);
+        var groups = new List<BriefDailyGroup>();
+        var spend = 0;
+        var more = 0;
+        var truncated = false;
+        var exhausted = false;
+
+        foreach (var bucket in buckets)
+        {
+            var ordered = bucket.Records
+                .OrderBy(record => record.CreatedAt)
+                .ThenBy(record => record.Id)
+                .GroupBy(record => record.Actor.Alias, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var byActor in ordered)
+            {
+                var entries = new List<BriefDailyEntry>();
+                foreach (var record in byActor)
+                {
+                    if (exhausted)
+                    {
+                        more++;
+                        continue;
+                    }
+
+                    var capped = record.Content.Length > entryCap;
+                    var content = capped ? record.Content[..entryCap] : record.Content;
+                    if (spend + content.Length > totalCap)
+                    {
+                        exhausted = true;
+                        more++;
+                        continue;
+                    }
+
+                    spend += content.Length;
+                    truncated |= capped;
+                    entries.Add(new BriefDailyEntry
+                    {
+                        Id = record.Id,
+                        Content = content,
+                        Truncated = capped,
+                        CreatedAt = record.CreatedAt,
+                    });
+                }
+
+                if (entries.Count > 0)
+                {
+                    groups.Add(new BriefDailyGroup
+                    {
+                        Day = bucket.Day,
+                        Bucket = bucket.Bucket,
+                        Actor = byActor.Key,
+                        Entries = entries,
+                    });
+                }
+            }
+        }
+
+        return (groups, more, truncated);
+    }
+
+    private async Task<(DailyWindow? Window, IReadOnlyList<MemoryRecord> Records)> FirstCandidateHoldingAsync(
+        DailyWindowPlan plan,
+        IReadOnlyList<MemoryScope> scopes,
+        string tome,
+        string? projectId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var candidate in plan.LastWorkingDayCandidates)
+        {
+            var records = await ReadDailyWindowAsync(candidate, scopes, tome, projectId, cancellationToken);
+            if (records.Count > 0)
+            {
+                return (candidate, records);
+            }
+        }
+
+        return (null, []);
+    }
+
+    private async Task<IReadOnlyList<MemoryRecord>> ReadDailyWindowAsync(
+        DailyWindow window,
+        IReadOnlyList<MemoryScope> scopes,
+        string tome,
+        string? projectId,
+        CancellationToken cancellationToken)
+    {
+        var filter = new MemoryFilter
+        {
+            Scopes = scopes,
+            Kind = MemoryKind.Journal,
+            Status = MemoryStatus.Active,
+            Tome = tome,
+            ProjectId = projectId,
+            Tags = [_options.DailyTag],
+            CreatedAfter = window.CreatedAfter,
+            CreatedBefore = window.CreatedBefore,
+        };
+
+        // CreatedBefore has been enforced by the store since feature 055: MemoryFilterTranslator maps it
+        // as an exclusive lt bound, the same edge MemoryFilter.Matches uses, so the re-check below is
+        // defensive rather than load-bearing now. It stays because every other bounded reader in the
+        // codebase re-checks the same way (MemoryService.ListAsync, DigestService) and deleting it is
+        // 055's decision, not this one's.
+        var records = await store.ListAsync(filter, cancellationToken);
+        return [.. records.Where(record => filter.Matches(record))];
+    }
+
     private async Task<IReadOnlyList<BriefJournalEntry>> CollectJournalAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
+        IReadOnlySet<Guid>? excludeIds,
         CancellationToken cancellationToken)
     {
         var records = await store.ListAsync(new MemoryFilter
@@ -191,6 +380,7 @@ public sealed class BriefService(
 
         var limit = ClampHint(query.JournalPerScope, DefaultJournalPerScope);
         return records
+            .Where(record => excludeIds is null || !excludeIds.Contains(record.Id))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
             .GroupBy(record => record.Scope)

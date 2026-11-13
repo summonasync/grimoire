@@ -12,6 +12,8 @@ internal sealed record BriefView
 
     public required BriefItemsSection<BriefJournalItem> Journal { get; init; }
 
+    public BriefDailySection? Daily { get; init; }
+
     public BriefTomesSection? Tomes { get; init; }
 
     public required IReadOnlyList<string> Omitted { get; init; }

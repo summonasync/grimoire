@@ -65,7 +65,7 @@ public sealed class McpToolContractTests
         data.Add("memory_persona_get", [], ["tome"]);
         data.Add("memory_compact_candidates", [], ["tome"]);
         data.Add("memory_stats", [], ["tome", "includeTomeCompaction"]);
-        data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome"]);
+        data.Add("memory_brief", [], ["projectId", "scopes", "factsPerScope", "journalPerScope", "tombstoneLimit", "tome", "daily"]);
         data.Add("memory_tome_create", ["key", "description"], []);
         data.Add("memory_scry", ["query"], ["tomes", "includeJournal", "attribution", "limit"]);
         data.Add("projects", ["action"], ["alias", "boardProjectId", "displayName", "paths"]);
