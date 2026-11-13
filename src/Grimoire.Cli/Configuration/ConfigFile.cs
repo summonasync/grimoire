@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Grimoire.Infrastructure.Configuration;
@@ -98,10 +97,7 @@ internal static class ConfigFile
         {
             return ConfigSchema.KindOf(segments) switch
             {
-                ConfigValueKind.Number when double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var nullableNumber)
-                    => JsonValue.Create(nullableNumber)!,
-                ConfigValueKind.Number => throw new CommandException(
-                    "config", $"Configuration property '{key}' must be a number, got '{value}'.", ExitCodes.Config),
+                ConfigValueKind.Number => NumberValue(key, value),
                 ConfigValueKind.Boolean when bool.TryParse(value, out var nullableFlag)
                     => JsonValue.Create(nullableFlag)!,
                 ConfigValueKind.Boolean => throw new CommandException(
@@ -112,9 +108,7 @@ internal static class ConfigFile
 
         if (schema is JsonValue box && box.TryGetValue<decimal>(out _))
         {
-            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
-                ? JsonValue.Create(number)!
-                : throw new CommandException("config", $"Configuration property '{key}' must be a number, got '{value}'.", ExitCodes.Config);
+            return NumberValue(key, value);
         }
 
         if (schema is JsonValue flag && flag.TryGetValue<bool>(out _))
@@ -125,6 +119,22 @@ internal static class ConfigFile
         }
 
         return JsonValue.Create(value)!;
+    }
+
+    private static JsonValue NumberValue(string key, string value)
+    {
+        var verdict = ConfigSchema.ClassifyNumber(value, out var number);
+        if (verdict == NumberVerdict.Finite)
+        {
+            return JsonValue.Create(number)!;
+        }
+
+        throw new CommandException(
+            "config",
+            verdict == NumberVerdict.NotNumber
+                ? $"Configuration property '{key}' must be a number, got '{value}'."
+                : $"Configuration property '{key}' must be a finite number, got '{value}'.",
+            ExitCodes.Config);
     }
 
     private static string? Resolve(JsonObject node, string segment)

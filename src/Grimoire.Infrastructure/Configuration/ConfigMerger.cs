@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -82,10 +81,7 @@ internal static class ConfigMerger
         {
             return ConfigSchema.KindOf(segments) switch
             {
-                ConfigValueKind.Number when double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var nullableNumber)
-                    => JsonValue.Create(nullableNumber),
-                ConfigValueKind.Number => throw new ConfigException(
-                    $"Environment override '{fullName}' must be a number for '{property}'."),
+                ConfigValueKind.Number => NumberValue(fullName, property, value),
                 ConfigValueKind.Boolean when bool.TryParse(value, out var nullableFlag)
                     => JsonValue.Create(nullableFlag),
                 ConfigValueKind.Boolean => throw new ConfigException(
@@ -96,12 +92,7 @@ internal static class ConfigMerger
 
         if (existing is JsonValue candidate && candidate.TryGetValue<decimal>(out _))
         {
-            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
-            {
-                return JsonValue.Create(number);
-            }
-
-            throw new ConfigException($"Environment override '{fullName}' must be a number for '{property}'.");
+            return NumberValue(fullName, property, value);
         }
 
         if (existing is JsonValue flag && flag.TryGetValue<bool>(out _))
@@ -117,8 +108,21 @@ internal static class ConfigMerger
         return JsonValue.Create(value);
     }
 
+    private static JsonNode NumberValue(string fullName, string property, string value)
+    {
+        var verdict = ConfigSchema.ClassifyNumber(value, out var number);
+        if (verdict == NumberVerdict.Finite)
+        {
+            return JsonValue.Create(number);
+        }
+
+        throw new ConfigException(verdict == NumberVerdict.NotNumber
+            ? $"Environment override '{fullName}' must be a number for '{property}'."
+            : $"Environment override '{fullName}' must be a finite number for '{property}'; '{value}' is not.");
+    }
+
     // A nullable option serializes its null default; the node kind carries no type hint,
-    // so a numeric-looking override becomes a number and everything else stays a string.
+    // so an override that reads as a finite number becomes a number and everything else stays a string.
     private static bool IsNullValue(JsonNode? node) =>
         node is null || (node is JsonValue value && value.GetValueKind() == JsonValueKind.Null);
 }
