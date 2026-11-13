@@ -332,6 +332,7 @@ public sealed class MemoryService(
         {
             Scopes = [MemoryScope.Session],
             ExpiresBefore = now,
+            Status = MemoryStatus.Active,
         }, cancellationToken);
 
         var aged = await store.ListAsync(new MemoryFilter
@@ -350,7 +351,22 @@ public sealed class MemoryService(
             await store.DeleteAsync(ids, cancellationToken);
         }
 
-        return new GcResult { ExpiredSessions = expired.Count, AgedTombstones = aged.Count };
+        // Counted after the delete on purpose: a session tombstone can be past TTL and past
+        // retention at once, and then it belongs in AgedTombstones only — reporting the same row
+        // as both removed and retained is the dishonesty this figure exists to remove.
+        var retained = await store.CountAsync(new MemoryFilter
+        {
+            Scopes = [MemoryScope.Session],
+            ExpiresBefore = now,
+            Statuses = [MemoryStatus.Superseded, MemoryStatus.Tombstoned],
+        }, cancellationToken);
+
+        return new GcResult
+        {
+            ExpiredSessions = expired.Count,
+            AgedTombstones = aged.Count,
+            RetainedPastTtl = (int)retained,
+        };
     }
 
     public async Task<MemoryStats> StatsAsync(CancellationToken cancellationToken)
