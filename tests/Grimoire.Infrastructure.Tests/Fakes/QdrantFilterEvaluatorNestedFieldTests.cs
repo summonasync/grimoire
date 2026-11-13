@@ -135,6 +135,86 @@ public sealed class QdrantFilterEvaluatorNestedFieldTests
         new MemoryFilter { Actor = "human" }.Matches(ActorBearingRecord()).ShouldBeTrue();
     }
 
+    [Fact]
+    public void DotPath_IntoAScalarPrefix_AnswersNoMatchLikeTheServer()
+    {
+        // Handed forward from task 02's review as a shape where the double was looser than the
+        // server. Measured directly on 127.0.0.1:6353 against a throwaway collection holding this
+        // same payload: a keyword aimed at "status.x" returns no rows, because a dotted key only
+        // descends into a struct. The old fake stopped at the scalar and matched it — TRUE here.
+        // The second assertion is the control: the row and the value really are there.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["mine"] = Payload(Alias("kelthuzad", "qwen")),
+        };
+
+        MatchingIds(DotFilter("status.x", "Active"), points).ShouldBeEmpty();
+        MatchingIds(DotFilter(MemoryPayloadFields.Status, "Active"), points).ShouldBe(["mine"]);
+    }
+
+    [Fact]
+    public void DotPath_IntoAListPosition_AnswersNoMatchLikeTheServer()
+    {
+        // The fake used to give every list a positional grammar ("tags.1" resolving to the second
+        // element). This server has none: the same query shape over ["a","b"] returned no rows,
+        // while the keyword list the translator actually emits for tags returned the point.
+        //
+        // Side finding, written instead of silently aligned: a SINGLE keyword ("match":"b") over a
+        // list of strings does match on the server and does not here. The translator never emits
+        // that shape (tags go through Conditions.Match, i.e. match.keywords), and a double that is
+        // stricter than the server fails loudly rather than hiding anything — the looser direction
+        // is the one that hides bugs, and that is the direction this guard removes.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["mine"] = TaggedPayload(["a", "b"]),
+        };
+        var anyOfTheProductShapes = new Filter
+        {
+            Must = { Conditions.Match(MemoryPayloadFields.Tags, ["b"]) },
+        };
+
+        MatchingIds(DotFilter("tags.1", "b"), points).ShouldBeEmpty();
+        MatchingIds(anyOfTheProductShapes, points).ShouldBe(["mine"]);
+    }
+
+    [Fact]
+    public void DotPath_ThroughAListOfStructs_AnswersNoMatchLikeTheServer()
+    {
+        // Both dotted shapes over a list of structs, probed on the same collection: implicit
+        // traversal ("items.name") and explicit index ("items.0.name") each answer no rows. The
+        // must-not-is_empty assertion proves the list is actually stored, so this is not an
+        // empty-fixture green.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["mine"] = ItemsPayload(["alpha", "beta"]),
+        };
+        var present = new Condition { IsEmpty = new IsEmptyCondition { Key = "items" } };
+
+        MatchingIds(DotFilter("items.name", "alpha"), points).ShouldBeEmpty();
+        MatchingIds(DotFilter("items.0.name", "alpha"), points).ShouldBeEmpty();
+        MatchingIds(new Filter { MustNot = { present } }, points).ShouldBe(["mine"]);
+    }
+
+    [Fact]
+    public void MalformedKey_RefusesTheQueryInsteadOfAnsweringIt()
+    {
+        // The third divergence is an error shape, not a row shape: "actor." made the server reject
+        // the whole request ("Invalid json path"), while the fake quietly matched nothing. Quiet and
+        // empty is exactly how a loose double hides a bug, so it refuses to answer instead, and a
+        // test that builds such a key fails loudly rather than passing on an empty page.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["mine"] = Payload(Alias("kelthuzad", "qwen")),
+        };
+
+        var thrown = Record.Exception(() =>
+            QdrantFilterEvaluator.Matches(DotFilter("actor.", "kelthuzad"), points["mine"]));
+
+        thrown.ShouldBeOfType<NotSupportedException>();
+        thrown!.Message.ShouldContain("Invalid json path");
+        QdrantFilterEvaluator.Matches(DotFilter("actor.alias", "kelthuzad"), points["mine"]).ShouldBeTrue();
+    }
+
     private static MemoryRecord ActorBearingRecord() =>
         TestMemories.Create("written by the human", actor: MemoryActor.Human);
 
@@ -164,6 +244,38 @@ public sealed class QdrantFilterEvaluatorNestedFieldTests
             [MemoryPayloadFields.Status] = "Active",
             [MemoryPayloadFields.Actor] = new Value { StructValue = actor },
         };
+
+    private static IReadOnlyDictionary<string, Value> TaggedPayload(IReadOnlyList<string> tags)
+    {
+        var list = new ListValue();
+        foreach (var tag in tags)
+        {
+            list.Values.Add(tag);
+        }
+
+        return new Dictionary<string, Value>
+        {
+            [MemoryPayloadFields.Status] = "Active",
+            [MemoryPayloadFields.Tags] = new Value { ListValue = list },
+        };
+    }
+
+    private static IReadOnlyDictionary<string, Value> ItemsPayload(IReadOnlyList<string> names)
+    {
+        var list = new ListValue();
+        foreach (var name in names)
+        {
+            var item = new Struct();
+            item.Fields.Add("name", name);
+            list.Values.Add(new Value { StructValue = item });
+        }
+
+        return new Dictionary<string, Value>
+        {
+            [MemoryPayloadFields.Status] = "Active",
+            ["items"] = new Value { ListValue = list },
+        };
+    }
 
     private static string[] MatchingIds(Filter filter, IReadOnlyDictionary<string, IReadOnlyDictionary<string, Value>> points)
     {

@@ -97,9 +97,24 @@ public static class QdrantFilterEvaluator
     // top level, which made it answer "no match" for anything aimed inside a struct — an actor
     // condition among them. Absent segment and null value both resolve to "not there", matching
     // what the server reported when probed directly.
+    //
+    // The grammar is deliberately no wider than the server's, measured on 1.19 against a throwaway
+    // collection: a dotted key walks into structs only. "status.x" (a scalar prefix), "tags.1"
+    // (a positional index) and "items.name" / "items.0.name" (a list of structs) all answered with
+    // no rows there, so they answer with no rows here. A malformed path ("actor.") was refused by
+    // the server as a bad request rather than matched silently, so it throws here — a test double
+    // that answers a query the server would never run is the looseness this feature exists to kill.
     private static bool TryResolve(IReadOnlyDictionary<string, Value> payload, string key, out Value value)
     {
         var segments = key.Split('.');
+
+        if (Array.IndexOf(segments, string.Empty) >= 0)
+        {
+            throw new NotSupportedException(
+                $"Key '{key}' is not a valid json path. Real Qdrant refuses the whole request with " +
+                "\"Invalid json path\", so the fake refuses to answer it instead of matching nothing.");
+        }
+
         var current = new Value();
         var fields = (IReadOnlyDictionary<string, Value>?)payload;
 
@@ -113,29 +128,21 @@ public static class QdrantFilterEvaluator
 
             // The last segment resolves to whatever it holds, container included: a plain keyword on
             // "actor" is a real query shape and the server answers it with no match, not with an error.
-            if (index == segments.Length - 1 || current.KindCase is not (Value.KindOneofCase.StructValue or Value.KindOneofCase.ListValue))
+            if (index == segments.Length - 1)
             {
                 break;
             }
 
-            fields = current.KindCase == Value.KindOneofCase.StructValue
-                ? current.StructValue.Fields
-                : ToIndexedFields(current.ListValue.Values);
+            if (current.KindCase != Value.KindOneofCase.StructValue)
+            {
+                value = new Value();
+                return false;
+            }
+
+            fields = current.StructValue.Fields;
         }
 
         value = current;
         return true;
-    }
-
-    private static IReadOnlyDictionary<string, Value> ToIndexedFields(IEnumerable<Value> values)
-    {
-        var indexed = new Dictionary<string, Value>();
-        var index = 0;
-        foreach (var item in values)
-        {
-            indexed[index++.ToString(CultureInfo.InvariantCulture)] = item;
-        }
-
-        return indexed;
     }
 }
