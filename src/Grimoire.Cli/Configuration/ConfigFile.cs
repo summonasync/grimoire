@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
 
 namespace Grimoire.Cli.Configuration;

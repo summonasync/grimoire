@@ -1,4 +1,5 @@
 using System.Globalization;
+using Grimoire.Core;
 
 namespace Grimoire.Infrastructure.Configuration;
 
@@ -7,18 +8,6 @@ public enum ConfigValueKind
     Text,
     Number,
     Boolean,
-}
-
-/// <summary>
-/// Outcome of reading override text against the numeric grammar both config doors share.
-/// Only <see cref="Finite"/> may reach the options tree: a value that parses but is not
-/// finite aborts the later deserialization as an unclassified runtime failure.
-/// </summary>
-public enum NumberVerdict
-{
-    Finite,
-    NotNumber,
-    NonFinite,
 }
 
 /// <summary>
