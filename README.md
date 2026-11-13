@@ -373,11 +373,14 @@ Standing rules, enforced from day one:
 
 - **No silent deletes.** `forget` writes a tombstone (status + reason +
   timestamp); only the GC hard-deletes — expired **Active** session records and
-  aged tombstones. A session record past its TTL in another status stays, by
-  decision: superseded rows are what the correction chain reads through, so GC
-  reports them (`past TTL kept by policy`) instead of reaping them
-  (ADR-005, 2026-11-13 amendment). The one extra hard-delete door is the human's: the console
-  tome purge, gated by a typed confirmation (ADR-005 amendment).
+  aged tombstones. A session record past its TTL is not reaped by that rule once
+  it changes status: a Superseded one stays for good (the correction chain reads
+  through it), a Tombstoned one stays until retention retires it as an aged
+  tombstone. Either way GC reports the leftover (`past TTL kept by policy`)
+  instead of pretending it is zero — superseded rows are what the correction
+  chain reads through (ADR-005, 2026-11-13 amendment). The one extra hard-delete
+  door is the human's: the console tome purge, gated by a typed confirmation
+  (ADR-005 amendment).
 - **Every write carries provenance** — agent alias+vendor, or `human`.
 - **Project writes carry a registered projectId.** scope=`project` is
   rejected at the write door unless the projectId names an entry of the
