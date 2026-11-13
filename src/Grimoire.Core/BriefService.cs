@@ -353,10 +353,11 @@ public sealed class BriefService(
             CreatedBefore = window.CreatedBefore,
         };
 
-        // The store cannot enforce CreatedBefore: MemoryFilterTranslator has no branch for it and
-        // QdrantMemoryStore does not post-filter, so an upper bound sent here would be answered as
-        // "everything at or after CreatedAfter". Every other bounded reader in the codebase
-        // (MemoryService.ListAsync, DigestService) re-checks with Matches for exactly this reason.
+        // CreatedBefore has been enforced by the store since feature 055: MemoryFilterTranslator maps it
+        // as an exclusive lt bound, the same edge MemoryFilter.Matches uses, so the re-check below is
+        // defensive rather than load-bearing now. It stays because every other bounded reader in the
+        // codebase re-checks the same way (MemoryService.ListAsync, DigestService) and deleting it is
+        // 055's decision, not this one's.
         var records = await store.ListAsync(filter, cancellationToken);
         return [.. records.Where(record => filter.Matches(record))];
     }
