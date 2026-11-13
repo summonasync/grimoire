@@ -47,6 +47,8 @@ public sealed class ConfigLoaderTests : IDisposable
         options.DefaultTome.ShouldBe(TomeKey.DefaultTome);
         options.Serve.Port.ShouldBe(4770);
         options.Serve.GcIntervalMinutes.ShouldBe(30);
+        options.Sessions.RetentionHours.ShouldBeNull();
+        options.SessionsRetentionHoursOrDefault.ShouldBe(24);
         options.Projects.ShouldBeEmpty();
     }
 
@@ -182,6 +184,16 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithNumericLookingApiKeyOverride_StaysAString()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_QDRANT__APIKEY", "12345")]);
+
+        var options = loader.Load();
+
+        options.Qdrant.ApiKey.ShouldBe("12345");
+    }
+
+    [Fact]
     public void Load_WithDailyTagEnvironmentOverride_AppliesValue()
     {
         var loader = Loader(MissingPath(), [("GRIMOIRE_MEMORY__DAILYTAG", "field-notes")]);
@@ -243,6 +255,59 @@ public sealed class ConfigLoaderTests : IDisposable
         exception.Message.ShouldContain("number");
     }
 
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public void Load_WithNonFiniteOverrideOfNullableNumber_Throws(string value)
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SESSIONS__RETENTIONHOURS", value)]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            $"Environment override 'GRIMOIRE_SESSIONS__RETENTIONHOURS' must be a finite number for 'retentionHours'; '{value}' is not.");
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public void Load_WithNonFiniteOverrideOfNumberedDefault_Throws(string value)
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORT", value)]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            $"Environment override 'GRIMOIRE_SERVE__PORT' must be a finite number for 'port'; '{value}' is not.");
+    }
+
+    [Theory]
+    [InlineData("GRIMOIRE_SESSIONS__RETENTIONHOURS", "retentionHours")]
+    [InlineData("GRIMOIRE_SERVE__PORT", "port")]
+    public void Load_WithNonNumericEnvironmentOverride_KeepsThePlainNumberMessage(string name, string property)
+    {
+        var loader = Loader(MissingPath(), [(name, "banana")]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe($"Environment override '{name}' must be a number for '{property}'.");
+    }
+
+    [Fact]
+    public void Load_WithExponentOrFractionEnvironmentOverride_StillCoercesToNumber()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SERVE__PORT", "1e3"), ("GRIMOIRE_SESSIONS__RETENTIONHOURS", "0.5")]);
+
+        var options = loader.Load();
+
+        options.Serve.Port.ShouldBe(1000);
+        options.Sessions.RetentionHours.ShouldBe(0.5);
+    }
+
     [Fact]
     public void Load_WithExplicitNullSection_Throws()
     {
@@ -267,6 +332,39 @@ public sealed class ConfigLoaderTests : IDisposable
         var options = new ConfigLoader(path, EmptyEnvironment).Load();
 
         options.Qdrant.ApiKey.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithSessionsRetentionHours_RoundTripsConfiguredValue()
+    {
+        var path = WriteConfig("""{ "memory": { "sessionTtlHours": 12 }, "sessions": { "retentionHours": 48 } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Sessions.RetentionHours.ShouldBe(48);
+        options.SessionsRetentionHoursOrDefault.ShouldBe(48);
+    }
+
+    [Fact]
+    public void Load_WithoutSessionsRetentionHours_FallsBackToMemorySessionTtl()
+    {
+        var path = WriteConfig("""{ "memory": { "sessionTtlHours": 6 } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Sessions.RetentionHours.ShouldBeNull();
+        options.SessionsRetentionHoursOrDefault.ShouldBe(6);
+    }
+
+    [Fact]
+    public void Load_WithNullableNumberEnvironmentOverride_AppliesSessionsRetentionHours()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_SESSIONS__RETENTIONHOURS", "36")]);
+
+        var options = loader.Load();
+
+        options.Sessions.RetentionHours.ShouldBe(36);
+        options.SessionsRetentionHoursOrDefault.ShouldBe(36);
     }
 
     [Fact]
@@ -362,6 +460,99 @@ public sealed class ConfigLoaderTests : IDisposable
         var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
 
         exception.Message.ShouldContain("pathz");
+    }
+
+    [Theory]
+    [InlineData(
+        """{ "qdrant": { "collection": "shared", "manifestCollection": "shared" } }""",
+        "qdrant.manifestCollection 'shared' is the same collection as qdrant.collection.")]
+    [InlineData(
+        """{ "qdrant": { "collection": "shared", "sessionCollection": "shared" } }""",
+        "qdrant.sessionCollection 'shared' is the same collection as qdrant.collection.")]
+    [InlineData(
+        """{ "qdrant": { "collection": "mem", "manifestCollection": "mem-sessions" } }""",
+        "qdrant.sessionCollection 'mem-sessions' is the same collection as qdrant.manifestCollection.")]
+    public void Load_WithCollidingQdrantCollections_Throws(string json, string violation)
+    {
+        var path = WriteConfig(json);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldBe($"Qdrant collections are invalid: {violation}");
+    }
+
+    [Theory]
+    [InlineData("""{ "qdrant": { "collection": "" } }""", "qdrant.collection")]
+    [InlineData("""{ "qdrant": { "collection": "   " } }""", "qdrant.collection")]
+    [InlineData("""{ "qdrant": { "manifestCollection": "" } }""", "qdrant.manifestCollection")]
+    [InlineData("""{ "qdrant": { "sessionCollection": "  " } }""", "qdrant.sessionCollection")]
+    public void Load_WithBlankQdrantCollectionName_Throws(string json, string knob)
+    {
+        var path = WriteConfig(json);
+
+        var exception = Should.Throw<ConfigException>(() => new ConfigLoader(path, EmptyEnvironment).Load());
+
+        exception.Message.ShouldBe($"Qdrant collections are invalid: {knob} must not be empty.");
+    }
+
+    [Fact]
+    public void Load_WithQdrantDefaults_KeepsThreeDistinctCollections()
+    {
+        var options = new ConfigLoader(MissingPath(), EmptyEnvironment).Load();
+
+        var effective = new[]
+        {
+            options.Qdrant.Collection,
+            options.Qdrant.ManifestCollectionOrDefault,
+            options.Qdrant.SessionCollectionOrDefault,
+        };
+
+        effective.ShouldBe(["grimoire", "grimoire-manifests", "grimoire-sessions"]);
+        options.Qdrant.ManifestCollection.ShouldBeNull();
+        options.Qdrant.SessionCollection.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Load_WithRenamedMemoryCollection_KeepsTheDerivedSiblingsDistinct()
+    {
+        var path = WriteConfig("""{ "qdrant": { "collection": "vault" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.ManifestCollectionOrDefault.ShouldBe("vault-manifests");
+        options.Qdrant.SessionCollectionOrDefault.ShouldBe("vault-sessions");
+    }
+
+    [Fact]
+    public void Load_WithSessionCollectionNamedLikeItsOwnDerivation_Loads()
+    {
+        var path = WriteConfig("""{ "qdrant": { "sessionCollection": "grimoire-sessions" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.SessionCollection.ShouldBe("grimoire-sessions");
+    }
+
+    [Fact]
+    public void Load_WithCollectionsDifferingOnlyByCase_Loads()
+    {
+        var path = WriteConfig("""{ "qdrant": { "collection": "Grimoire", "sessionCollection": "grimoire" } }""");
+
+        var options = new ConfigLoader(path, EmptyEnvironment).Load();
+
+        options.Qdrant.Collection.ShouldBe("Grimoire");
+        options.Qdrant.SessionCollection.ShouldBe("grimoire");
+    }
+
+    [Fact]
+    public void Load_WithCollidingCollectionsFromEnvironmentOverride_Throws()
+    {
+        var loader = Loader(MissingPath(), [("GRIMOIRE_QDRANT__SESSIONCOLLECTION", "grimoire")]);
+
+        var exception = Should.Throw<ConfigException>(() => loader.Load());
+
+        exception.Message.ShouldBe(
+            "Qdrant collections are invalid: qdrant.sessionCollection 'grimoire' is the same collection as qdrant.collection.");
     }
 
     private static ConfigLoader Loader(

@@ -22,4 +22,21 @@ public sealed class QdrantOptionsTests
 
         options.ManifestCollectionOrDefault.ShouldBe("custom");
     }
+
+    [Fact]
+    public void SessionCollection_WhenUnset_DerivesFromTheMemoryCollection()
+    {
+        var options = new QdrantOptions { Collection = "grimoire" };
+
+        options.SessionCollection.ShouldBeNull();
+        options.SessionCollectionOrDefault.ShouldBe("grimoire-sessions");
+    }
+
+    [Fact]
+    public void SessionCollection_WhenSet_OverridesTheDerivedName()
+    {
+        var options = new QdrantOptions { Collection = "grimoire", SessionCollection = "custom-sessions" };
+
+        options.SessionCollectionOrDefault.ShouldBe("custom-sessions");
+    }
 }
