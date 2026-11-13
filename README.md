@@ -39,9 +39,10 @@ One binary, three faces:
 
 **Status**: the MVP plus honest-writes, startup-brief and the tome model are
 landed and acceptance-verified end to end — all three faces (CLI, MCP stdio,
-loopback web console) round-trip against a live Qdrant + Ollama, 2068 tests
-green. Live work tracking happens on the Overmind board; this README
-describes the shipped shape plus the frozen contracts.
+loopback web console) round-trip against a live Qdrant + Ollama. Test counts
+live in git, the CI run and the board — not in this paragraph, because a number
+here goes stale on every merge. Live work tracking happens on the Overmind
+board; this README describes the shipped shape plus the frozen contracts.
 
 ## Why it exists
 
