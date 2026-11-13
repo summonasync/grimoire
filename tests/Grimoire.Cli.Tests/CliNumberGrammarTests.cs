@@ -156,6 +156,7 @@ public sealed class CliNumberGrammarTests : IDisposable
             CultureInfo.CurrentCulture = comma;
 
             CliValues.Unit(ListSpec(), "importance", "1e-2").ShouldBe(0.01);
+            CliValues.Unit(ListSpec(), "importance", "1e-999").ShouldBe(0.0);
             CliValues.Hours(ListSpec(), "ttl", "0.5").ShouldBe(0.5);
             Should.Throw<UsageException>(() => CliValues.Unit(ListSpec(), "importance", "NaN"));
             Should.Throw<UsageException>(() => CliValues.Hours(ListSpec(), "ttl", "Infinity"));
