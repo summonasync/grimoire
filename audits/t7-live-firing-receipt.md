@@ -207,3 +207,150 @@ own copy under the scratch `HOME`, and only `stat` (mtime/size, unchanged) was t
   (`grimoire-session-start: …`), session unaffected — measured end to end at FIRE 4.
 - Startup costs ~0.4 s of `dotnet`-carrier wall time (0.82 s on PowerShell 7.7); the brief itself is the
   payload, currently ~770 bytes for a near-empty tome and ~28 KB for the crew tome's full brief.
+
+---
+
+# FIX-RECEIPT — reopen after review 046-08 (SF-1 / SF-2)
+
+Same task, two acceptance items carried in from the light review (AC5 = SF-1 `.ps1` waits stdin EOF,
+AC6 = SF-2 `.sh` passes `HOOK_GRIMOIRE_TIMEOUT` raw into `timeout`). Both fixed, nothing else changed.
+Base commit for the diff: `b056a81` (the shipped scripts) on top of `036775e`.
+
+## New hashes — these are the ones T8's README and result must cite
+
+```
+36f2aa8c6005a02e20d0988ec33a3a943a94b99bf2e787a2f98905a1430dfd73  deploy/hooks/grimoire-session-start.sh
+08f69fed6e100592870ba08004b5f3e61d690f697e7c69f038157237e5e63d01  deploy/hooks/grimoire-session-start.ps1
+```
+
+Replaces `e6580828…` (.sh) and `015e5831…` (.ps1) from the first receipt. Diff numstat, uncommitted:
+
+```
+5   0   deploy/hooks/grimoire-session-start.sh
+28  3   deploy/hooks/grimoire-session-start.ps1
+```
+
+## The two changes
+
+**.sh — one guard line, right after the knob is read (SF-2):**
+
+```bash
+[[ "$budget" =~ ^[0-9]+$ ]] && ((10#$budget > 0)) || budget=10
+```
+
+Acceptance set is deliberately identical to the `.ps1`'s existing `TryParse` + `-gt 0`: digits only, not
+zero, `10#` so a leading zero reads as 7 rather than as octal or as a rejected typo. Deviation from the
+suggested `^[1-9][0-9]*$` shape: that pattern rejects `07` while the `.ps1` accepts it, which would have
+put the twins out of step on one value — the whole point of the item.
+
+**.ps1 — the drain no longer runs on `[Console]::In` (SF-1).** Root cause, measured not guessed:
+`[Console]::In.ReadToEndAsync()` does not hand control back while a writer holds stdin open, so the
+script never reached the brief at all, and `[Console]::In.Dispose()` cannot help because the script
+thread is already inside the call. The shipped drain now reads the raw `[Console]::OpenStandardInput()`
+stream in a loop bounded by the budget (`ReadAsync` + `Wait(left)` against a `Stopwatch` deadline) and
+calls `Release-Stdin` — cancel-free, idempotent disposal of that stream — as soon as it stops waiting,
+so no exit path (brief, bail, outer trap) still owns the fd.
+
+## SF-1 wedge matrix — writer sends the payload plus 200 KB, marks its own flush, then never closes
+
+Pipe buffer is 64 KB, so `drained=YES` proves the read consumed everything rather than erroring out, and
+`envelope` distinguishes forwarded-from-empty-from-nothing (a first version of this fixture truncated
+stdout to 44 chars and could not tell the two envelopes apart — discarded).
+
+| target | twin | budget | rc | wall_ms | within budget+3s | drained | envelope |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| OLD `b056a81` | sh | 3 | 0 | 3041 | yes | YES | FORWARDED |
+| OLD | ps | 3 | **124** | **35020** (cap) | **NO** | YES | **NONE** |
+| OLD | sh | 2 | 0 | 2038 | yes | YES | FORWARDED |
+| OLD | ps | 2 | **124** | **35020** (cap) | **NO** | YES | **NONE** |
+| OLD | sh | 5 | 0 | 5039 | yes | YES | FORWARDED |
+| OLD | ps | 5 | **124** | **35020** (cap) | **NO** | YES | **NONE** |
+| NEW | sh | 3 | 0 | 3037 | yes | YES | FORWARDED |
+| NEW | ps | 3 | 0 | **3426** | yes | YES | **FORWARDED** |
+| NEW | sh | 2 | 0 | 2039 | yes | YES | FORWARDED |
+| NEW | ps | 2 | 0 | **2413** | yes | YES | **FORWARDED** |
+| NEW | sh | 5 | 0 | 5039 | yes | YES | FORWARDED |
+| NEW | ps | 5 | 0 | **5422** | yes | YES | **FORWARDED** |
+
+The `.ps1` now costs its budget plus ~400 ms of teardown, at every budget, and the brief still gets
+through. Control rows under the same wedged writer: trivial `pwsh` 285 ms, trivial `bash` 8 ms.
+
+## SF-2 budget-value matrix — CLI stub hangs 25 s, stdin=/dev/null so the drain cannot colour the wall
+
+| value | OLD sh | OLD ps | NEW sh | NEW ps |
+| --- | --- | --- | --- | --- |
+| `3` | 3026ms, cut ✓ | 3787ms, cut ✓ | 3028ms, cut ✓ | 3827ms, cut ✓ |
+| `abc` | **24ms, CLI never reached**, stderr `timeout: invalid tim…` | 10816ms ✓ | 10026ms, cut at the default ✓ | 10808ms ✓ |
+| `0` | **25043ms — unbounded, brief forwarded after the CLI's 25s hang** | 10792ms ✓ | 10026ms ✓ | 10799ms ✓ |
+| `-3` | **22ms, CLI never reached**, stderr `error: unexpected ar…` | 10775ms ✓ | 10029ms ✓ | 10814ms ✓ |
+| `1.5` | 1526ms (GNU read it as 1.5 s — silently a different budget than asked) | 10768ms ✓ | 10026ms ✓ | 10804ms ✓ |
+| `''` / unset | 10027 / 10027ms ✓ | 10792 / 10771ms ✓ | 10028 / 10026ms ✓ | 10817 / 10807ms ✓ |
+
+And with a healthy (instant) CLI, every one of those values still **forwards the brief** on both twins
+(`FORWARDED` in all 14 NEW rows, 37-45 ms on `.sh`, 415-450 ms on `.ps1`): the guard rescues the knob, it
+does not spend the brief. rc stayed 0 everywhere, as the contract requires.
+
+## Nothing else moved
+
+* Contract harness on the new bytes: **42/42 pass** — parity, all four failure shapes, missing binary,
+  no-trailing-newline, budget cut (`sh` 2026 ms / `ps` 2808 ms at budget 2), envelope shape.
+* Live byte parity, read-only brief through the real CLI: `up sh` rc=0 528 ms / `up ps` rc=0 910 ms,
+  334 bytes each, `cmp` clean against the direct CLI stdout **and** against each other, canary present in
+  both envelopes.
+* Fail-open re-measured without stopping any container: refused port `127.0.0.1:59999` → both twins rc=0,
+  identical empty envelope, one stderr line (`upstream_unavailable`), 243 ms / 749 ms; unroutable
+  `10.255.255.1:6334` → rc=0, empty envelope, cut at 10031/10721 ms (default) and 2032/2755 ms
+  (`HOOK_GRIMOIRE_TIMEOUT=2`).
+* After the sweep: qdrant 6353 healthz=200, `grimoire brief` still answers, `grimoire serve /health`
+  healthy, squeezr 6333 untouched at 200.
+* Static gates: `bash -n` 0, PowerShell language parser 0; both files still ASCII-only; `shellcheck` still
+  not installed on this box (disclosed, not passed).
+
+## Method honesty — three of my own fixtures were wrong before they were right
+
+Recorded because a receipt that hides its own re-dos is worth less:
+1. First wedge fixture exported `HOOK_GRIMOIRE_BIN` but never `HOOK_GRIMOIRE_TIMEOUT`, so the `.sh` rows
+   all read 10029 ms (the default) instead of the budget under test.
+2. First budget matrix recreated the "hanging" stub without its `sleep` and fed stdin from a here-string,
+   which keeps the write end open — every row then measured the drain eating the budget, not the CLI cut.
+   Both runs discarded; the tables above are the corrected fixtures, re-measured against `b056a81` and the
+   working tree in one sequential pass (never concurrent: overlapping wall-time measurements lie).
+3. The B3 "both hazards" rows are **not** wedge evidence — that arm's stdin closed at EOF. The wedge
+   evidence is the matrix above, which holds the pipe open through a `mkfifo` writer that never exits.
+4. `pkill -f` is still banned here for a reason: killed by PID file throughout, one runaway probe stub
+   chased down by PID.
+
+### Why my OLD-column walls differ from the review's (same bug, same direction)
+
+Review 046-08 measured the `.ps1` at 20 187 / 15 884 ms under budgets 3 / 2; my re-run of the same
+`b056a81` bytes hit the 35 s cap instead. The fixture is what differs, and it pins the mechanism down:
+this fixture pushes the payload plus 200 KB and then holds the pipe open, so `[Console]::In`'s pump keeps
+finding bytes and never returns control to `Wait` at all; with a writer that hands over a small payload
+and then merely stops closing, `Wait` does return at the budget and the abandoned pump is what costs the
+extra ~17 s at process exit. Both shapes are the same un-detachable pump on the same line, both blow the
+budget by an order of magnitude, and the fix closes both - which is why the NEW column is now
+budget + ~400 ms rather than either number.
+
+## Hash correction and the final-bytes re-verification (read this last)
+
+The `.ps1` hash above is `08f69fed…`, not the `c2b6d755…` this section first recorded: after the matrices
+ran, one comment line inside the new drain was itself wrong — it quoted `25 018 ms` as if it were a
+measurement of the bug, when that number was a test-harness *timeout*. Behavior-neutral (comment only),
+but the receipt cannot cite a hash whose comment misstates its own evidence, so it was corrected and
+everything that matters was re-measured on the final bytes. `c2b6d755…` and `e6580828…` are both dead;
+cite `36f2aa8c…` / `08f69fed…`.
+
+Final-bytes verification, one pass, 20/20:
+
+```
+gates     bash -n rc=0 · PowerShell parser rc=0 ("ps1 parse OK") · both files ASCII-only
+wedge b3  sh rc=0 3035 ms · ps rc=0 3570 ms (budget 3 + 3 s grace) · fixture drained in both
+parity    .sh == .ps1 == direct CLI stdout, 28 627 bytes each, read-only live brief, one line each
+knob      HOOK_GRIMOIRE_TIMEOUT = abc / 0 / -3 / 1.5 / '' → rc=0 and the brief still forwarded on .sh
+fail-open refused port 59999: .sh and .ps1 both rc=0, byte-identical EMPTY envelope, one stderr line
+```
+
+Review-quoted numbers stay quoted as the review's own measurements (20 187 / 15 884 ms for SF-1,
+the rc=125 and `0`-means-no-limit findings for SF-2); the numbers in the tables above are mine, and the
+`35 020 ms` cap row in the OLD column is my harness's timeout firing, which is exactly the distinction the
+corrected comment now makes.

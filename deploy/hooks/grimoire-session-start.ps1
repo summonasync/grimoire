@@ -6,6 +6,16 @@
 
 $emptyEnvelope = '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}'
 $emitted = $false
+$stdinStream = $null
+
+function Release-Stdin {
+    # Idempotent: the drain calls it as soon as it stops waiting, so every later path (brief, bail,
+    # outer trap) already has the stream gone.
+    if ($script:stdinStream) {
+        try { $script:stdinStream.Dispose() } catch { }
+        $script:stdinStream = $null
+    }
+}
 
 function Send-EmptyEnvelope([string]$reason) {
     $script:emptyEnvelope | Write-Output
@@ -30,10 +40,26 @@ try {
     }
 
     # Drain the payload to nothing: none of its fields matter to a brief, and a pipe nobody reads can
-    # wedge its writer. The async read is bounded so a runtime that keeps stdin open cannot hang us.
+    # wedge its writer. Deliberately NOT [Console]::In.ReadToEndAsync() - that pump never gives control
+    # back while a writer holds stdin open, so the script never reaches the brief at all: review 046-08
+    # measured 20 187/15 884 ms at budgets 3/2 against the .sh twin's 3 012 ms, and re-running the same
+    # bytes here, the read had still not returned at a 35 s cap. The raw stream read with a bounded Wait
+    # does both jobs: it drained the full 200 KB fixture and abandoned at the budget.
     if ([Console]::IsInputRedirected) {
-        $drain = [Console]::In.ReadToEndAsync()
-        [void]$drain.Wait($budgetSeconds * 1000)
+        $buffer = New-Object byte[] 16384
+        $script:stdinStream = [Console]::OpenStandardInput()
+        $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            while ($true) {
+                $left = ($budgetSeconds * 1000) - $clock.ElapsedMilliseconds
+                if ($left -le 50) { break }
+                $read = $script:stdinStream.ReadAsync($buffer, 0, $buffer.Length)
+                if (-not $read.Wait([int]$left)) { break }
+                if ($read.Result -le 0) { break }
+            }
+        } catch { }
+        # The abandoned read stays pending on the fd, and that is what would hold the process at exit.
+        Release-Stdin
     }
 
     $target = $env:HOOK_GRIMOIRE_BIN

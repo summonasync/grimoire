@@ -31,6 +31,11 @@ bail() {
 # endpoint spends the whole budget. HOOK_ prefix, not GRIMOIRE_: the CLI reads every GRIMOIRE_*
 # variable as a config overlay, so a name it does not own breaks the call it tunes.
 budget=${HOOK_GRIMOIRE_TIMEOUT:-10}
+# Validated, never passed through: a non-numeric value makes timeout itself fail (rc 125) and skips both
+# the stdin drain and the brief, and 0 is GNU's "no limit" - the unbounded call the budget exists to
+# prevent. One line, same acceptance set as the .ps1's TryParse + -gt 0 (10# so a leading zero reads as
+# 7, not as octal or as a rejected typo), so one knob value means one thing on both platforms.
+[[ "$budget" =~ ^[0-9]+$ ]] && ((10#$budget > 0)) || budget=10
 
 # Drain the payload (session_id, cwd, source, ...) to nothing: leaving it unread can wedge the runtime's
 # writer, and none of those fields matter to a brief. The CLI gets /dev/null instead of the leftovers.
