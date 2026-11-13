@@ -118,4 +118,52 @@ public sealed class NumericGrammarTests
             number.ShouldBe((double)whole);
         }
     }
+
+    [Theory]
+    [InlineData("1e-999")]
+    [InlineData("-1e-999")]
+    [InlineData("1e-100")]
+    public void TryWholeNumber_UnderflowedExponentLiteralsMeasureAsZero(string value)
+    {
+        var accepted = NumericGrammar.TryWholeNumber(value, out var whole);
+
+        accepted.ShouldBeTrue();
+        whole.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("1e-999")]
+    [InlineData("-1e-999")]
+    public void Classify_UnderflowedExponentLiteralsMeasureAsFiniteZero(string value)
+    {
+        NumericGrammar.Classify(value, out var number).ShouldBe(NumberVerdict.Finite);
+        number.ShouldBe(0d);
+    }
+
+    [Theory]
+    [InlineData("1234567890123456789012345678")]
+    [InlineData("1234567890123456789012345678.5")]
+    [InlineData("123456789012345678901234567890")]
+    [InlineData("123456789012345678901234567890.5")]
+    [InlineData("1e30")]
+    [InlineData("1e15")]
+    public void TryWholeNumber_RejectsLiteralsTooWideForIntEvenWhenTheyAreWholeLooking(string value)
+    {
+        var accepted = NumericGrammar.TryWholeNumber(value, out var whole);
+
+        accepted.ShouldBeFalse();
+        whole.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("1234567890123456789012345678")]
+    [InlineData("1234567890123456789012345678.5")]
+    [InlineData("123456789012345678901234567890")]
+    [InlineData("1e30")]
+    [InlineData("1e15")]
+    public void Classify_AcceptsWideDigitRunsThatTheWholeNumberRuleRefuses(string value)
+    {
+        NumericGrammar.Classify(value, out var number).ShouldBe(NumberVerdict.Finite);
+        number.ShouldBeGreaterThan(int.MaxValue);
+    }
 }
