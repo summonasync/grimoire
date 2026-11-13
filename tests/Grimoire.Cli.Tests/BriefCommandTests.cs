@@ -223,6 +223,25 @@ public sealed class BriefCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Brief_DailyFlag_LastWorkingDayGroupPrintsAheadOfToday()
+    {
+        SeedDaily(_host.Store, "friday seam landed", -24 * 60, "medivh", "claude");
+        SeedDaily(_host.Store, "saturday note on the door", 0, "radim", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        var today = ExpectedLocalDay();
+        var lastWorkingDay = ExpectedLocalDay(-24 * 60);
+        lastWorkingDay.ShouldNotBe(today);
+        LineIndex(output, $"  {lastWorkingDay} last-working-day medivh (1)").ShouldNotBe(-1);
+        LineIndex(output, $"  {today} today radim (1)").ShouldNotBe(-1);
+        LineIndex(output, " last-working-day medivh").ShouldBeLessThan(LineIndex(output, " today radim"));
+        WarningLines(output).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Brief_WithoutDailyFlag_RendersNoDailySection()
     {
         var note = SeedDaily(_host.Store, "a daily note plain brief must not announce", 0, "medivh", "claude");
@@ -237,6 +256,22 @@ public sealed class BriefCommandTests : IDisposable
 
         declined.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         _host.Output.ToString().ShouldNotContain("daily:");
+    }
+
+    [Fact]
+    public async Task Brief_WithoutDailyFlag_StaysSilentOnWarningsEvenWhenTheZoneIsDead()
+    {
+        using var host = new TestHost(options: new MemoryEngineOptions { DailyTimeZone = "Not/AZone" });
+        var note = SeedDaily(host.Store, "a note the journal path can still show", 0, "medivh", "claude");
+
+        var code = await host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldNotContain("daily:");
+        WarningLines(output).ShouldBeEmpty();
+        output.ShouldContain(note.Id.ToString(),
+            customMessage: "the note is renderable on this seam, so the silence below is earned and not a cold store");
     }
 
     [Fact]
@@ -374,8 +409,9 @@ public sealed class BriefCommandTests : IDisposable
         return record;
     }
 
-    private static string ExpectedLocalDay() =>
-        TimeZoneInfo.ConvertTime(FakeClock.DefaultStart, TimeZoneInfo.Local).ToString("yyyy-MM-dd");
+    private static string ExpectedLocalDay(int minutesFromClockStart = 0) =>
+        TimeZoneInfo.ConvertTime(FakeClock.DefaultStart.AddMinutes(minutesFromClockStart), TimeZoneInfo.Local)
+            .ToString("yyyy-MM-dd");
 
     private static int LineIndex(string output, string needle) =>
         Array.FindIndex(
