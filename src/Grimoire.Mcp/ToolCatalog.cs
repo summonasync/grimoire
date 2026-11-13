@@ -9,10 +9,9 @@ namespace Grimoire.Mcp;
 internal static class ToolCatalog
 {
     public static IReadOnlyList<McpServerTool> CreateTools(
-        McpHostOptions options,
         IServiceProvider services,
-        ClientInfoHolder clientInfo,
-        SessionIdentityHolder sessionIdentity)
+        SessionIdentityHolder sessionIdentity,
+        MemoryActorProvider actors)
     {
         var store = Require<IMemoryStore>(services);
         var embeddings = Require<IEmbeddingProvider>(services);
@@ -40,21 +39,10 @@ internal static class ToolCatalog
         var digests = new DigestService(store, embeddings, clock, engineOptions);
         var corrections = new CorrectionService(store, clock, engineOptions);
         var callerPaths = Require<ICallerPathProvider>(services);
-        var claims = Require<IActorClaimProvider>(services);
-        var identityFile = options.IdentityFile ?? new UnsetAgentIdentitySource();
         var registryStore = Require<IProjectRegistryStore>(services);
         var projects = new LiveProjectRegistry(registryStore);
         var projectTags = new ProjectTagResolver(projects);
         var projectSync = new ProjectSyncService(Require<IBoardProjectSource>(services), registryStore);
-        var actors = new MemoryActorProvider(
-            options.Actor,
-            options.EnvTome,
-            options.EnvActor,
-            sessionIdentity,
-            identityFile,
-            clientInfo,
-            claims,
-            new TomeResolver(engineOptions));
 
         return
         [

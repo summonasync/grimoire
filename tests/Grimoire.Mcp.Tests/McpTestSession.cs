@@ -27,6 +27,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeConsolidationStateStore consolidationState,
         FakeProjectRegistryStore registry,
         FakeTomeManifestStore manifests,
+        FakeSessionRegistry sessions,
         McpClient client,
         Channel<JsonRpcMessage> clientToServer,
         Channel<JsonRpcMessage> serverToClient,
@@ -40,6 +41,7 @@ internal sealed class McpTestSession : IAsyncDisposable
         Consolidation = consolidationState;
         Registry = registry;
         Manifests = manifests;
+        Sessions = sessions;
         Client = client;
         _clientToServer = clientToServer;
         _serverToClient = serverToClient;
@@ -60,6 +62,8 @@ internal sealed class McpTestSession : IAsyncDisposable
     public FakeProjectRegistryStore Registry { get; }
 
     public FakeTomeManifestStore Manifests { get; }
+
+    public FakeSessionRegistry Sessions { get; }
 
     public McpClient Client { get; }
 
@@ -82,7 +86,9 @@ internal sealed class McpTestSession : IAsyncDisposable
         FakeProjectRegistryStore? registryStore = null,
         FakeBoardProjectSource? board = null,
         IAgentIdentitySource? identityFile = null,
-        FakeTomeManifestStore? manifests = null)
+        FakeTomeManifestStore? manifests = null,
+        FakeSessionRegistry? sessions = null,
+        string? clientProtocolVersion = null)
     {
         var store = new FakeMemoryStore();
         var embeddings = new FakeEmbeddingProvider();
@@ -91,13 +97,15 @@ internal sealed class McpTestSession : IAsyncDisposable
         var consolidation = consolidationState ?? new FakeConsolidationStateStore();
         var registry = registryStore ?? new FakeProjectRegistryStore(projects ?? DefaultProjects);
         var manifestsStore = manifests ?? new FakeTomeManifestStore();
+        var sessionRegistry = sessions ?? new FakeSessionRegistry();
         var services = new FakeServiceProvider(
             store, embeddings, clock, engineOptions, claims, gcOptions, gc,
             callerPath is null ? null : new FakeCallerPathProvider(callerPath),
             registry,
             board,
             consolidation,
-            manifestsStore);
+            manifestsStore,
+            sessionRegistry);
         var options = hostOptions ?? new McpHostOptions();
         if (identityFile is not null)
         {
@@ -118,10 +126,11 @@ internal sealed class McpTestSession : IAsyncDisposable
         var client = await Task.Run(() => McpClient.CreateAsync(clientTransport, new McpClientOptions
         {
             ClientInfo = new Implementation { Name = ClientName, Version = "0.1.0" },
+            ProtocolVersion = clientProtocolVersion,
         })).WaitAsync(TimeSpan.FromSeconds(15));
 
         return new McpTestSession(
-            store, embeddings, clock, gc, consolidation, registry, manifestsStore, client, clientToServer, serverToClient, serverRun, cancellation);
+            store, embeddings, clock, gc, consolidation, registry, manifestsStore, sessionRegistry, client, clientToServer, serverToClient, serverRun, cancellation);
     }
 
     public async ValueTask DisposeAsync()
