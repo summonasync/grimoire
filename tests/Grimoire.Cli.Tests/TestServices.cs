@@ -3,6 +3,7 @@ using Grimoire.Core;
 using Grimoire.Infrastructure.Board;
 using Grimoire.Infrastructure.Configuration;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Grimoire.Cli.Tests;
@@ -50,6 +51,9 @@ internal static class TestServices
             sp.GetRequiredService<MemoryEngineOptions>().ReindexBatchSize));
         services.AddSingleton<IMemoryStore>(store);
         services.AddSingleton<ITomeManifestStore>(manifests ?? new FakeTomeManifestStore());
+        services.AddSingleton<ISessionRegistry>(sp => new QdrantSessionStore(
+            sp.GetRequiredService<IQdrantVectorDb>(),
+            new QdrantOptions { Collection = "grimoire" }));
         services.AddSingleton<IEmbeddingProvider>(embeddings);
         services.AddSingleton<IClock>(clock);
         services.AddSingleton<IActorClaimProvider>(claims ?? new NullClaimProvider());

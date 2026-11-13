@@ -15,6 +15,8 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public RpcException? UpsertFailure { get; set; }
 
+    public RpcException? SetPayloadFailure { get; set; }
+
     public int CreateCollectionCount { get; private set; }
 
     public int DroppedCount { get; private set; }
@@ -147,6 +149,11 @@ public sealed class FakeQdrantVectorDb : IQdrantVectorDb
 
     public Task SetPayloadAsync(string collection, IReadOnlyDictionary<string, Value> payload, Guid id, CancellationToken cancellationToken)
     {
+        if (SetPayloadFailure is { } failure)
+        {
+            return Task.FromException(failure);
+        }
+
         SetPayloads.Add(new Dictionary<string, Value>(payload));
 
         if (_points.TryGetValue(id, out var stored))

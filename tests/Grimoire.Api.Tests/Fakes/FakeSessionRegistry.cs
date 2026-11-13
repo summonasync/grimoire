@@ -18,11 +18,14 @@ public sealed class FakeSessionRegistry : ISessionRegistry
 
     public void Clear() => _entries.Clear();
 
-    public Task WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken)
+    public Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken)
     {
         _entries.Add(entry);
-        return Task.CompletedTask;
+        return Task.FromResult(Guid.CreateVersion7());
     }
+
+    public Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 
     public Task<IReadOnlyList<SessionRegistryEntry>> ListRecentAsync(
         int limit,

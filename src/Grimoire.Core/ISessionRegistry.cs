@@ -7,12 +7,21 @@ namespace Grimoire.Core;
 /// of throwing: when the store is unreachable the list comes back empty and
 /// <see cref="DegradationReason"/> carries the honest reason; writes surface failures as
 /// UpstreamUnavailableException so the caller decides what a lost row costs.
+/// <see cref="WriteAsync"/> hands back the id of the point it stored, so the actor columns
+/// can be refined on that exact row by <see cref="RefineActorAsync"/> instead of a second
+/// write minting a second row. The refinement is one-shot by contract: the MCP face calls
+/// it at most once per row, right after session_identity_set. Against an id the registry
+/// does not hold it is a documented no-op — it never creates a row — and an unreachable
+/// store surfaces UpstreamUnavailableException, the same failure shape as the write path.
+/// It patches only the actor fields; every other field of the row stays byte-equal.
 /// </summary>
 public interface ISessionRegistry
 {
     string? DegradationReason { get; }
 
-    Task WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken);
+    Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken);
+
+    Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SessionRegistryEntry>> ListRecentAsync(
         int limit,

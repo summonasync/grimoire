@@ -108,6 +108,102 @@ public sealed class QdrantSessionStoreTests
     }
 
     [Fact]
+    public async Task Write_ReturnsTheIdOfThePointThatReadsBackAsTheWrittenRow()
+    {
+        var entry = Entry();
+
+        var id = await _store.WriteAsync(entry, CancellationToken.None);
+
+        var payload = _db.PayloadOf(id);
+        payload[SessionPayloadFields.Transport].ShouldBe((Value)"stdio");
+        payload[SessionPayloadFields.Host].ShouldBe((Value)"box-01");
+        (await _store.ListRecentAsync(10, null, CancellationToken.None)).ShouldHaveSingleItem().ShouldBe(entry);
+    }
+
+    [Fact]
+    public async Task Refine_PatchesOnlyTheActorFieldsOnTheAddressedPoint()
+    {
+        var id = await _store.WriteAsync(Entry(), CancellationToken.None);
+
+        await _store.RefineActorAsync(id, "sigma", "claude", CancellationToken.None);
+
+        var patch = _db.SetPayloads.ShouldHaveSingleItem();
+        patch.Count.ShouldBe(2);
+        patch.ContainsKey(SessionPayloadFields.ActorAlias).ShouldBeTrue();
+        patch.ContainsKey(SessionPayloadFields.ActorVendor).ShouldBeTrue();
+        _db.PayloadOf(id)[SessionPayloadFields.ActorAlias].ShouldBe((Value)"sigma");
+        _db.PayloadOf(id)[SessionPayloadFields.ActorVendor].ShouldBe((Value)"claude");
+    }
+
+    [Theory]
+    [InlineData(SessionPayloadFields.SchemaVersion)]
+    [InlineData(SessionPayloadFields.OccurredAt)]
+    [InlineData(SessionPayloadFields.ClientName)]
+    [InlineData(SessionPayloadFields.ClientVersion)]
+    [InlineData(SessionPayloadFields.ProtocolVersion)]
+    [InlineData(SessionPayloadFields.Transport)]
+    [InlineData(SessionPayloadFields.Host)]
+    [InlineData(SessionPayloadFields.SessionId)]
+    public async Task Refine_LeavesEveryOtherPayloadFieldByteEqual(string field)
+    {
+        var id = await _store.WriteAsync(Entry(), CancellationToken.None);
+        var before = _db.PayloadOf(id)[field];
+
+        await _store.RefineActorAsync(id, "sigma", "claude", CancellationToken.None);
+
+        _db.PayloadOf(id)[field].ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task Refine_ThenRead_SeesNewActorsWithEveryOtherFieldIntact()
+    {
+        var id = await _store.WriteAsync(Entry(), CancellationToken.None);
+
+        await _store.RefineActorAsync(id, "sigma", "claude", CancellationToken.None);
+
+        var loaded = await _store.ListRecentAsync(10, null, CancellationToken.None);
+        loaded.ShouldHaveSingleItem().ShouldBe(Entry() with { ActorAlias = "sigma", ActorVendor = "claude" });
+    }
+
+    [Fact]
+    public async Task Refine_TwoRows_PatchesOnlyTheAddressedOne()
+    {
+        var first = await _store.WriteAsync(Entry(clientName: "qwen"), CancellationToken.None);
+        var second = await _store.WriteAsync(Entry(clientName: "codex"), CancellationToken.None);
+        second.ShouldNotBe(first);
+
+        await _store.RefineActorAsync(first, "sigma", "claude", CancellationToken.None);
+
+        _db.PayloadOf(first)[SessionPayloadFields.ActorAlias].ShouldBe((Value)"sigma");
+        _db.PayloadOf(second)[SessionPayloadFields.ActorAlias].ShouldBe((Value)"guldana");
+        (await _store.ListRecentAsync(10, null, CancellationToken.None)).Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Refine_UnknownId_SucceedsAsANoOpAndStoresNothing()
+    {
+        await _store.RefineActorAsync(Guid.CreateVersion7(), "sigma", "claude", CancellationToken.None);
+
+        _db.PointIds.ShouldBeEmpty();
+        _db.SetPayloads.ShouldHaveSingleItem();
+        (await _store.ListRecentAsync(10, null, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(StatusCode.Unavailable)]
+    [InlineData(StatusCode.NotFound)]
+    public async Task Refine_WhenQdrantFails_ThrowsTheSameExceptionAsTheWritePath(StatusCode statusCode)
+    {
+        var id = await _store.WriteAsync(Entry(), CancellationToken.None);
+        _db.SetPayloadFailure = new RpcException(new Status(statusCode, "host unreachable"));
+
+        var exception = await Should.ThrowAsync<UpstreamUnavailableException>(
+            () => _store.RefineActorAsync(id, "sigma", "claude", CancellationToken.None));
+
+        exception.Upstream.ShouldBe("qdrant");
+    }
+
+    [Fact]
     public async Task ListRecent_OrdersNewestFirst()
     {
         await _store.WriteAsync(Entry(occurredAt: Moment), CancellationToken.None);

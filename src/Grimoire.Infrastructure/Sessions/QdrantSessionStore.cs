@@ -12,8 +12,11 @@ namespace Grimoire.Infrastructure.Sessions;
 /// a sibling of the tome-manifest store: same boot shape (ensure the collection on first
 /// use, retried until it succeeds), same degradation honesty (reads return empty with a
 /// reason, writes surface <see cref="UpstreamUnavailableException"/>). Point ids are random
-/// UUIDv7 values generated per write — one point per handshake is the unit of observation,
-/// so two identical handshakes are two rows and no field-derived hash may collapse them.
+/// UUIDv7 values generated per write and handed back to the caller — one point per handshake
+/// is the unit of observation, so two identical handshakes are two rows and no field-derived
+/// hash may collapse them. The actor refinement patches only actorAlias and actorVendor on
+/// the addressed point via SetPayload and fails the same way a write does; an unknown id is
+/// acknowledged without creating a row.
 /// No payload indexes: Qdrant scroll has no server-side ordering, so newest-first retrieval
 /// and the window filter are done reader-side over a collection bounded by retention.
 /// Null contract fields are omitted from the payload and decode back to null — a missing
@@ -38,11 +41,31 @@ public sealed class QdrantSessionStore : ISessionRegistry
 
     public string? DegradationReason { get; private set; }
 
-    public async Task WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken) =>
+    public async Task<Guid> WriteAsync(SessionRegistryEntry entry, CancellationToken cancellationToken) =>
         await GuardAsync(async () =>
         {
             await EnsureReadyAsync(cancellationToken);
-            await _db.UpsertAsync(_collection, [Point(entry)], cancellationToken);
+            var id = Guid.CreateVersion7();
+            await _db.UpsertAsync(_collection, [Point(id, entry)], cancellationToken);
+            return id;
+        });
+
+    public async Task RefineActorAsync(Guid id, string alias, string vendor, CancellationToken cancellationToken) =>
+        await GuardAsync(async () =>
+        {
+            await EnsureReadyAsync(cancellationToken);
+
+            // SetPayload addresses one existing point: on an unknown id Qdrant acknowledges
+            // the update without creating a row, so the no-op policy is the server's own.
+            await _db.SetPayloadAsync(
+                _collection,
+                new Dictionary<string, Value>
+                {
+                    [SessionPayloadFields.ActorAlias] = alias,
+                    [SessionPayloadFields.ActorVendor] = vendor,
+                },
+                id,
+                cancellationToken);
         });
 
     private async Task GuardAsync(Func<Task> call) =>
@@ -181,11 +204,11 @@ public sealed class QdrantSessionStore : ISessionRegistry
             or StatusCode.DeadlineExceeded
             or StatusCode.Unauthenticated;
 
-    private static PointStruct Point(SessionRegistryEntry entry)
+    private static PointStruct Point(Guid id, SessionRegistryEntry entry)
     {
         var point = new PointStruct
         {
-            Id = NewPointId(),
+            Id = new PointId { Uuid = id.ToString() },
             Vectors = new Vectors { Vectors_ = new NamedVectors() },
         };
 
@@ -226,8 +249,6 @@ public sealed class QdrantSessionStore : ISessionRegistry
 
         return point;
     }
-
-    private static PointId NewPointId() => new() { Uuid = Guid.CreateVersion7().ToString() };
 
     private static SessionRegistryEntry Decode(RetrievedPoint point)
     {
