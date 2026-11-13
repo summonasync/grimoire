@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Grimoire.Core;
 using Shouldly;
 using Xunit;
 
@@ -22,6 +23,22 @@ public class HealthEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
         body.GetProperty("store").GetProperty("reachable").GetBoolean().ShouldBeTrue();
         body.GetProperty("embeddings").GetProperty("reachable").GetBoolean().ShouldBeTrue();
         body.GetProperty("checkedAt").GetDateTimeOffset().ShouldBe(factory.Clock.UtcNow, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Get_ProbeCountsActiveOnly_AndSaysSoInsteadOfInheritingTheDefault()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors["grimoire-health-probe"] = [1f, 0f];
+        var captured = new List<MemoryFilter>();
+        factory.Store.OnCountAsync = captured.Add;
+
+        var response = await factory.NewClient().GetAsync("/health");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var seen = captured.ShouldHaveSingleItem();
+        seen.Status.ShouldBe(MemoryStatus.Active);
+        seen.Statuses.ShouldBeEmpty();
     }
 
     [Fact]
