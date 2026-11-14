@@ -28,13 +28,17 @@ function Send-EmptyEnvelope([string]$reason) {
 
 # Our own budget in seconds; the runtime caps a command hook at 60s and the README sets that per-hook
 # timeout explicitly. HOOK_ prefix, not GRIMOIRE_: the CLI reads every GRIMOIRE_* variable as a config
-# overlay, so a name it does not own breaks the call it tunes. Both platforms read the same knob.
+# overlay, so a name it does not own breaks the call it tunes. Both platforms read the same knob and the
+# same range: at or above 60 the runtime would cut us first, so the value could not mean what it says, and
+# an int near the ceiling was worse than meaningless - 2147484 passed the old guard, then the *1000
+# millisecond conversions overflowed and the brief was dropped silently at 504ms. Rejecting it up front
+# costs nothing and keeps the twins agreeing on every input.
 $budgetSeconds = 10
 
 try {
     if ($env:HOOK_GRIMOIRE_TIMEOUT) {
         $parsed = 0
-        if ([int]::TryParse($env:HOOK_GRIMOIRE_TIMEOUT, [ref]$parsed) -and $parsed -gt 0) {
+        if ([int]::TryParse($env:HOOK_GRIMOIRE_TIMEOUT, [ref]$parsed) -and $parsed -gt 0 -and $parsed -lt 60) {
             $budgetSeconds = $parsed
         }
     }

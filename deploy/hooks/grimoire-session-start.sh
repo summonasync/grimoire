@@ -33,9 +33,12 @@ bail() {
 budget=${HOOK_GRIMOIRE_TIMEOUT:-10}
 # Validated, never passed through: a non-numeric value makes timeout itself fail (rc 125) and skips both
 # the stdin drain and the brief, and 0 is GNU's "no limit" - the unbounded call the budget exists to
-# prevent. One line, same acceptance set as the .ps1's TryParse + -gt 0 (10# so a leading zero reads as
-# 7, not as octal or as a rejected typo), so one knob value means one thing on both platforms.
-[[ "$budget" =~ ^[0-9]+$ ]] && ((10#$budget > 0)) || budget=10
+# prevent. The ceiling is that same mistake a third time: the runtime kills a command hook at 60s, so a
+# value from 60 up cannot mean what it says - before this bound existed, 99999999999 ran a 25s hang to its
+# own end instead of cutting. Same acceptance range as the .ps1's TryParse + -gt 0 + -lt 60, and 10# so a
+# leading zero reads as 7 rather than as octal or as a rejected typo: one knob value, one meaning, both
+# platforms.
+[[ "$budget" =~ ^[0-9]+$ ]] && ((10#$budget > 0 && 10#$budget < 60)) || budget=10
 
 # Drain the payload (session_id, cwd, source, ...) to nothing: leaving it unread can wedge the runtime's
 # writer, and none of those fields matter to a brief. The CLI gets /dev/null instead of the leftovers.

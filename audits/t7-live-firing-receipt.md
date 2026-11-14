@@ -32,7 +32,7 @@ field**, both platforms, byte-compared): **42 checks, 42 pass, 0 fail.**
 | Case | .sh | .ps1 |
 | --- | --- | --- |
 | store answers, fixture envelope | rc=0, forwards the CLI line byte-for-byte | rc=0, forwards the CLI line byte-for-byte |
-| `.sh` stdout vs `.ps1` stdout, same fixture | **identical** (`cmp` clean, live store, 770 bytes) | **identical** |
+| `.sh` stdout vs `.ps1` stdout, same fixture | **identical** (`cmp` clean; live Grimoire store, throwaway collection `t7probe046`, tome `t7probe` holding one seeded fact → 770 bytes) | **identical** |
 | CLI exit 2 (usage/recovery text) | rc=0, empty envelope, 1 stderr line | rc=0, empty envelope, 1 stderr line |
 | CLI exit 6 (upstream unavailable) | rc=0, empty envelope, 1 stderr line | rc=0, empty envelope, 1 stderr line |
 | CLI exit 0, garbage multi-line stdout | rc=0, empty envelope, "printed 2 stdout line(s)" | rc=0, empty envelope, same reason |
@@ -42,7 +42,9 @@ field**, both platforms, byte-compared): **42 checks, 42 pass, 0 fail.**
 | envelope with no trailing newline | forwarded (that is why the line count is `grep -c ''`, not `wc -l`) | forwarded |
 | shape | `hookEventName == "SessionStart"`, canary present in `additionalContext` | same |
 
-Live (not stubbed) happy path against the real store through the real CLI:
+Live (not stubbed) happy path against the real store through the real CLI: (subject of every byte count in the block below: the **throwaway collection
+`t7probe046`, tome `t7probe`**, seeded with one canary fact, on Grimoire's own isolated Qdrant at
+6353/6354 - `770 bytes` is that brief, `79 bytes` is the empty envelope, never the crew collection)
 
 ```
 up_store      rc=0 wall_ms=369 stdout_lines=1 stdout_bytes=770 stderr=[]
@@ -206,7 +208,8 @@ own copy under the scratch `HOME`, and only `stat` (mtime/size, unchanged) was t
 - The hook does nothing useful when Grimoire is down by design: empty envelope, exit 0, one stderr line
   (`grimoire-session-start: …`), session unaffected — measured end to end at FIRE 4.
 - Startup costs ~0.4 s of `dotnet`-carrier wall time (0.82 s on PowerShell 7.7); the brief itself is the
-  payload, currently ~770 bytes for a near-empty tome and ~28 KB for the crew tome's full brief.
+  payload: measured 770 bytes for the throwaway probe collection `t7probe046` / tome `t7probe` with a
+  single seeded fact, and 28 627 bytes for the real crew collection `grimoire` / tome `crew`.
 
 ---
 
@@ -214,20 +217,36 @@ own copy under the scratch `HOME`, and only `stat` (mtime/size, unchanged) was t
 
 Same task, two acceptance items carried in from the light review (AC5 = SF-1 `.ps1` waits stdin EOF,
 AC6 = SF-2 `.sh` passes `HOOK_GRIMOIRE_TIMEOUT` raw into `timeout`). Both fixed, nothing else changed.
-Base commit for the diff: `b056a81` (the shipped scripts) on top of `036775e`.
+Commit lineage (corrected here: an earlier draft of this section had it backwards): `b056a81` "T7 shipped
+hook scripts with live receipts" is the shipped pair, `036775e` is its **child** (the T7 light review
+record), `3206aae` carries this reopen's fix, and `cce7ce8` is the current HEAD (the fix-round
+reverification record). The clamp round below is uncommitted working-tree state on top of `cce7ce8`.
 
-## New hashes — these are the ones T8's README and result must cite
+## The second pair (SF-1/SF-2 fix, commit 3206aae) — historical; T8 cites the final pair in "Third pair"
 
 ```
 36f2aa8c6005a02e20d0988ec33a3a943a94b99bf2e787a2f98905a1430dfd73  deploy/hooks/grimoire-session-start.sh
 08f69fed6e100592870ba08004b5f3e61d690f697e7c69f038157237e5e63d01  deploy/hooks/grimoire-session-start.ps1
 ```
 
-Replaces `e6580828…` (.sh) and `015e5831…` (.ps1) from the first receipt. Diff numstat, uncommitted:
+This block recorded the *second* pair, which commit `3206aae` now carries
+(`36f2aa8c…` .sh / `08f69fed…` .ps1). A third and final round followed it - see "Third pair" at the end of
+this file - so read this as history, not as the number to cite.
+Lineage of the script content: **shipped `b056a81`** (`e6580828…` / `015e5831…`) → **fix `3206aae`**
+(`36f2aa8c…` / `08f69fed…`) → **clamp final, working tree** (`87f7246c…` / `517cef25…`). Inside that last
+round the `.sh` also passed through content `d79f07ac…`, which one comment tightening superseded before
+verification: no number in the "Third pair" section below was taken on it, and it should not be cited.
+
+Numstat against the ranges that matter (both twins only; the receipt's own growth is separate):
 
 ```
-5   0   deploy/hooks/grimoire-session-start.sh
-28  3   deploy/hooks/grimoire-session-start.ps1
+b056a81 -> 3206aae      (what the reopen's fix commit carried)
+  8   0   deploy/hooks/grimoire-session-start.sh
+ 35   5   deploy/hooks/grimoire-session-start.ps1
+
+cce7ce8 -> working tree (this clamp round, uncommitted)
+  6   3   deploy/hooks/grimoire-session-start.sh
+  6   2   deploy/hooks/grimoire-session-start.ps1
 ```
 
 ## The two changes
@@ -248,8 +267,9 @@ put the twins out of step on one value — the whole point of the item.
 script never reached the brief at all, and `[Console]::In.Dispose()` cannot help because the script
 thread is already inside the call. The shipped drain now reads the raw `[Console]::OpenStandardInput()`
 stream in a loop bounded by the budget (`ReadAsync` + `Wait(left)` against a `Stopwatch` deadline) and
-calls `Release-Stdin` — cancel-free, idempotent disposal of that stream — as soon as it stops waiting,
-so no exit path (brief, bail, outer trap) still owns the fd.
+the **drain releases stdin before any exit path runs**: `Release-Stdin` is called inline the moment the
+read stops being waited on, so by the time any later branch (brief, bail, outer trap) is reached there is
+no stream left to own.
 
 ## SF-1 wedge matrix — writer sends the payload plus 200 KB, marks its own flush, then never closes
 
@@ -295,7 +315,8 @@ does not spend the brief. rc stayed 0 everywhere, as the contract requires.
 * Contract harness on the new bytes: **42/42 pass** — parity, all four failure shapes, missing binary,
   no-trailing-newline, budget cut (`sh` 2026 ms / `ps` 2808 ms at budget 2), envelope shape.
 * Live byte parity, read-only brief through the real CLI: `up sh` rc=0 528 ms / `up ps` rc=0 910 ms,
-  334 bytes each, `cmp` clean against the direct CLI stdout **and** against each other, canary present in
+  334 bytes each (live Grimoire store, throwaway collection `t7fix046`, tome `t7fix`, one seeded fact),
+  `cmp` clean against the direct CLI stdout **and** against each other, canary present in
   both envelopes.
 * Fail-open re-measured without stopping any container: refused port `127.0.0.1:59999` → both twins rc=0,
   identical empty envelope, one stderr line (`upstream_unavailable`), 243 ms / 749 ms; unroutable
@@ -331,21 +352,23 @@ extra ~17 s at process exit. Both shapes are the same un-detachable pump on the 
 budget by an order of magnitude, and the fix closes both - which is why the NEW column is now
 budget + ~400 ms rather than either number.
 
-## Hash correction and the final-bytes re-verification (read this last)
+## Hash correction and the final-bytes re-verification (SUPERSEDED by "Third pair" below - read that)
 
 The `.ps1` hash above is `08f69fed…`, not the `c2b6d755…` this section first recorded: after the matrices
 ran, one comment line inside the new drain was itself wrong — it quoted `25 018 ms` as if it were a
 measurement of the bug, when that number was a test-harness *timeout*. Behavior-neutral (comment only),
 but the receipt cannot cite a hash whose comment misstates its own evidence, so it was corrected and
-everything that matters was re-measured on the final bytes. `c2b6d755…` and `e6580828…` are both dead;
-cite `36f2aa8c…` / `08f69fed…`.
+everything that matters was re-measured on the final bytes. At the time of writing that pair was
+`36f2aa8c…` / `08f69fed…`, and `c2b6d755…` / `e6580828…` were already dead - but a third round followed
+(the oversized-knob clamp), so **cite the "Third pair" section at the end of this file instead**.
 
-Final-bytes verification, one pass, 20/20:
+Verification of that (second) pair, one pass, 20/20:
 
 ```
 gates     bash -n rc=0 · PowerShell parser rc=0 ("ps1 parse OK") · both files ASCII-only
 wedge b3  sh rc=0 3035 ms · ps rc=0 3570 ms (budget 3 + 3 s grace) · fixture drained in both
-parity    .sh == .ps1 == direct CLI stdout, 28 627 bytes each, read-only live brief, one line each
+parity    .sh == .ps1 == direct CLI stdout, 28 627 bytes each (READ-ONLY brief of the crew collection
+          `grimoire`, tome `crew` - the real crew store, nothing written), one line each
 knob      HOOK_GRIMOIRE_TIMEOUT = abc / 0 / -3 / 1.5 / '' → rc=0 and the brief still forwarded on .sh
 fail-open refused port 59999: .sh and .ps1 both rc=0, byte-identical EMPTY envelope, one stderr line
 ```
@@ -354,3 +377,81 @@ Review-quoted numbers stay quoted as the review's own measurements (20 187 / 15 
 the rc=125 and `0`-means-no-limit findings for SF-2); the numbers in the tables above are mine, and the
 `35 020 ms` cap row in the OLD column is my harness's timeout firing, which is exactly the distinction the
 corrected comment now makes.
+
+
+---
+
+# Third pair — the oversized-knob clamp (reviewer N-4), final bytes
+
+Parent chose the clamp over prose. Two edits, nothing else moved. **Cite this pair; the two above it are
+history.** Base of the diff: HEAD `cce7ce8`.
+
+```
+87f7246ce8573568b24e9945456982757ab9be4d40bbe7c5cb5ef79417ba0427  deploy/hooks/grimoire-session-start.sh
+517cef25a1e6c1c997965e4495695874ee4ac1414fba5f94104350c8763786e5  deploy/hooks/grimoire-session-start.ps1
+```
+
+```
+6   3   deploy/hooks/grimoire-session-start.sh      (cce7ce8 -> working tree)
+6   2   deploy/hooks/grimoire-session-start.ps1
+```
+
+## The two guard lines, verbatim as landed
+
+`.sh` line 41:
+
+```bash
+[[ "$budget" =~ ^[0-9]+$ ]] && ((10#$budget > 0 && 10#$budget < 60)) || budget=10
+```
+
+`.ps1` line 41:
+
+```powershell
+        if ([int]::TryParse($env:HOOK_GRIMOIRE_TIMEOUT, [ref]$parsed) -and $parsed -gt 0 -and $parsed -lt 60) {
+```
+
+Rationale carried in both comments: the runtime caps a command hook at 60s, so a value of 60 or above
+cannot mean what it says - the third face of the SF-2 class. The `.ps1` one adds why the ceiling was worth
+more than tidiness: `2147484` passed the old guard and then the `*1000` millisecond conversions overflowed,
+so the hook dropped the brief silently at 504 ms instead of delivering it.
+
+## Knob matrix, both twins, hang stub (CLI sleeps 25s), stdin=/dev/null
+
+| HOOK_GRIMOIRE_TIMEOUT | decided | sh wall / envelope | ps wall / envelope |
+| --- | --- | --- | --- |
+| `7` | accepted → cut at 7s | 7 026 ms EMPTY | 7 799 ms EMPTY |
+| `07` | accepted as 7 (the `10#` parity case) | 7 029 ms EMPTY | 7 812 ms EMPTY |
+| `59` | accepted → runs to the stub, brief survives | 25 043 ms FORWARDED | 25 420 ms FORWARDED |
+| `60` | **rejected → fallback 10s cut** | 10 027 ms EMPTY | 10 807 ms EMPTY |
+| `99` | rejected → 10s cut | 10 025 ms EMPTY | 10 793 ms EMPTY |
+| `0` | rejected → 10s cut | 10 027 ms EMPTY | 10 798 ms EMPTY |
+| `-3` | rejected → 10s cut | 10 030 ms EMPTY | 10 815 ms EMPTY |
+| `1.5` | rejected → 10s cut | 10 027 ms EMPTY | 10 846 ms EMPTY |
+| `abc` | rejected → 10s cut | 10 028 ms EMPTY | 10 837 ms EMPTY |
+| `99999999999` | rejected → 10s cut (was unbounded 25 024 ms) | 10 026 ms EMPTY | 10 806 ms EMPTY |
+| `2147484` | rejected → 10s cut (was the 504 ms silent drop) | 10 028 ms EMPTY | 10 814 ms EMPTY |
+
+`cli_reached=yes` in all 22 rows - the pre-clamp `.sh` shapes that skipped the CLI entirely (`abc`, `-3`)
+are gone too. rc=0 everywhere, as the fail-open contract requires.
+
+Same value set with a healthy instant CLI: **22/22 rows rc=0 and the brief FORWARDED** (34-42 ms `.sh`,
+411-443 ms `.ps1`) - no knob value, valid or not, can cost the payload.
+
+What was deliberately not re-measured: the SF-1 wedge and the SF-2 lower bound were closed in the round
+above and only sanity-checked here - `.ps1` wedge at budget 2 → rc=0, 2 428 ms, drained, FORWARDED.
+
+## Parity and gates on these exact bytes
+
+```
+live read-only brief, crew collection `grimoire` / tome `crew` (nothing written to the store):
+  sh rc=0 28 769 bytes 1 line | ps rc=0 28 769 bytes 1 line | direct CLI rc=0 28 769 bytes
+  PASS .sh stdout == .ps1 stdout ; PASS .sh stdout == CLI stdout
+  (28 769 vs the 28 627 of the previous round: the crew brief grew between the two runs, both times
+   read-only - the number is a property of the store at the moment of the run, not of the scripts)
+bash -n rc=0 · PowerShell language parser rc=0 ("ps1 parse OK") · both files 0 non-ASCII lines
+shellcheck: still not installed on this box (not passed, disclosed)
+```
+
+Cleanup: `~/scratch/t7-*` deleted, no probe processes left, `docker ps` untouched (no container was
+stopped this round - unreachability came from the stub and from /dev/null-bounded hangs), the user's real
+`~/.qwen/settings.json` never read. No commit.
