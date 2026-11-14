@@ -24,9 +24,20 @@ public sealed class RoundCapWarningTests
         warnings.ShouldNotBeNull();
         warnings!.ShouldHaveSingleItem();
         warnings[0].ShouldBe(
-            "recall page came up short after 4 rounds of window doubling: " +
+            "The page came up short after 4 rounds of window doubling: " +
             "1 of limit 2 matches, last window 48 points — narrow the query; " +
             "a wider limit only widens the searched window, it cannot fill the page");
+    }
+
+    [Fact]
+    public void Build_Text_NamesNoDoorBecauseOneSentenceServesEverySurface()
+    {
+        var text = RoundCapWarning.Build(
+            Scan(RecallStopReason.RoundCapReached, rounds: 4, lastWindow: 48),
+            limit: 2)![0];
+
+        text.ShouldNotContain("recall", Case.Insensitive);
+        text.ShouldNotContain("scry", Case.Insensitive);
     }
 
     private static RecallEscalationResult Scan(RecallStopReason stoppedBy, int rounds, int lastWindow) => new()

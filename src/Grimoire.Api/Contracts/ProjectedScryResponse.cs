@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Grimoire.Api.Contracts;
 
 public sealed record ProjectedScryResponse(
@@ -5,4 +7,8 @@ public sealed record ProjectedScryResponse(
     ScryAttribution Attribution,
     int Count,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Items,
-    long ElapsedMs);
+    long ElapsedMs)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Warnings { get; init; }
+}

@@ -367,6 +367,65 @@ public class ScryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Grim
             .ShouldBe(["tomes", "attribution", "count", "items", "elapsedMs"]);
     }
 
+    [Fact]
+    public async Task Scry_EveryWindowRejectedUntilTheCap_ResponseCarriesTheWarning()
+    {
+        factory.Reset();
+        SeedLeakyWindow();
+
+        var body = await ScryAsync(LeakyQuery, "tomes=alpha&limit=2");
+
+        body.GetProperty("count").GetInt32().ShouldBe(1);
+        body.GetProperty("items")[0].GetProperty("content").GetString().ShouldBe("kept alpha fact");
+        factory.Store.SearchCallCount.ShouldBe(RecallEscalationLoop.MaxRounds);
+        factory.Store.SearchWindows.ShouldBe([6, 12, 24, 48]);
+        body.GetProperty("warnings").GetArrayLength().ShouldBe(1);
+        var warning = body.GetProperty("warnings")[0].GetString()!;
+        warning.ShouldContain("The page came up short after 4 rounds of window doubling");
+        warning.ShouldContain("1 of limit 2 matches");
+        warning.ShouldNotContain("recall", Case.Insensitive);
+    }
+
+    [Fact]
+    public async Task Scry_WithFields_ProjectedShapeCarriesTheWarningToo()
+    {
+        factory.Reset();
+        SeedLeakyWindow();
+
+        var body = await ScryAsync(LeakyQuery, "tomes=alpha&limit=2&fields=content");
+
+        body.GetProperty("items")[0].EnumerateObject().Select(property => property.Name)
+            .ShouldBe(["memoryId", "score", "content"]);
+        body.GetProperty("warnings").GetArrayLength().ShouldBe(1);
+        body.GetProperty("warnings")[0].GetString()!.ShouldContain("1 of limit 2 matches");
+    }
+
+    [Fact]
+    public async Task Scry_WhenThePageFills_ResponseHasNoWarningsKey()
+    {
+        factory.Reset();
+        Seed("alpha squad decision", tome: "alpha");
+
+        var body = await ScryAsync("alpha squad decision");
+
+        body.TryGetProperty("warnings", out _).ShouldBeFalse("silence stays null on this door too");
+        factory.Store.SearchCallCount.ShouldBe(1);
+    }
+
+    // No flag on this door can produce a window the store answers outside the requested tome set,
+    // so the capped fixtures inject the looser-store clause through FakeMemoryStore.RejectingWindow:
+    // the gamma rows come back in every window and the post-filter drops them all.
+    private const string LeakyQuery = "alpha squad decision";
+
+    private void SeedLeakyWindow()
+    {
+        factory.Embeddings.Vectors[LeakyQuery] = [1f, 0f];
+        var kept = factory.Store.Seed("kept alpha fact", [1f, 0f], scope: MemoryScope.Global, kind: MemoryKind.Fact, tome: "alpha");
+        var leaks = Enumerable.Range(1, 48)
+            .Select(index => factory.Store.Seed($"gamma leak {index}", [0.93f, 0.37f], scope: MemoryScope.Global, kind: MemoryKind.Fact, tome: "gamma"));
+        factory.Store.RejectingWindow = [kept, .. leaks];
+    }
+
     private void Seed(
         string content,
         string tome = TomeKey.DefaultTome,

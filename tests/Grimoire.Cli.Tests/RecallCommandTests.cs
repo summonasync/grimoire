@@ -25,7 +25,7 @@ public sealed class RecallCommandTests : IDisposable
         var output = _host.Output.ToString();
         output.ShouldContain("No matching memories.");
         _host.Store.Searched.Count.ShouldBe(RecallEscalationLoop.MaxRounds);
-        output.ShouldContain("Warning: recall page came up short after 4 rounds of window doubling");
+        output.ShouldContain("Warning: The page came up short after 4 rounds of window doubling");
         output.ShouldContain("a wider limit only widens the searched window, it cannot fill the page");
     }
 
