@@ -27,7 +27,8 @@ public sealed class RecordingMemoryStore : IMemoryStore
 
     // Models a store clause looser than MemoryFilterExtensions.Matches: search answers come from
     // this list instead of the filter, so windows can come back full of rows the post-filter drops.
-    // Production reaches that shape on the `alias+` actor grammar and through ANN non-nestedness.
+    // In production that shape is ANN window non-nestedness — the `alias+` grammar used to hand it
+    // over too, until 061 made the matcher and the clause read the candidate the same way.
     public IReadOnlyList<MemoryRecord>? RejectingWindow { get; set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();

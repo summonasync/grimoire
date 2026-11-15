@@ -88,10 +88,10 @@ public sealed class MemoryFilterTranslatorActorTests
     [Fact]
     public void Translate_WithATrailingSeparator_TreatsTheCandidateAsAliasOnly()
     {
-        // Divergence pinned, not fixed: MemoryFilterExtensions.MatchesActor compares "alias+" against
-        // MemoryActor.ToString() and therefore matches NOTHING for it, while this clause matches every
-        // row written by that alias. Both readings are defensible; the owner chose the alias-only
-        // reading here and asked that the difference be written down rather than hidden.
+        // The owner's chosen reading of a trailing separator, and since 061 the only reading: the
+        // in-process matcher asks MemoryActorSemantics.Segments the same question this clause does,
+        // so "alias+" means this alias with any vendor on both sides of a recall. The case
+        // asymmetry beside it stays — this keyword is exact, the matcher ignores case.
         var filter = MemoryFilterTranslator.Translate(new MemoryFilter { Actor = "kelthuzad+" });
 
         FieldConditions(filter, "actor.alias").ShouldHaveSingleItem().Field!.Match.Keyword.ShouldBe("kelthuzad");

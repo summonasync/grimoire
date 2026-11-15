@@ -385,6 +385,29 @@ public sealed class RecallToolTests
         message.ShouldContain("mutually exclusive");
     }
 
+    [Fact]
+    public async Task Recall_TrailingSeparatorActor_HandsBackTheRowThatCarriesAVendor()
+    {
+        // The contract change of 061 seen from the tool an agent actually calls. "bob+" is this alias
+        // with any vendor; the store clause always kept the bob+qwen row and the in-process matcher
+        // then threw it away, so this exact call answered count 0.
+        await using var session = await McpTestSession.StartAsync(new McpHostOptions { Actor = new MemoryActor("bob", "qwen") });
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["actor"] = "bob+",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.GetProperty("matches")[0].GetProperty("actor").GetString().ShouldBe("bob+qwen");
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse("the page filled, so the loop has nothing to say");
+    }
+
     private static string[] KeysOf(JsonElement hit)
     {
         return [.. hit.EnumerateObject().Select(property => property.Name)];

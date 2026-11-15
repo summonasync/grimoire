@@ -12,9 +12,11 @@ public sealed class MemoryFilterActorParityTests
 
     private readonly FakeMemoryStore _store = new();
 
+    private readonly MemoryRecord _mineRow;
+
     public MemoryFilterActorParityTests()
     {
-        Seed("mine", Mine);
+        _mineRow = Seed("mine", Mine);
         Seed("other", Other);
         Seed("human", MemoryActor.Human);
     }
@@ -52,9 +54,30 @@ public sealed class MemoryFilterActorParityTests
         records.Select(record => record.Content).ShouldBe(["mine"]);
     }
 
-    private void Seed(string content, MemoryActor actor)
+    [Fact]
+    public async Task TrailingSeparator_StoreClauseAndMatcherAcceptTheIdenticalRows()
+    {
+        // One candidate, two readers, one answer. The store side is this fake's clause (it filters
+        // through MemoryActorSemantics.MatchesExactly, the same reading the Qdrant translator emits);
+        // the matcher side is MemoryFilterExtensions.Matches, which used to reject every row a
+        // trailing separator reached and left the two halves disagreeing on the recall path. Both
+        // vendors of the alias are in the fixture because "any vendor" is only a statement if there
+        // is more than one vendor to take.
+        var otherVendor = Seed("mine-glm", MemoryActor.Agent("kelthuzad", "glm"));
+        var filter = new MemoryFilter { Actor = "kelthuzad+" };
+        Guid[] expected = [_mineRow.Id, otherVendor.Id];
+
+        var listed = await _store.ListAsync(filter, CancellationToken.None);
+        var matched = _store.Records.Where(record => filter.Matches(record)).ToArray();
+
+        listed.Select(record => record.Id).ShouldBe(expected, ignoreOrder: true);
+        matched.Select(record => record.Id).ShouldBe(expected, ignoreOrder: true);
+    }
+
+    private MemoryRecord Seed(string content, MemoryActor actor)
     {
         var record = TestMemories.Create(content, [1f, 0f], actor: actor);
         _store.Seed(record, [1f, 0f]);
+        return record;
     }
 }

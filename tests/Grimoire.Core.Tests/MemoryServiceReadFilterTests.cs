@@ -124,9 +124,9 @@ public sealed class MemoryServiceReadFilterTests
         // Was Recall_RefillsTheWindowWhenFiltersWashOutTheFirstPage: it proved the refill by seeding
         // a window full of another actor's rows, and a CLEAN actor candidate cannot do that any more.
         // Before/after on this identical fixture: two calls and twelve points fetched to hand back
-        // two rows, now one call and six points. The loop itself is untouched and still reachable
-        // through the "alias+" grammar - see the test that pins that, which falsified my earlier
-        // claim that recall could no longer trigger it.
+        // two rows, now one call and six points. Since "alias+" stopped meaning "nothing" the loop
+        // has no actor grammar left to trigger it, so its reachability is ANN non-nestedness (the
+        // widened-window test below) and the doubles that flood a window on purpose.
         var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);
@@ -134,25 +134,25 @@ public sealed class MemoryServiceReadFilterTests
     }
 
     [Fact]
-    public async Task Recall_WithATrailingSeparator_StaysCorrectOnlyBecauseThePostFilterStillRuns()
+    public async Task Recall_WithATrailingSeparator_FillsThePageFromOneHonestWindow()
     {
+        var mine = new List<MemoryRecord>();
         for (var index = 1; index <= 6; index++)
         {
-            Seed($"mine {index}", [0.9f - index * 0.01f, 0.1f, 0f]);
+            mine.Add(Seed($"mine {index}", [0.9f - index * 0.01f, 0.1f, 0f]));
         }
 
-        // The pinned asymmetry with teeth, and the fixture is the point: with "alias+" the store
-        // clause is alias-only, so it keeps this actor's own rows and drops everyone else's - which
-        // is the opposite direction from what my first version of this test assumed. To fill the
-        // window the rows have to be the actor's own: six of them, limit 2, oversampling 3, so the
-        // 6-point window is full, the matcher then rejects all six for the trailing separator, and
-        // the refill fires. For this one grammar the post-filter is the only thing standing between
-        // this query and a wrong answer, which is why "recall can no longer trigger the escalation"
-        // was false and why the asymmetry is on record rather than quietly aligned.
+        // The door half of the alias+ parity: every row here belongs to this actor and carries the
+        // claude vendor, the store clause is alias-only and used to hand the whole 6-point window
+        // back only for the matcher to reject all of it - two calls, empty page. Was
+        // Recall_WithATrailingSeparator_StaysCorrectOnlyBecauseThePostFilterStillRuns, which pinned
+        // that as the one grammar where the post-filter was all that stood between this query and a
+        // wrong answer. Both sides read the candidate through MemoryActorSemantics now, so the page
+        // fills from the first window and the escalation never spends a second one.
         var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder+"), CancellationToken.None)).Matches;
 
-        _store.SearchCallCount.ShouldBe(2);
-        matches.ShouldBeEmpty();
+        _store.SearchCallCount.ShouldBe(1);
+        matches.Select(match => match.Record.Id).ShouldBe([mine[0].Id, mine[1].Id]);
     }
 
     [Fact]
@@ -167,9 +167,8 @@ public sealed class MemoryServiceReadFilterTests
 
         // The escalation loop itself is untouched by this slice (its own card), but its cause moved
         // for a CLEAN actor candidate: the store narrows the window to this actor's rows, one of them
-        // survives, and the honest short page is reached in one call. Not a general statement — with
-        // the trailing-separator grammar the window can still fill and be emptied afterwards, which
-        // is what the trailing-separator test above exists to show.
+        // survives, and the honest short page is reached in one call. No actor grammar widens it any
+        // more — the trailing separator reads the same on both sides now.
         var matches = (await _service.RecallAsync(Query(limit: 2, actor: "dotnet-coder"), CancellationToken.None)).Matches;
 
         _store.SearchCallCount.ShouldBe(1);

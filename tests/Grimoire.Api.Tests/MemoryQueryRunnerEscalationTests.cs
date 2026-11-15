@@ -37,16 +37,19 @@ public class MemoryQueryRunnerEscalationTests(GrimoireApiFactory factory) : ICla
     {
         factory.Reset();
         factory.Embeddings.Vectors[Query] = [1f, 0f];
-        for (var index = 1; index <= 24; index++)
-        {
-            factory.Store.Seed(
+        var rejects = Enumerable.Range(1, 24)
+            .Select(index => factory.Store.Seed(
                 $"flooder {index}",
                 [0.99f - index * 0.001f, 0.141f],
-                actor: MemoryActor.Agent("flooder", "claude"));
-        }
+                actor: MemoryActor.Agent("flooder", "claude")));
 
-        var response = await ReadList(
-            $"/api/memories?query={Query}&limit=1&actor={Uri.EscapeDataString("flooder+")}");
+        // Was built on `actor=flooder+`: that grammar filled the window and let the matcher empty
+        // it, which is the divergence 061 removed. The door still has to be able to shout, so the
+        // reject-full window is injected the way the scry fixtures do it — through the hook that
+        // hands back rows the store clause would never keep.
+        factory.Store.RejectingWindow = [.. rejects];
+
+        var response = await ReadList($"/api/memories?query={Query}&limit=1&actor=dotnet-coder");
 
         response.Items.ShouldBeEmpty();
         factory.Store.SearchCallCount.ShouldBe(RecallEscalationLoop.MaxRounds);

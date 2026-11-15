@@ -145,10 +145,10 @@ internal static class MemoryFilterTranslator
 
     // Actor is stored as a struct payload and the filter carries it as one candidate string, so the
     // clause splits into one keyword per segment: alias always, vendor only when the candidate names
-    // one. A trailing separator ("alias+") names no vendor and is read as alias-only — where that
-    // diverges from the matcher is pinned by a test, not smoothed over. Matching is exact, by
-    // decision: the matcher next door compares case-insensitively and the write path normalizes
-    // nothing, so a mixed-case candidate narrows more at the store than the post-filter ever did.
+    // one. A trailing separator ("alias+") names no vendor and is read as alias-only, which is what
+    // the in-process matcher reads too now that both go through MemoryActorSemantics.Segments.
+    // Matching is exact, by decision: the matcher next door compares case-insensitively and the write
+    // path normalizes nothing, so a mixed-case candidate narrows more at the store than the matcher.
     private static IEnumerable<Condition> ActorConditions(MemoryFilter filter)
     {
         if (filter.Actor is not { } actor)

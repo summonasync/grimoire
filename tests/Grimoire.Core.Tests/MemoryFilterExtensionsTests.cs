@@ -80,6 +80,20 @@ public sealed class MemoryFilterExtensionsTests
         filter.Matches(Record()).ShouldBeFalse();
     }
 
+    [Fact]
+    public void Matches_AliasWithPlusInsideItsVendor_IsReachedByTheWholeVendorSegment()
+    {
+        // The delegation guard: the matcher owns no separator rule of its own, it asks
+        // MemoryActorSemantics.Segments, which splits on the FIRST separator and leaves the rest to
+        // the vendor. Re-implement that split here — LastIndexOf, or a plain Split with a parts[1]
+        // read — and this case goes red while every trailing-separator test stays green, which is
+        // how a second home for the parse announces itself.
+        var record = Record(actor: MemoryActor.Agent("wave", "marshal+glm"));
+
+        new MemoryFilter { Actor = "wave+marshal+glm" }.Matches(record).ShouldBeTrue();
+        new MemoryFilter { Actor = "wave+glm" }.Matches(record).ShouldBeFalse();
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
