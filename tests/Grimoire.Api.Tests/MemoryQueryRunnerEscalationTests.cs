@@ -57,6 +57,46 @@ public class MemoryQueryRunnerEscalationTests(GrimoireApiFactory factory) : ICla
         response.Warnings[0].ShouldContain("0 of limit 1 matches");
     }
 
+    // One escalation scan per requested status: the Superseded scan can run out of rounds while the
+    // Active scan fills the page. A page that is full must not shout "came up short" — that is the
+    // per-status accumulator leaking past Take(limit).
+    [Fact]
+    public async Task Search_CappedStatusFillsNoPageButTheSiblingDoes_ResponseStaysSilent()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors[Query] = [1f, 0f];
+        SeedSupersededFlood(48);
+        factory.Store.Seed("active one", [0.9f, 0.4359f], createdAt: FakeClock.DefaultStart.AddDays(-1));
+        factory.Store.Seed("active two", [0.8f, 0.6f], createdAt: FakeClock.DefaultStart.AddDays(-1));
+
+        var response = await ReadList(
+            $"/api/memories?query={Query}&limit=2&status=active,superseded&until={UntilBound}");
+
+        response.Count.ShouldBe(2);
+        response.Items.Count.ShouldBe(2);
+        response.Warnings.ShouldBeNull();
+        factory.Store.SearchCallCount.ShouldBe(5);
+        factory.Store.SearchWindows.ShouldContain(48);
+    }
+
+    [Fact]
+    public async Task Search_CappedStatusLeavesThePagePartial_ResponseStillCarriesTheWarning()
+    {
+        factory.Reset();
+        factory.Embeddings.Vectors[Query] = [1f, 0f];
+        SeedSupersededFlood(72);
+        factory.Store.Seed("active one", [0.9f, 0.4359f], createdAt: FakeClock.DefaultStart.AddDays(-1));
+        factory.Store.Seed("active two", [0.8f, 0.6f], createdAt: FakeClock.DefaultStart.AddDays(-1));
+
+        var response = await ReadList(
+            $"/api/memories?query={Query}&limit=3&status=active,superseded&until={UntilBound}");
+
+        response.Count.ShouldBe(2);
+        response.Warnings.ShouldNotBeNull();
+        response.Warnings!.ShouldHaveSingleItem();
+        response.Warnings[0].ShouldContain("0 of limit 3 matches");
+    }
+
     [Fact]
     public async Task Search_ZeroLimit_ParserClampsToOneBeforeTheLoopSeesIt()
     {
@@ -89,6 +129,22 @@ public class MemoryQueryRunnerEscalationTests(GrimoireApiFactory factory) : ICla
 
         response.Items.Select(record => record.Id).ShouldBe([first.Id, second.Id]);
         factory.Store.SearchCallCount.ShouldBe(1);
+    }
+
+    // Rows the fake store hands back but MemoryFilterExtensions.Matches drops (they sit on the
+    // until bound). A status only reaches the round cap while every round still comes back full,
+    // so the count has to cover the last window: limit x RecallOversampling(3) x 2^(MaxRounds-1).
+    private void SeedSupersededFlood(int rejects)
+    {
+        for (var index = 1; index <= rejects; index++)
+        {
+            var angle = index * 2f * MathF.PI / 180f;
+            factory.Store.Seed(
+                $"superseded noise {index}",
+                [MathF.Cos(angle), MathF.Sin(angle)],
+                createdAt: FakeClock.DefaultStart,
+                status: MemoryStatus.Superseded);
+        }
     }
 
     private void SeedFlood(int rejects)

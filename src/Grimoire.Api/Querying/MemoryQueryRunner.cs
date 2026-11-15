@@ -34,14 +34,20 @@ public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider emb
             warnings = WarningMerge.Merge(warnings, RoundCapWarning.Build(scan, parsed.Limit));
         }
 
+        // One escalation scan per requested status, so a status can run out of rounds while a
+        // sibling fills the page. The warning says "the page came up short", which a full page
+        // cannot honestly claim: it is gated on the merged rows that actually go out, not on the
+        // per-status accumulator that produced them.
+        var page = merged
+            .OrderByDescending(match => match.Similarity)
+            .ThenBy(match => match.Record.Id)
+            .Take(parsed.Limit)
+            .ToList();
+
         return new MemoryQueryResult
         {
-            Records = [.. merged
-                .OrderByDescending(match => match.Similarity)
-                .ThenBy(match => match.Record.Id)
-                .Take(parsed.Limit)
-                .Select(match => match.Record)],
-            Warnings = warnings,
+            Records = [.. page.Select(match => match.Record)],
+            Warnings = page.Count < parsed.Limit ? warnings : null,
         };
     }
 
