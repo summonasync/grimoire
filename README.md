@@ -332,7 +332,11 @@ markers, `<removed …>` tombstones and `alias+vendor` placeholders survive the
 trip readable instead of being mangled by a second escaping pass.
 
 Register the hook **user-scope** — `~/.qwen/settings.json` (or
-`$QWEN_HOME/settings.json`). These are the fields 0.27.1 reads:
+`$QWEN_HOME/settings.json`). The measured install uses these fields; the
+annotations describe the 0.27.1 behavior this hook relies on — receipts in
+`audits/t7-live-firing-receipt.md` cover the firing, escaping and re-stamp,
+while `type`/`command`/`name`/`description`/`timeout`/`env` are what the shipped
+snippet ran with end to end:
 
 ```jsonc
 {
@@ -380,9 +384,10 @@ subcommand).
 hook payload from stdin, once calling the CLI — so the worst case is
 `2 × HOOK_GRIMOIRE_TIMEOUT` plus a second of teardown. Set the per-hook `timeout`
 to at least `2 × HOOK_GRIMOIRE_TIMEOUT + 2`: at the default budget of 10 that is
-24, which is what the snippet carries. The per-hook `timeout` is the runtime's
-hard ceiling and the knob's range exists to keep it meaningful — a budget of 60
-or more could never finish before the runtime cut it.
+22; the snippet carries 24 for slack, which is what the twins' worst-case
+measurement (two budgets plus the kill grace) leaves room for. The per-hook
+`timeout` is the runtime's hard ceiling and the knob's range exists to keep it
+meaningful — a budget of 60 or more could never finish before the runtime cut it.
 
 **Knobs.** Both scripts read the same two variables and both validate before
 using them:
