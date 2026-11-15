@@ -607,6 +607,7 @@ unreachable registry answers an empty list plus a `degradationReason`, and the p
 |---|---|
 | `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest; `daily: true` folds in the day's `daily-notes` section; what the budget cut is named twice, the sections in `omitted` and the records in `omissionDigest` |
 | `memory_compact_candidates` | get journal clusters worth distilling into facts |
+| `memory_digest` | pull everything one tome knows about a topic in a single read — the standing facts, the journal entries that are still news, and the tombstones that used to be true; a `topic:` tag matches in both shapes (the `topic:<value>` stamp and the bare slug), so asking by topic needs no tag archaeology; what the budget cut off is named in `omitted` |
 | `memory_forget` | retract with a reason (tombstone, never delete) |
 | `memory_history` | walk a memory's full supersede chain before trusting or overwriting it |
 | `memory_restore` | reverse a correction that was itself a mistake — the record returns, the superseder is tombstoned |
@@ -618,6 +619,8 @@ unreachable registry answers an empty list plus a `degradationReason`, and the p
 | `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
 | `memory_stats` | counts, `pendingCompaction`, provider health |
 | `memory_tome_create` | open a new tome when nothing fits — the description is the routing hint other agents read in the brief's tome table |
+| `projects` | read and amend the alias→workspace registry — the kebab-case aliases with absolute paths that a `Project`-scope write is auto-tagged from, plus the optional board link; an alias the registry does not know is rejected with the registered set spelled out, and `Sync` pulls the project list from the local Overmind host, marking what the board dropped as gone rather than deleting it |
+| `session_identity_set` | say who is talking — this session's actor alias and vendor — so every later write carries real provenance instead of the shared placeholder; the latest pair wins, it lives for the connection only and is never persisted, and a `--actor` flag still outranks it |
 
 Tool descriptions are the extraction substitute — they are pinned by
 wire-level contract tests.
@@ -653,6 +656,15 @@ An unusable handshake window — `sessions.retentionHours` (or its
 `memory.sessionTtlHours` fallback) that is not finite or not positive — stops `serve`
 at startup with a config error naming the knob, because a zero window would retire
 live handshake rows instead of aged ones.
+
+The topic vote has three knobs and none of them is a config key:
+`NearTopicSimilarityThreshold` (0.75) decides which neighbors are near enough to
+cast a vote, `TopicAgreementCount` (2) how many must name the same topic, and
+`TopicConfidenceThreshold` (0.8) the winner's own similarity required before the
+stamp lands. They are defaults on `MemoryEngineOptions` with no `memory` section
+entry — `EngineOptionsMapper` never reads them — so
+`GRIMOIRE_MEMORY__TOPICCONFIDENCETHRESHOLD` fails the load like any other unknown
+name, and retuning one means editing the default where it is declared.
 
 ## Development
 
