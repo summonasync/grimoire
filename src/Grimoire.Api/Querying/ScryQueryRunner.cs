@@ -15,9 +15,12 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
             ? query.Tomes
             : [.. (await DiscoverTomesAsync(cancellationToken)).Where(tome => tome != own)];
 
-        var matches = targets.Count == 0
-            ? []
-            : await memories.RecallAsync(new RecallQuery
+        IReadOnlyList<RecallMatch> matches = [];
+        IReadOnlyList<string>? warnings = null;
+
+        if (targets.Count > 0)
+        {
+            var recall = await memories.RecallAsync(new RecallQuery
             {
                 Text = query.Query,
                 Scopes = MemoryScopes.LongTerm,
@@ -26,6 +29,10 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
                 Limit = query.Limit,
             }, cancellationToken);
 
+            matches = recall.Matches;
+            warnings = recall.Warnings;
+        }
+
         var terms = LexicalTermMatcher.Tokenize(query.Query);
 
         return new ScryResponse(
@@ -33,7 +40,10 @@ public sealed class ScryQueryRunner(MemoryService memories, IMemoryStore store, 
             query.Attribution,
             matches.Count,
             [.. matches.Select(match => ToItem(match, query.Attribution, terms))],
-            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds)
+        {
+            Warnings = warnings,
+        };
     }
 
     private async Task<IReadOnlyList<string>> DiscoverTomesAsync(CancellationToken cancellationToken)

@@ -71,17 +71,18 @@ public sealed class MemoryActorSemanticsTests
     }
 
     [Fact]
-    public void MatchesExactly_AVendorlessRowIsReachedByTheTrailingSeparatorCandidate()
+    public void TrailingSeparator_ReachesAVendorlessRowOnBothSides()
     {
-        // Pinned divergence, not a fix: the matcher compares "human+" with MemoryActor.ToString()
-        // ("human", the vendor is absent) using an ordinal-insensitive equality and rejects the
-        // record outright, while the store clause reads the same candidate as alias-only and keeps
-        // it. Both readings are on record here; neither is smoothed over.
+        // The candidate that used to split the readers: a human row carries no vendor, so the store
+        // clause read "human+" as alias-only and kept it while the matcher compared it against
+        // ToString() ("human") and threw it away. The matcher splits through this same Segments now,
+        // so one candidate means one thing — the assertion below is the parity, not a pinned
+        // disagreement.
         var human = MemoryActor.Human;
         var record = TestMemories.Create("note", [1f, 0f], actor: human);
 
         MemoryActorSemantics.MatchesExactly(human, "human+").ShouldBeTrue();
-        new MemoryFilter { Actor = "human+" }.Matches(record).ShouldBeFalse();
+        new MemoryFilter { Actor = "human+" }.Matches(record).ShouldBeTrue();
     }
 
     [Fact]
@@ -95,13 +96,16 @@ public sealed class MemoryActorSemanticsTests
     }
 
     [Fact]
-    public void MatchesExactly_ADoubleSeparator_ProducesAStoreVendorTheMatcherCannotName()
+    public void DoubleSeparator_NamesAPlusAsTheVendorOnBothSides()
     {
-        // Third member of the same divergence family, pinned rather than tidied: "a++" splits on the
-        // first separator, so the store asks for alias "a" with vendor "+", while the matcher
-        // compares against ToString() and can never produce that vendor. Rejected by both sides for
-        // this actor - the agreement here is luck, and the test says so instead of implying a rule.
-        MemoryActorSemantics.MatchesExactly(MemoryActor.Agent("a", "plus"), "a++").ShouldBeFalse();
+        // "a++" splits on the first separator, so the candidate names alias "a" with the vendor "+".
+        // A row written under vendor "plus" is rejected by the clause and by the matcher — for the
+        // same stated reason now, because both ask this Segments what the candidate means.
+        var storeVendorTheCandidateCannotName = MemoryActor.Agent("a", "plus");
+
+        MemoryActorSemantics.MatchesExactly(storeVendorTheCandidateCannotName, "a++").ShouldBeFalse();
+        new MemoryFilter { Actor = "a++" }.Matches(
+            TestMemories.Create("note", [1f, 0f], actor: storeVendorTheCandidateCannotName)).ShouldBeFalse();
         MemoryActorSemantics.Segments("a++").ShouldBe([("a", "+")]);
     }
 

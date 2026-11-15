@@ -40,7 +40,7 @@ internal sealed class ScryCommand(CliEnvironment environment)
             return ExitCodes.Ok;
         }
 
-        var matches = await services.GetRequiredService<MemoryService>().RecallAsync(new RecallQuery
+        var recall = await services.GetRequiredService<MemoryService>().RecallAsync(new RecallQuery
         {
             Text = query,
             Scopes = MemoryScopes.LongTerm,
@@ -50,17 +50,17 @@ internal sealed class ScryCommand(CliEnvironment environment)
         }, cancellationToken);
 
         environment.Output.WriteLine($"Tomes: {string.Join(", ", targets)}");
-        if (matches.Count == 0)
+        if (recall.Matches.Count == 0)
         {
             environment.Output.WriteLine("No matching memories in other tomes.");
-            return ExitCodes.Ok;
         }
 
-        foreach (var match in matches)
+        foreach (var match in recall.Matches)
         {
             MemoryFormatter.WriteScryMatch(environment.Output, match, AttributionText(match, attribution));
         }
 
+        MemoryFormatter.WriteWarnings(environment.Output, recall.Warnings);
         return ExitCodes.Ok;
     }
 

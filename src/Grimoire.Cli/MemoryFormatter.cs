@@ -30,6 +30,19 @@ internal static class MemoryFormatter
         WriteLines(output, match.Record.Content, "  ");
     }
 
+    public static void WriteWarnings(TextWriter output, IReadOnlyList<string>? warnings)
+    {
+        if (warnings is null)
+        {
+            return;
+        }
+
+        foreach (var warning in warnings)
+        {
+            output.WriteLine($"Warning: {warning}");
+        }
+    }
+
     public static void WriteBrief(TextWriter output, BriefResult brief, bool daily)
     {
         WriteBriefSections(output, brief, daily);
@@ -119,8 +132,9 @@ internal static class MemoryFormatter
     }
 
     // The daily block mirrors the MCP door's `daily` payload: Core already ordered buckets, actor
-    // groups and entries, so the renderer walks the lists as given and prints Core's warnings by
-    // index, after the section they describe.
+    // groups and entries, so the text face prints them as given. Warnings are NOT printed here — they
+    // belong to WriteBriefWarnings, which is the only door that can route them away from the sections'
+    // stdout when the hook envelope asks for stream separation.
     private static void WriteDaily(TextWriter output, BriefResult brief)
     {
         output.WriteLine(Heading("daily", brief.DailyState));

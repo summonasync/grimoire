@@ -30,6 +30,7 @@ internal static class ScryEndpoints
                     response.Count,
                     [.. response.Items.Select(item => ScryItemProjection.Project(item, keys))],
                     response.ElapsedMs)
+                { Warnings = response.Warnings }
                 : response);
         });
     }

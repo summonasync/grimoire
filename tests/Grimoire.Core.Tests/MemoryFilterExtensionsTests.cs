@@ -21,6 +21,20 @@ public sealed class MemoryFilterExtensionsTests
     public void Matches_EmptyFilter_AcceptsAnyRecord() =>
         new MemoryFilter().Matches(Record()).ShouldBeTrue();
 
+    [Theory]
+    [InlineData(MemoryStatus.Superseded)]
+    [InlineData(MemoryStatus.Tombstoned)]
+    public void Matches_EmptyFilter_KeepsARecordThatIsNotActive(MemoryStatus status)
+    {
+        // The half the case above cannot see: its record carries the default Active, so a matcher
+        // tightened to default to Active passes it and the leniency stays unstated. The leniency is
+        // the rule — the store clause owns the default (MemoryStatuses.Effective renders the single
+        // Active keyword when the filter names none), which is what keeps a recall narrowed exactly
+        // once. 058's experiment A measured four Api failures for the tightening, and not one of
+        // those failure messages said why leniency exists; this row says it.
+        new MemoryFilter().Matches(Record(status: status)).ShouldBeTrue();
+    }
+
     [Fact]
     public void Matches_CreatedAtEqualToSince_Inclusive() =>
         new MemoryFilter { CreatedAfter = Start }.Matches(Record(Start)).ShouldBeTrue();
@@ -78,6 +92,20 @@ public sealed class MemoryFilterExtensionsTests
         var filter = new MemoryFilter { Actor = "human" };
 
         filter.Matches(Record()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Matches_AliasWithPlusInsideItsVendor_IsReachedByTheWholeVendorSegment()
+    {
+        // The delegation guard: the matcher owns no separator rule of its own, it asks
+        // MemoryActorSemantics.Segments, which splits on the FIRST separator and leaves the rest to
+        // the vendor. Re-implement that split here — LastIndexOf, or a plain Split with a parts[1]
+        // read — and this case goes red while every trailing-separator test stays green, which is
+        // how a second home for the parse announces itself.
+        var record = Record(actor: MemoryActor.Agent("wave", "marshal+glm"));
+
+        new MemoryFilter { Actor = "wave+marshal+glm" }.Matches(record).ShouldBeTrue();
+        new MemoryFilter { Actor = "wave+glm" }.Matches(record).ShouldBeFalse();
     }
 
     [Theory]

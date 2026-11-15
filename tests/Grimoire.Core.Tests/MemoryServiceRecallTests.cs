@@ -47,7 +47,7 @@ public sealed class MemoryServiceRecallTests
         Seed("strong", [0.9f, 0.4359f, 0f], importance: 1);
         Seed("weak", [0.5f, 0.866f, 0f], importance: 0);
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(2);
         matches[0].Score.ShouldBe(0.9, 1e-3);
@@ -61,7 +61,7 @@ public sealed class MemoryServiceRecallTests
         var fresh = Seed("fresh", [0.9f, 0.4359f, 0f], importance: 1, accessed: FakeClock.DefaultStart);
         var aged = Seed("aged", [0.9f, 0.4359f, 0f], importance: 1, accessed: FakeClock.DefaultStart.AddDays(-30));
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches[0].Record.Id.ShouldBe(fresh.Id);
         matches[1].Record.Id.ShouldBe(aged.Id);
@@ -74,7 +74,7 @@ public sealed class MemoryServiceRecallTests
         Seed("vital", [0.8f, 0.6f, 0f], importance: 1);
         Seed("minor", [0.8f, 0.6f, 0f], importance: 0);
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches[0].Score.ShouldBe(0.8, 1e-3);
         matches[1].Score.ShouldBe(0.4, 1e-3);
@@ -86,7 +86,7 @@ public sealed class MemoryServiceRecallTests
         Seed("session note", [1f, 0f, 0f], scope: MemoryScope.Session);
         var project = Seed("project note", [0.9f, 0.4359f, 0f]);
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(project.Id);
@@ -97,7 +97,7 @@ public sealed class MemoryServiceRecallTests
     {
         Seed("session note", [1f, 0f, 0f], scope: MemoryScope.Session, sessionId: "s-1");
 
-        var matches = await _service.RecallAsync(Query(scopes: [MemoryScope.Session], sessionId: "s-1"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(scopes: [MemoryScope.Session], sessionId: "s-1"), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Scope.ShouldBe(MemoryScope.Session);
@@ -109,7 +109,7 @@ public sealed class MemoryServiceRecallTests
         var record = Seed("project note", [0.9f, 0.4359f, 0f], accessCount: 4, accessed: FakeClock.DefaultStart.AddDays(-10));
         _clock.Advance(TimeSpan.FromMinutes(3));
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches[0].Record.AccessCount.ShouldBe(5);
         matches[0].Record.LastAccessedAt.ShouldBe(_clock.UtcNow);
@@ -126,7 +126,7 @@ public sealed class MemoryServiceRecallTests
         Seed("tombstoned", [0.99f, 0.141f, 0f], status: MemoryStatus.Tombstoned, tombstoneReason: "forgotten", tombstonedAt: FakeClock.DefaultStart);
         var active = Seed("active", [0.5f, 0.866f, 0f]);
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(active.Id);
@@ -139,7 +139,7 @@ public sealed class MemoryServiceRecallTests
         Seed("second", [0.8f, 0.6f, 0f], importance: 1);
         Seed("third", [0.5f, 0.866f, 0f], importance: 1);
 
-        var matches = await _service.RecallAsync(Query(limit: 2), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 2), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(2);
         matches[0].Similarity.ShouldBe(0.9, 1e-3);
@@ -152,7 +152,7 @@ public sealed class MemoryServiceRecallTests
         Seed("journal note", [1f, 0f, 0f], kind: MemoryKind.Journal);
         var fact = Seed("fact note", [0.9f, 0.4359f, 0f], kind: MemoryKind.Fact);
 
-        var matches = await _service.RecallAsync(Query(kind: MemoryKind.Fact), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(kind: MemoryKind.Fact), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(fact.Id);
@@ -164,7 +164,7 @@ public sealed class MemoryServiceRecallTests
         Seed("csharp note", [1f, 0f, 0f], tags: ["csharp"]);
         Seed("rust note", [0.9f, 0.4359f, 0f], tags: ["rust"]);
 
-        var matches = await _service.RecallAsync(Query(tags: ["csharp", "ml"]), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(tags: ["csharp", "ml"]), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Tags.ShouldBe(["csharp"]);
@@ -176,7 +176,7 @@ public sealed class MemoryServiceRecallTests
         Seed("other project", [1f, 0f, 0f], projectId: "other");
         var own = Seed("own project", [0.9f, 0.4359f, 0f], projectId: "grim");
 
-        var matches = await _service.RecallAsync(Query(projectId: "grim"), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(projectId: "grim"), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(own.Id);
@@ -188,7 +188,7 @@ public sealed class MemoryServiceRecallTests
         Seed("stale champion", [0.99f, 0.141f, 0f], importance: 1, accessed: FakeClock.DefaultStart.AddDays(-100));
         var recent = Seed("recent runner-up", [0.7f, 0.714f, 0f], importance: 1, accessed: FakeClock.DefaultStart);
 
-        var matches = await _service.RecallAsync(Query(limit: 1), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(limit: 1), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(1);
         matches[0].Record.Id.ShouldBe(recent.Id);
@@ -198,7 +198,7 @@ public sealed class MemoryServiceRecallTests
     [Fact]
     public async Task Recall_WithoutMatches_ReturnsEmpty()
     {
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches.ShouldBeEmpty();
     }
@@ -210,7 +210,7 @@ public sealed class MemoryServiceRecallTests
         Seed("foreign fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "other");
         var global = Seed("global fact", [0.9f, 0.4359f, 0f], scope: MemoryScope.Global, importance: 1, projectId: null);
 
-        var matches = await _service.RecallAsync(Query() with { CallerProjectId = "grim" }, CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query() with { CallerProjectId = "grim" }, CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(3);
         matches.Take(2).ShouldContain(match => match.Record.Id == home.Id);
@@ -226,7 +226,7 @@ public sealed class MemoryServiceRecallTests
         Seed("home fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "grim");
         Seed("foreign fact", [0.9f, 0.4359f, 0f], importance: 1, projectId: "other");
 
-        var matches = await _service.RecallAsync(Query(), CancellationToken.None);
+        var matches = (await _service.RecallAsync(Query(), CancellationToken.None)).Matches;
 
         matches.Count.ShouldBe(2);
         matches.ShouldAllBe(match => match.Score > 0.89);

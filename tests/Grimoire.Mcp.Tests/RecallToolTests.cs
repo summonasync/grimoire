@@ -385,6 +385,29 @@ public sealed class RecallToolTests
         message.ShouldContain("mutually exclusive");
     }
 
+    [Fact]
+    public async Task Recall_TrailingSeparatorActor_HandsBackTheRowThatCarriesAVendor()
+    {
+        // The contract change of 061 seen from the tool an agent actually calls. "bob+" is this alias
+        // with any vendor; the store clause always kept the bob+qwen row and the in-process matcher
+        // then threw it away, so this exact call answered count 0.
+        await using var session = await McpTestSession.StartAsync(new McpHostOptions { Actor = new MemoryActor("bob", "qwen") });
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["actor"] = "bob+",
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.GetProperty("matches")[0].GetProperty("actor").GetString().ShouldBe("bob+qwen");
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse("the page filled, so the loop has nothing to say");
+    }
+
     private static string[] KeysOf(JsonElement hit)
     {
         return [.. hit.EnumerateObject().Select(property => property.Name)];
@@ -529,5 +552,89 @@ public sealed class RecallToolTests
         result.ShouldSucceed();
         result.Payload().GetProperty("count").GetInt32().ShouldBe(0);
         result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Recall_WindowFillsWithRejects_WarnsNamingLimitAndRounds()
+    {
+        await using var session = await McpTestSession.StartAsync(storeDecorator: store => new WindowPaddingStore(store));
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["limit"] = 2,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        var warning = payload.GetProperty("warnings").EnumerateArray().Single().GetString();
+        warning.ShouldNotBeNull();
+        warning!.ShouldContain("after 4 rounds");
+        warning.ShouldContain("limit 2");
+        warning.ShouldContain("1 of limit 2 matches");
+    }
+
+    [Fact]
+    public async Task Recall_StoreCameBackShort_SaysNothingAboutRounds()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["limit"] = 2,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        payload.TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Recall_RoundCapOnATomeTheStoreDoesNotKnow_ShowsCapWarningAndTomeWarning()
+    {
+        await using var session = await McpTestSession.StartAsync(storeDecorator: store => new WindowPaddingStore(store));
+        session.Embeddings.Register("anything", VectorA);
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "anything",
+            ["tome"] = "nonesuch-tome",
+            ["limit"] = 2,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(0);
+        var warnings = payload.GetProperty("warnings").EnumerateArray().Select(value => value.GetString()!).ToArray();
+
+        warnings.Length.ShouldBe(2);
+        warnings[0].ShouldContain("after 4 rounds");
+        warnings[1].ShouldStartWith("tome 'nonesuch-tome' is empty or does not exist");
+        warnings.Distinct(StringComparer.Ordinal).Count().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Recall_ProjectedHits_StillCarryTheRoundCapWarning()
+    {
+        await using var session = await McpTestSession.StartAsync(storeDecorator: store => new WindowPaddingStore(store));
+        session.Embeddings.Register("alpha squad decision", VectorA);
+        await Remember(session, "alpha squad decision", "grimoire");
+
+        var result = await session.Client.CallToolAsync("memory_recall", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["limit"] = 2,
+            ["compact"] = true,
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("warnings").EnumerateArray().ShouldHaveSingleItem();
     }
 }

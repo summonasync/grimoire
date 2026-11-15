@@ -82,18 +82,21 @@ public static class MemoryFilterExtensions
         return MatchesActor(filter.Actor, record.Actor);
     }
 
+    // Split through MemoryActorSemantics, so a trailing separator reads the same here as in the store
+    // clause. Only the comparison is this matcher's own: case-insensitive, while the store keyword
+    // stays exact — 058's ruling, pinned by the actor parity tests.
     private static bool MatchesActor(string? candidate, MemoryActor actor)
     {
-        if (string.IsNullOrWhiteSpace(candidate))
+        var segments = MemoryActorSemantics.Segments(candidate);
+
+        if (segments.Count == 0)
         {
             return true;
         }
 
-        if (candidate.Contains('+'))
-        {
-            return actor.ToString().Equals(candidate, StringComparison.OrdinalIgnoreCase);
-        }
+        var (alias, vendor) = segments[0];
 
-        return actor.Alias.Equals(MemoryActor.AliasPart(candidate), StringComparison.OrdinalIgnoreCase);
+        return actor.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase)
+            && (vendor is null || string.Equals(actor.Vendor, vendor, StringComparison.OrdinalIgnoreCase));
     }
 }

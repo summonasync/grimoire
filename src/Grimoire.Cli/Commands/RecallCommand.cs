@@ -19,7 +19,7 @@ internal sealed class RecallCommand(CliEnvironment environment)
             services.GetRequiredService<MemoryEngineOptions>().DefaultTome,
             services.GetRequiredService<IActorClaimProvider>(),
             services.GetService<IAgentIdentitySource>(), cancellationToken);
-        var matches = await memories.RecallAsync(new RecallQuery
+        var recall = await memories.RecallAsync(new RecallQuery
         {
             Tome = identity.Tome,
             Text = invocation.JoinedPositional(),
@@ -27,17 +27,17 @@ internal sealed class RecallCommand(CliEnvironment environment)
             Limit = invocation.Value("limit") is { } raw ? CliValues.PositiveInt(invocation.Spec, "limit", raw) : 5,
         }, cancellationToken);
 
-        if (matches.Count == 0)
+        if (recall.Matches.Count == 0)
         {
             environment.Output.WriteLine("No matching memories.");
-            return ExitCodes.Ok;
         }
 
-        foreach (var match in matches)
+        foreach (var match in recall.Matches)
         {
             MemoryFormatter.WriteMatch(environment.Output, match);
         }
 
+        MemoryFormatter.WriteWarnings(environment.Output, recall.Warnings);
         return ExitCodes.Ok;
     }
 }

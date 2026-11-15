@@ -343,6 +343,60 @@ public sealed class ScryToolTests
         annotations.DestructiveHint.ShouldBe(false);
     }
 
+    [Fact]
+    public async Task Scry_WindowFillsWithRejects_OutputCarriesTheWarningsKey()
+    {
+        await using var session = await McpTestSession.StartAsync(storeDecorator: store => new WindowPaddingStore(store));
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["tomes"] = new[] { "alpha" },
+            ["limit"] = 2,
+        });
+
+        result.ShouldSucceed();
+        var payload = result.Payload();
+        payload.GetProperty("count").GetInt32().ShouldBe(1);
+        var warning = payload.GetProperty("warnings").EnumerateArray().Single().GetString();
+        warning.ShouldNotBeNull();
+        warning!.ShouldContain("after 4 rounds");
+        warning.ShouldContain("limit 2");
+    }
+
+    [Fact]
+    public async Task Scry_HonestShortPage_KeepsTheWarningsKeyOffThePayload()
+    {
+        await using var session = await McpTestSession.StartAsync();
+        await RememberAsync(session, "alpha squad decision", tome: "alpha");
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "alpha squad decision",
+            ["tomes"] = new[] { "alpha" },
+        });
+
+        result.ShouldSucceed();
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Scry_NoTomesToSearch_CarriesNoWarningsKey()
+    {
+        await using var session = await McpTestSession.StartAsync(storeDecorator: store => new WindowPaddingStore(store));
+        await RememberAsync(session, "own tome note", tome: null);
+
+        var result = await session.Client.CallToolAsync("memory_scry", new Dictionary<string, object?>
+        {
+            ["query"] = "own tome note",
+        });
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("tomes").EnumerateArray().ShouldBeEmpty();
+        result.Payload().TryGetProperty("warnings", out _).ShouldBeFalse();
+    }
+
     private static async Task<JsonElement> RememberAsync(McpTestSession session, string content, string? tome, string kind = "Fact")
     {
         var arguments = new Dictionary<string, object?>

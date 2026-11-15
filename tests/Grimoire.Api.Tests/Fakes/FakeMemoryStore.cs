@@ -15,6 +15,10 @@ public class FakeMemoryStore : IMemoryStore
 
     public int GetCount { get; set; }
 
+    public int SearchCallCount { get; set; }
+
+    public List<int> SearchWindows { get; } = [];
+
     public Action? OnGetAsync { get; set; }
 
     public Action<MemoryFilter>? OnFetchAsync { get; set; }
@@ -22,6 +26,11 @@ public class FakeMemoryStore : IMemoryStore
     public Action<MemoryFilter>? OnListAsync { get; set; }
 
     public Action<MemoryFilter>? OnCountAsync { get; set; }
+
+    // Models a store clause looser than MemoryFilterExtensions.Matches: search answers come from
+    // this list instead of Matching(filter), so windows can come back full of rows the post-filter
+    // drops. Same hook the CLI fake ships as RecordingMemoryStore.RejectingWindow.
+    public IReadOnlyList<MemoryRecord>? RejectingWindow { get; set; }
 
     public IReadOnlyList<MemoryRecord> Records => _points.Values.Select(point => point.Record).ToArray();
 
@@ -76,7 +85,12 @@ public class FakeMemoryStore : IMemoryStore
 
     public virtual Task<IReadOnlyList<VectorMatch>> SearchAsync(ReadOnlyMemory<float> vector, MemoryFilter filter, int limit, CancellationToken cancellationToken)
     {
-        IReadOnlyList<VectorMatch> matches = Matching(filter)
+        SearchCallCount++;
+        SearchWindows.Add(limit);
+        IReadOnlyList<StoredPoint> candidates = RejectingWindow is { } leaked
+            ? [.. leaked.Select(record => _points[record.Id])]
+            : [.. Matching(filter)];
+        IReadOnlyList<VectorMatch> matches = candidates
             .Select(point => new VectorMatch
             {
                 Record = point.Record,

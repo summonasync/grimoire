@@ -1,5 +1,6 @@
 using Grimoire.Core;
 using Grimoire.Infrastructure.Memory;
+using Grimoire.Infrastructure.Tests.Fakes;
 using Qdrant.Client.Grpc;
 using Shouldly;
 using Xunit;
@@ -88,14 +89,48 @@ public sealed class MemoryFilterTranslatorActorTests
     [Fact]
     public void Translate_WithATrailingSeparator_TreatsTheCandidateAsAliasOnly()
     {
-        // Divergence pinned, not fixed: MemoryFilterExtensions.MatchesActor compares "alias+" against
-        // MemoryActor.ToString() and therefore matches NOTHING for it, while this clause matches every
-        // row written by that alias. Both readings are defensible; the owner chose the alias-only
-        // reading here and asked that the difference be written down rather than hidden.
+        // The owner's chosen reading of a trailing separator, and since 061 the only reading: the
+        // in-process matcher asks MemoryActorSemantics.Segments the same question this clause does,
+        // so "alias+" means this alias with any vendor on both sides of a recall. The case
+        // asymmetry beside it stays — this keyword is exact, the matcher ignores case.
         var filter = MemoryFilterTranslator.Translate(new MemoryFilter { Actor = "kelthuzad+" });
 
         FieldConditions(filter, "actor.alias").ShouldHaveSingleItem().Field!.Match.Keyword.ShouldBe("kelthuzad");
         FieldConditions(filter, "actor.vendor").ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("+", null)]
+    [InlineData("+qwen", "qwen")]
+    public void Translate_ABareSeparatorCandidate_EmitsAnEmptyAliasKeywordRatherThanNoClause(string candidate, string? vendor)
+    {
+        // 058 WARNING-2's wire half, beside the in-process parity case 061 bought it with. The shape is
+        // the quiet one: the clause survives as a keyword on an empty alias, so the store stays
+        // constrained and nets nothing. Measured on the live 1.19.2 the product runs against, the
+        // scroll filter "actor.alias" match value "" answered 200 with zero rows over a point whose
+        // alias is "kelthuzad" (and the same point came back for alias "kelthuzad"), so the real
+        // server agrees with both doubles on this candidate. What this test actually guards is the
+        // other reading: decide a blank alias segment means unconstrained and the clause vanishes
+        // here first, which is a store returning every actor's rows to a query that named none — the
+        // in-process matcher would follow it into the same wrong answer, so the page would look full
+        // and be wrong.
+        var filter = MemoryFilterTranslator.Translate(new MemoryFilter { Actor = candidate });
+
+        FieldConditions(filter, "actor.alias").ShouldHaveSingleItem().Field!.Match.Keyword.ShouldBe(string.Empty);
+
+        if (vendor is null)
+        {
+            FieldConditions(filter, "actor.vendor").ShouldBeEmpty();
+        }
+        else
+        {
+            FieldConditions(filter, "actor.vendor").ShouldHaveSingleItem().Field!.Match.Keyword.ShouldBe(vendor);
+        }
+
+        var payload = StoredActor("kelthuzad", "qwen");
+
+        QdrantFilterEvaluator.Matches(filter, payload).ShouldBeFalse();
+        QdrantFilterEvaluator.Matches(MemoryFilterTranslator.Translate(new MemoryFilter()), payload).ShouldBeTrue();
     }
 
     [Fact]
@@ -107,5 +142,19 @@ public sealed class MemoryFilterTranslatorActorTests
         FieldConditions(filter, MemoryPayloadFields.Status).ShouldBeEmpty();
         filter.Must.ShouldContain(item => item.Filter != null);
         ActorConditionCount(filter).ShouldBe(2);
+    }
+
+    // The payload shape MemoryPayloadMapper writes: status plus an actor struct carrying both segments.
+    private static IReadOnlyDictionary<string, Value> StoredActor(string alias, string vendor)
+    {
+        var actor = new Struct();
+        actor.Fields.Add("alias", alias);
+        actor.Fields.Add("vendor", vendor);
+
+        return new Dictionary<string, Value>
+        {
+            [MemoryPayloadFields.Status] = "Active",
+            [MemoryPayloadFields.Actor] = new Value { StructValue = actor },
+        };
     }
 }

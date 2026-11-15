@@ -325,9 +325,9 @@ public sealed class MemoryServiceStatsTests
             _clock);
         Seed("recall me", MemoryScope.Project, MemoryKind.Journal, MemoryStatus.Active, created: created);
 
-        var recalled = await service.RecallAsync(
+        var recalled = (await service.RecallAsync(
             new RecallQuery { Text = "recall me", Tome = TomeKey.DefaultTome, Limit = 5 },
-            CancellationToken.None);
+            CancellationToken.None)).Matches;
 
         recalled.ShouldNotBeEmpty();
         _clock.Advance(TimeSpan.FromDays(30));

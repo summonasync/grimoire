@@ -37,6 +37,8 @@ public sealed class MemoryService(
 
     private readonly Consolidation.IClusterSummarizer _summarizer = new Consolidation.ExtractiveSummarizer();
 
+    private readonly RecallEscalationLoop _recallWindows = new(store, options);
+
     public async Task<RememberResult> RememberAsync(RememberRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
@@ -132,7 +134,7 @@ public sealed class MemoryService(
         return new RememberResult { Record = record, SupersededId = supersededId, NearMatches = nearMatches };
     }
 
-    public async Task<IReadOnlyList<RecallMatch>> RecallAsync(RecallQuery query, CancellationToken cancellationToken)
+    public async Task<RecallResult> RecallAsync(RecallQuery query, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query.Text))
         {
@@ -162,17 +164,9 @@ public sealed class MemoryService(
             Actor = query.Actor,
         };
 
-        var fetchLimit = query.Limit * Math.Max(_options.RecallOversampling, 1);
-        var matches = await store.SearchAsync(vector, filter, fetchLimit, cancellationToken);
-        var kept = matches.Where(match => filter.Matches(match.Record)).ToArray();
+        var scan = await _recallWindows.SearchAsync(vector, filter, query.Limit, cancellationToken);
 
-        if (kept.Length < query.Limit && matches.Count == fetchLimit)
-        {
-            var escalated = await store.SearchAsync(vector, filter, fetchLimit * 2, cancellationToken);
-            kept = escalated.Where(match => filter.Matches(match.Record)).ToArray();
-        }
-
-        var top = kept
+        var top = scan.Kept
             .Select(match => (Match: match, Score: MemoryScorer.Score(
                 match.Similarity,
                 match.Record,
@@ -199,7 +193,11 @@ public sealed class MemoryService(
             results.Add(new RecallMatch { Record = accessed, Similarity = match.Similarity, Score = score });
         }
 
-        return results;
+        return new RecallResult
+        {
+            Matches = results,
+            Warnings = RoundCapWarning.Build(scan, query.Limit),
+        };
     }
 
     public async Task<bool> ForgetAsync(

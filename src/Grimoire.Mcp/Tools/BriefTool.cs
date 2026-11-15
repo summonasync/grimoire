@@ -76,28 +76,13 @@ internal sealed class BriefTool(BriefService brief, IMemoryStore store, MemoryAc
                 OmissionDigest = ToOmissionDigest(result.OmissionDigest),
                 Hint = IsEmpty(result) ? $"{StartupContract} {EmptyTomeHint}" : StartupContract,
                 CompactionDue = ToCompactionSection(result.CompactionDue),
-                Warnings = MergeWarnings(result.Warnings, tomeWarnings),
+                Warnings = WarningMerge.Merge(result.Warnings, tomeWarnings),
             });
         }, cancellationToken);
     }
 
     private static BriefCompactionSection? ToCompactionSection(BriefCompactionDue? due) =>
         due is null ? null : new BriefCompactionSection { PendingEntries = due.PendingEntries };
-
-    // Core reports the daily zone degradation and EmptyTomeWarning reports the tome; both land in the
-    // same warnings channel, so neither may overwrite the other. Nothing to say stays null — an empty
-    // list would serialize a key onto a payload that has nothing to report.
-    private static IReadOnlyList<string>? MergeWarnings(IReadOnlyList<string>? coreWarnings, IReadOnlyList<string>? tomeWarnings)
-    {
-        if (coreWarnings is null)
-        {
-            return tomeWarnings;
-        }
-
-        return tomeWarnings is null
-            ? coreWarnings
-            : [.. coreWarnings.Concat(tomeWarnings).Distinct(StringComparer.Ordinal)];
-    }
 
     private static BriefDailySection ToDailySection(BriefResult result) => new()
     {

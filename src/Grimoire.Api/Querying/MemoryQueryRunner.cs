@@ -4,48 +4,51 @@ namespace Grimoire.Api.Querying;
 
 public sealed class MemoryQueryRunner(IMemoryStore store, IEmbeddingProvider embeddings, MemoryEngineOptions? options = null)
 {
-    private readonly MemoryEngineOptions _options = options ?? new();
+    private readonly RecallEscalationLoop _recallWindows = new(store, options);
 
-    public async Task<IReadOnlyList<MemoryRecord>> RunAsync(string? queryText, ParsedMemoryQuery parsed, CancellationToken cancellationToken)
+    public async Task<MemoryQueryResult> RunAsync(
+        string? queryText,
+        ParsedMemoryQuery parsed,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(parsed);
 
         if (string.IsNullOrWhiteSpace(queryText))
         {
-            return await ListAsync(parsed, cancellationToken);
+            return new MemoryQueryResult { Records = await ListAsync(parsed, cancellationToken) };
         }
 
         var vector = await embeddings.EmbedAsync(queryText, cancellationToken);
         var merged = new List<VectorMatch>();
+        IReadOnlyList<string>? warnings = null;
+
         foreach (var status in parsed.Statuses)
         {
-            merged.AddRange(await SearchAsync(vector, parsed.Filter with { Status = status }, parsed.Limit, cancellationToken));
+            var scan = await _recallWindows.SearchAsync(
+                vector,
+                parsed.Filter with { Status = status },
+                parsed.Limit,
+                cancellationToken);
+
+            merged.AddRange(scan.Kept);
+            warnings = WarningMerge.Merge(warnings, RoundCapWarning.Build(scan, parsed.Limit));
         }
 
-        return [.. merged
+        // One escalation scan per requested status, so a status can run out of rounds while a
+        // sibling fills the page. The warning says "the page came up short", which a full page
+        // cannot honestly claim: it is gated on the merged rows that actually go out, not on the
+        // per-status accumulator that produced them.
+        var page = merged
             .OrderByDescending(match => match.Similarity)
             .ThenBy(match => match.Record.Id)
             .Take(parsed.Limit)
-            .Select(match => match.Record)];
-    }
+            .ToList();
 
-    private async Task<IReadOnlyList<VectorMatch>> SearchAsync(
-        ReadOnlyMemory<float> vector,
-        MemoryFilter filter,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        var window = limit * Math.Max(_options.RecallOversampling, 1);
-        var matches = await store.SearchAsync(vector, filter, window, cancellationToken);
-        var kept = matches.Where(match => filter.Matches(match.Record)).ToArray();
-
-        if (kept.Length < limit && matches.Count == window)
+        return new MemoryQueryResult
         {
-            var escalated = await store.SearchAsync(vector, filter, window * 2, cancellationToken);
-            kept = [.. escalated.Where(match => filter.Matches(match.Record))];
-        }
-
-        return kept;
+            Records = [.. page.Select(match => match.Record)],
+            Warnings = page.Count < parsed.Limit ? warnings : null,
+        };
     }
 
     private async Task<IReadOnlyList<MemoryRecord>> ListAsync(ParsedMemoryQuery parsed, CancellationToken cancellationToken)
