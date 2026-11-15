@@ -159,11 +159,8 @@ public sealed class QdrantFilterEvaluatorNestedFieldTests
         // element). This server has none: the same query shape over ["a","b"] returned no rows,
         // while the keyword list the translator actually emits for tags returned the point.
         //
-        // Side finding, written instead of silently aligned: a SINGLE keyword ("match":"b") over a
-        // list of strings does match on the server and does not here. The translator never emits
-        // that shape (tags go through Conditions.Match, i.e. match.keywords), and a double that is
-        // stricter than the server fails loudly rather than hiding anything — the looser direction
-        // is the one that hides bugs, and that is the direction this guard removes.
+        // The same probe's side finding — a single keyword over that list does match on the server
+        // and does not here — is a named case beside this one, where it was purchased to live.
         var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
         {
             ["mine"] = TaggedPayload(["a", "b"]),
@@ -175,6 +172,34 @@ public sealed class QdrantFilterEvaluatorNestedFieldTests
 
         MatchingIds(DotFilter("tags.1", "b"), points).ShouldBeEmpty();
         MatchingIds(anyOfTheProductShapes, points).ShouldBe(["mine"]);
+    }
+
+    [Fact]
+    public void SingleKeyword_OverAListPayload_StaysTheStricterSideAndSaysSo()
+    {
+        // 058 WARNING-1, purchased into a named case instead of staying a comment. Measured in this
+        // slice on the server the product actually runs against — 1.19.2 at 127.0.0.1:6353, throwaway
+        // collection holding this same payload, dropped with the collection here: a field condition
+        // "tags" match value "b" over ["a","b"] returned the point, the same shape with "z" returned
+        // none, and the any-of shape the translator emits for tags returned it too. So the server
+        // reads a single keyword as "some element equals" while this double reads it as "the field is
+        // that string" — the fake is the stricter side, the one direction that cannot hand back a row
+        // the product did not ask for. Harmless because the translator never aims a single keyword at
+        // a list field. Widen the Keyword arm to walk ListValue and this case is the first thing red;
+        // the two controls beside it prove the false comes from the payload shape and not a dead
+        // fixture or a dead keyword arm.
+        var points = new Dictionary<string, IReadOnlyDictionary<string, Value>>
+        {
+            ["mine"] = TaggedPayload(["a", "b"]),
+        };
+        var keywordsTheProductEmits = new Filter
+        {
+            Must = { Conditions.Match(MemoryPayloadFields.Tags, ["b"]) },
+        };
+
+        MatchingIds(DotFilter(MemoryPayloadFields.Tags, "b"), points).ShouldBeEmpty();
+        MatchingIds(keywordsTheProductEmits, points).ShouldBe(["mine"]);
+        MatchingIds(DotFilter(MemoryPayloadFields.Status, "Active"), points).ShouldBe(["mine"]);
     }
 
     [Fact]

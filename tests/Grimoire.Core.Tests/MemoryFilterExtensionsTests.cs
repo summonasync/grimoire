@@ -21,6 +21,20 @@ public sealed class MemoryFilterExtensionsTests
     public void Matches_EmptyFilter_AcceptsAnyRecord() =>
         new MemoryFilter().Matches(Record()).ShouldBeTrue();
 
+    [Theory]
+    [InlineData(MemoryStatus.Superseded)]
+    [InlineData(MemoryStatus.Tombstoned)]
+    public void Matches_EmptyFilter_KeepsARecordThatIsNotActive(MemoryStatus status)
+    {
+        // The half the case above cannot see: its record carries the default Active, so a matcher
+        // tightened to default to Active passes it and the leniency stays unstated. The leniency is
+        // the rule — the store clause owns the default (MemoryStatuses.Effective renders the single
+        // Active keyword when the filter names none), which is what keeps a recall narrowed exactly
+        // once. 058's experiment A measured four Api failures for the tightening, and not one of
+        // those failure messages said why leniency exists; this row says it.
+        new MemoryFilter().Matches(Record(status: status)).ShouldBeTrue();
+    }
+
     [Fact]
     public void Matches_CreatedAtEqualToSince_Inclusive() =>
         new MemoryFilter { CreatedAfter = Start }.Matches(Record(Start)).ShouldBeTrue();
