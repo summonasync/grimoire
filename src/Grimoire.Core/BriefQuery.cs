@@ -15,4 +15,8 @@ public sealed record BriefQuery
     public int? TombstoneLimit { get; init; }
 
     public bool Daily { get; init; }
+
+    public DateTimeOffset? Since { get; init; }
+
+    public DateTimeOffset? Until { get; init; }
 }

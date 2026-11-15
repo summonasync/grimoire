@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Grimoire.Cli.Tests.Fakes;
 using Grimoire.Core;
 using Shouldly;
@@ -8,6 +10,266 @@ namespace Grimoire.Cli.Tests;
 public sealed class BriefCommandTests : IDisposable
 {
     private readonly TestHost _host = new();
+
+    private static readonly Regex FactRow = new(@"^  \d\.\d+ [0-9a-f]{8}-", RegexOptions.IgnoreCase);
+
+    [Fact]
+    public async Task Brief_NoOmissions_TextOutputIsThePreFlagGoldenByteForByte()
+    {
+        SeedPayload(_host.Store);
+
+        var code = await _host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldNotContain("omitted");
+        output.ReplaceLineEndings("\n").ShouldBe(NoOmissionGolden + "\n");
+    }
+
+    [Fact]
+    public async Task Brief_EnvTomeLandsTheReadThere()
+    {
+        using var host = new TestHost(
+            variables: new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+        SeedInTome(host.Store, "journal inside the env tome", "platform-work");
+        SeedInTome(host.Store, "journal outside the env tome", "default");
+
+        var code = await host.RunAsync("brief");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        var output = host.Output.ToString();
+        output.ShouldContain("journal inside the env tome");
+        output.ShouldNotContain("journal outside the env tome");
+        var filters = host.Store.ListedFilters;
+        filters.Count.ShouldBeGreaterThan(0);
+        foreach (var filter in filters)
+        {
+            filter.Tome.ShouldBe("platform-work");
+        }
+    }
+
+    [Fact]
+    public async Task Brief_FormatText_IsTheDefaultRender()
+    {
+        using var plain = new TestHost();
+        using var declared = new TestHost();
+        SeedPayload(plain.Store);
+        SeedPayload(declared.Store);
+
+        (await plain.RunAsync("brief")).ShouldBe(ExitCodes.Ok, plain.Output.ToString());
+        (await declared.RunAsync("brief", "--format", "text")).ShouldBe(ExitCodes.Ok, declared.Output.ToString());
+
+        declared.Output.ToString().ShouldBe(plain.Output.ToString());
+    }
+
+    [Fact]
+    public async Task Brief_FormatHook_PrintsTheSessionStartEnvelope()
+    {
+        SeedPayload(_host.Store);
+
+        var code = await _host.RunAsync("brief", "--format", "hook");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var stdout = _host.Output.ToString();
+        stdout.ShouldNotContain("not wired");
+        using var document = JsonDocument.Parse(stdout);
+        var output = document.RootElement.GetProperty("hookSpecificOutput");
+        output.GetProperty("hookEventName").GetString().ShouldBe("SessionStart");
+        var context = output.GetProperty("additionalContext").GetString();
+        context.ShouldNotBeNullOrWhiteSpace();
+        context!.ShouldContain("deploys happen on friday");
+        context.ShouldContain("superseded by the rewrite");
+        context.ShouldContain("user asked for the brief");
+        context.ShouldContain("tomes: (empty)");
+    }
+
+    [Fact]
+    public async Task Brief_FormatFlag_RejectsValuesOutsideTheEnum()
+    {
+        var code = await _host.RunAsync("brief", "--format", "galaxy");
+
+        code.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("Unknown format 'galaxy' (expected: text, hook).");
+    }
+
+    [Fact]
+    public async Task Brief_NewFlags_AreListedInHelp()
+    {
+        var code = await _host.RunAsync("help", "brief");
+
+        code.ShouldBe(ExitCodes.Ok);
+        var output = _host.Output.ToString();
+        output.ShouldContain("--format <text|hook>");
+        output.ShouldContain("--max-chars <n>");
+        output.ShouldContain("--since <time>");
+        output.ShouldContain("--until <time>");
+    }
+
+    [Fact]
+    public async Task Brief_WindowFlags_MapToTheFilterBoundsOfEveryDatedRead()
+    {
+        SeedPayload(_host.Store);
+
+        var code = await _host.RunAsync(
+            "brief",
+            "--since", "2026-10-10T00:00:00+00:00",
+            "--until", "2026-10-15T00:00:00+00:00");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var dated = _host.Store.ListedFilters
+            .Where(filter => filter.CreatedAfter is not null || filter.CreatedBefore is not null)
+            .ToArray();
+        dated.Length.ShouldBe(2);
+        foreach (var filter in dated)
+        {
+            filter.CreatedAfter.ShouldBe(new DateTimeOffset(2026, 10, 10, 0, 0, 0, TimeSpan.Zero));
+            filter.CreatedBefore.ShouldBe(new DateTimeOffset(2026, 10, 15, 0, 0, 0, TimeSpan.Zero));
+        }
+    }
+
+    [Fact]
+    public async Task Brief_DateOnlyWindow_IsResolvedInTheLocalZoneNotAsAnUtcLiteral()
+    {
+        SeedPayload(_host.Store);
+        var midnight = new DateTime(2026, 10, 10);
+        var expected = new DateTimeOffset(midnight, TimeZoneInfo.Local.GetUtcOffset(midnight)).ToUniversalTime();
+
+        var code = await _host.RunAsync("brief", "--since", "2026-10-10");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var dated = _host.Store.ListedFilters.Where(filter => filter.CreatedAfter is not null).ToArray();
+        dated.Length.ShouldBe(2);
+        foreach (var filter in dated)
+        {
+            filter.CreatedAfter.ShouldBe(expected);
+        }
+    }
+
+    [Fact]
+    public async Task Brief_UntilFlag_ExcludesTheRecordStandingExactlyOnTheBound()
+    {
+        var bound = LocalMidnight(new DateTime(2026, 10, 12));
+        SeedRecord(_host.Store, Guid.Parse("66666666-6666-6666-6666-666666666666"), "journal on the bound",
+            MemoryScope.Project, MemoryKind.Journal, bound);
+        SeedRecord(_host.Store, Guid.Parse("77777777-7777-7777-7777-777777777777"), "journal an hour before",
+            MemoryScope.Project, MemoryKind.Journal, bound.AddHours(-1));
+        SeedRecord(_host.Store, Guid.Parse("88888888-8888-8888-8888-888888888888"), "fact on the bound",
+            MemoryScope.Project, MemoryKind.Fact, bound);
+
+        // The Cli fake ignores CreatedBefore; this green is load-bearing on Core's Matches
+        // re-check — delete that branch and this test reddens (review 046-05 mutation 3).
+        var code = await _host.RunAsync("brief", "--until", "2026-10-12");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldContain("journal an hour before");
+        output.ShouldNotContain("journal on the bound");
+        output.ShouldNotContain("88888888-8888-8888-8888-888888888888");
+        LineIndex(output, $"    {Guid.Parse("66666666-6666-6666-6666-666666666666")}").ShouldBe(-1);
+    }
+
+    [Fact]
+    public async Task Brief_SinceFlag_KeepsTheRecordStandingExactlyOnTheBound()
+    {
+        var bound = LocalMidnight(new DateTime(2026, 10, 10));
+        SeedRecord(_host.Store, Guid.Parse("99999999-9999-9999-9999-999999999999"), "note on the lower bound",
+            MemoryScope.Project, MemoryKind.Journal, bound);
+
+        var code = await _host.RunAsync("brief", "--since", "2026-10-10");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("note on the lower bound");
+    }
+
+    [Fact]
+    public async Task Brief_InvertedWindow_ExitsUsageInsteadOfReadingEmpty()
+    {
+        SeedPayload(_host.Store);
+
+        var code = await _host.RunAsync("brief", "--since", "2026-10-15", "--until", "2026-10-10");
+
+        code.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("'since' must not be later than 'until'.");
+    }
+
+    [Fact]
+    public async Task Brief_UnparsableWindow_ExitsUsageNamingTheFlagAndTheValue()
+    {
+        var code = await _host.RunAsync("brief", "--until", "last tuesday");
+
+        code.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("'until' must be an ISO-8601 timestamp or a yyyy-MM-dd date but was 'last tuesday'.");
+    }
+
+    [Fact]
+    public async Task Brief_MaxCharsBelowTheSectionBudget_OmitsSectionsAndNamesTheRecords()
+    {
+        SeedPayload(_host.Store);
+
+        var plain = await _host.RunAsync("brief");
+        plain.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("deploys happen on friday");
+        _host.Output.ToString().ShouldNotContain("omitted");
+
+        using var tight = new TestHost();
+        SeedPayload(tight.Store);
+
+        var cut = await tight.RunAsync("brief", "--max-chars", "5");
+
+        cut.ShouldBe(ExitCodes.Ok, tight.Output.ToString());
+        var output = tight.Output.ToString();
+        output.ShouldContain("persona: (omitted: over budget)");
+        NextHeading(output, "persona").ShouldBe("facts: (omitted: over budget)");
+        LineIndex(output, "    22222222-2222-2222-2222-222222222222 over-budget: deploys happen on friday")
+            .ShouldNotBe(-1);
+        LineIndex(output, "    33333333-3333-3333-3333-333333333333 over-budget: the store is qdrant")
+            .ShouldNotBe(-1);
+        output.ShouldContain("  omitted 2:");
+    }
+
+    [Fact]
+    public async Task Brief_MaxCharsRejectsZeroAndGarbage()
+    {
+        (await _host.RunAsync("brief", "--max-chars", "0")).ShouldBe(ExitCodes.Usage, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("--max-chars must be a positive integer, got '0'.");
+
+        var garbage = await _host.RunAsync("brief", "--max-chars", "wide");
+
+        garbage.ShouldBe(ExitCodes.Usage, _host.Output.ToString());
+        _host.Output.ToString().ShouldContain("--max-chars must be a positive integer, got 'wide'.");
+    }
+
+    [Fact]
+    public async Task Brief_MaxCharsWithDaily_BindsTheDailyPurseToTheSameEnvelope()
+    {
+        var note = SeedDaily(_host.Store, new string('x', 2000), 0, "medivh", "claude");
+
+        var code = await _host.RunAsync("brief", "--daily", "--max-chars", "5");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        output.ShouldNotContain(new string('x', 81),
+            customMessage: "the daily purse ignored --max-chars (review 046-05, N-2): the flood is still in the render.");
+        LineIndex(output, $"    {note.Id} daily-purse: {new string('x', 80)} [cut]").ShouldNotBe(-1);
+    }
+
+
+    [Fact]
+    public async Task Brief_DigestLine_PrintsTheExcerptAsCoreFoldedItAndCutsNothingFurther()
+    {
+        SeedRecord(_host.Store, Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "the note that stayed",
+            MemoryScope.Project, MemoryKind.Journal, FakeClock.DefaultStart);
+        SeedRecord(_host.Store, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), new string('x', 500),
+            MemoryScope.Project, MemoryKind.Journal, FakeClock.DefaultStart.AddHours(-2));
+
+        var code = await _host.RunAsync("brief", "--journal-per-scope", "1");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        var output = _host.Output.ToString();
+        LineIndex(output, $"    {Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")} read-limit: {new string('x', 80)} [cut]")
+            .ShouldNotBe(-1);
+        output.ShouldNotContain(new string('x', 81));
+    }
 
     [Fact]
     public async Task Brief_RendersPopulatedSections()
@@ -80,8 +342,15 @@ public sealed class BriefCommandTests : IDisposable
             filter.Scopes.ShouldBe([MemoryScope.Project]);
         }
 
-        var rendered = new[] { first.Id.ToString(), second.Id.ToString() }.Count(_host.Output.ToString().Contains);
-        rendered.ShouldBe(1);
+        var output = _host.Output.ToString();
+        var factRows = output.Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => FactRow.IsMatch(line))
+            .ToArray();
+        factRows.Length.ShouldBe(1);
+        var trimmed = new[] { first.Id, second.Id }
+            .First(id => !factRows[0].Contains(id.ToString(), StringComparison.Ordinal));
+        LineIndex(output, $"    {trimmed} read-limit: fact").ShouldNotBe(-1);
     }
 
     [Fact]
@@ -101,14 +370,14 @@ public sealed class BriefCommandTests : IDisposable
     public async Task Brief_OverBudgetSection_ShowsOmittedMarker()
     {
         SeedPersona(new string('p', 7995), "persona:identity");
-        _host.Store.Add("small fact", [1f, 0f], kind: MemoryKind.Fact);
+        var fact = _host.Store.Add("small fact", [1f, 0f], kind: MemoryKind.Fact);
 
         var code = await _host.RunAsync("brief");
 
         code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
         var output = _host.Output.ToString();
         output.ShouldContain("facts: (omitted: over budget)");
-        output.ShouldNotContain("small fact");
+        LineIndex(output, $"    {fact.Id} over-budget: small fact").ShouldNotBe(-1);
         output.ShouldContain("journal: (empty)");
     }
 
@@ -368,8 +637,8 @@ public sealed class BriefCommandTests : IDisposable
         output.ShouldContain($"  {ExpectedLocalDay()} today medivh (2)");
         output.ShouldContain(kept.Id.ToString());
         output.ShouldContain(alsoKept.Id.ToString());
-        output.ShouldNotContain(swallowed.Id.ToString());
         output.ShouldContain("  (+1 more)");
+        LineIndex(output, $"    {swallowed.Id} daily-purse: ").ShouldNotBe(-1);
     }
 
     [Fact]
@@ -385,6 +654,113 @@ public sealed class BriefCommandTests : IDisposable
         output.ShouldNotContain(new string('x', 1501));
         LineIndex(output, "      (truncated)").ShouldNotBe(-1);
     }
+
+    private static void SeedInTome(RecordingMemoryStore store, string content, string tome)
+    {
+        var created = FakeClock.DefaultStart;
+        store.Seed(
+            new MemoryRecord
+            {
+                Id = Guid.NewGuid(),
+                Content = content,
+                Scope = MemoryScope.Project,
+                Kind = MemoryKind.Journal,
+                Actor = MemoryActor.Human,
+                Tome = tome,
+                CreatedAt = created,
+                LastAccessedAt = created,
+            },
+            [1f, 0f]);
+    }
+
+    private static void SeedPayload(RecordingMemoryStore store)
+    {
+        SeedRecord(store, Guid.Parse("11111111-1111-1111-1111-111111111111"), "senior backend dev",
+            MemoryScope.Personal, MemoryKind.Fact, FakeClock.DefaultStart, ["persona", "persona:identity"]);
+        SeedRecord(store, Guid.Parse("22222222-2222-2222-2222-222222222222"), "deploys happen on friday",
+            MemoryScope.Project, MemoryKind.Fact, FakeClock.DefaultStart.AddHours(-60));
+        SeedRecord(store, Guid.Parse("33333333-3333-3333-3333-333333333333"), "the store is qdrant",
+            MemoryScope.Global, MemoryKind.Fact, FakeClock.DefaultStart.AddHours(-120));
+        SeedRecord(store, Guid.Parse("44444444-4444-4444-4444-444444444444"), "user asked for the brief",
+            MemoryScope.Project, MemoryKind.Journal, FakeClock.DefaultStart.AddHours(-180));
+        SeedRecord(store, Guid.Parse("55555555-5555-5555-5555-555555555555"), "note the rewrite swallowed",
+            MemoryScope.Project, MemoryKind.Journal, FakeClock.DefaultStart.AddHours(-240),
+            status: MemoryStatus.Tombstoned, tombstoneReason: "superseded by the rewrite");
+    }
+
+    private static void SeedRecord(
+        RecordingMemoryStore store,
+        Guid id,
+        string content,
+        MemoryScope scope,
+        MemoryKind kind,
+        DateTimeOffset created,
+        IReadOnlyList<string>? tags = null,
+        MemoryStatus status = MemoryStatus.Active,
+        string? tombstoneReason = null)
+    {
+        store.Seed(
+            new MemoryRecord
+            {
+                Id = id,
+                Content = content,
+                Scope = scope,
+                Kind = kind,
+                Actor = MemoryActor.Human,
+                Tags = tags ?? [],
+                CreatedAt = created,
+                LastAccessedAt = created,
+                Status = status,
+                TombstoneReason = tombstoneReason,
+                TombstonedAt = status == MemoryStatus.Tombstoned ? created : null,
+            },
+            [1f, 0f]);
+    }
+
+    private static DateTimeOffset LocalMidnight(DateTime date) =>
+        new DateTimeOffset(date, TimeZoneInfo.Local.GetUtcOffset(date)).ToUniversalTime();
+
+    private static string NextHeading(string output, string section)
+    {
+        var lines = output.Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+        var index = Array.FindIndex(lines, line => line.StartsWith(section, StringComparison.Ordinal));
+        index.ShouldBeGreaterThanOrEqualTo(0, $"no {section} heading in:{Environment.NewLine}{output}");
+        for (var next = index + 1; next < lines.Length; next++)
+        {
+            if (lines[next].Length > 0 && !lines[next].StartsWith(' '))
+            {
+                return lines[next];
+            }
+        }
+
+        return string.Empty;
+    }
+
+    // Captured from the pre-flag tree at d7840d6 before this slice edited the renderer: 542 bytes, the
+    // same bytes under TZ unset (Europe/Minsk) and TZ=UTC. This string, not a ShouldContain, is AC3.
+    private const string NoOmissionGolden = """
+        persona:
+          identity:
+            senior backend dev
+          tone:
+            (empty)
+          preferences:
+            (empty)
+          rules:
+            (empty)
+        facts:
+          0.722 33333333-3333-3333-3333-333333333333 Global 2026-10-12 12:00:00Z
+            the store is qdrant
+          0.708 22222222-2222-2222-2222-222222222222 Project 2026-10-15 00:00:00Z
+            deploys happen on friday
+        tombstones:
+          55555555-5555-5555-5555-555555555555 2026-10-07 12:00:00Z
+            superseded by the rewrite
+        journal:
+          44444444-4444-4444-4444-444444444444 Project 2026-10-10 00:00:00Z
+            user asked for the brief
+        tomes: (empty)
+        """;
 
     private static MemoryRecord SeedDaily(
         RecordingMemoryStore store,

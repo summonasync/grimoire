@@ -55,6 +55,23 @@ public sealed class ListCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task List_EnvTomeLandsTheReadThere()
+    {
+        using var host = new TestHost(
+            variables: new Dictionary<string, string> { ["GRIMOIRE_TOME"] = "platform-work" });
+        SeedInTome(host, "note inside the env tome", "platform-work");
+        SeedInTome(host, "note outside the env tome", "default");
+
+        var code = await host.RunAsync("list");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Store.ListedFilters.ShouldHaveSingleItem().Tome.ShouldBe("platform-work");
+        var output = host.Output.ToString();
+        output.ShouldContain("note inside the env tome");
+        output.ShouldNotContain("note outside the env tome");
+    }
+
+    [Fact]
     public async Task List_UnknownStatus_ExitsUsage()
     {
         var code = await _host.RunAsync("list", "--status", "archived");
@@ -69,6 +86,23 @@ public sealed class ListCommandTests : IDisposable
 
         code.ShouldBe(ExitCodes.Ok);
         _host.Output.ToString().ShouldContain("No memories.");
+    }
+
+    private static void SeedInTome(TestHost host, string content, string tome)
+    {
+        host.Store.Seed(
+            new MemoryRecord
+            {
+                Id = Guid.NewGuid(),
+                Content = content,
+                Scope = MemoryScope.Project,
+                Kind = MemoryKind.Journal,
+                Actor = MemoryActor.Human,
+                Tome = tome,
+                CreatedAt = host.Clock.UtcNow,
+                LastAccessedAt = host.Clock.UtcNow,
+            },
+            [1f, 0f]);
     }
 
     public void Dispose() => _host.Dispose();

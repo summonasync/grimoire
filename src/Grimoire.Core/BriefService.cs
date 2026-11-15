@@ -9,6 +9,10 @@ public sealed class BriefService(
 {
     private const double NoSimilarity = 1.0;
 
+    private const double NoScore = 0;
+
+    private const int NoGroup = 0;
+
     private const int LimitHintCeiling = 50;
 
     private const int DefaultFactsPerScope = 5;
@@ -51,10 +55,14 @@ public sealed class BriefService(
         var document = await persona.GetAsync(cancellationToken, tome);
         var personaState = Fit(BriefSection.Persona, PersonaChars(document));
 
-        var facts = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
+        // The collect paths hand back what their limits trimmed and the purse dropped. Together with the
+        // records of any section that fell out of budget those remainders become the omission digest —
+        // records that were never in the running (outside the caller's window, already shown as daily
+        // notes, or in buckets the window emptied) are excluded, not lost, and stay out of the digest.
+        var (facts, factsDropped) = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
         var factsState = Fit(BriefSection.Facts, facts.Sum(fact => fact.Content.Length));
 
-        var tombstones = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
+        var (tombstones, tombstonesDropped) = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
         var tombstonesState = Fit(BriefSection.Tombstones, tombstones.Sum(tombstone => tombstone.Reason?.Length ?? 0));
 
         IReadOnlyList<BriefDailyGroup> dailyGroups = [];
@@ -62,6 +70,7 @@ public sealed class BriefService(
         var dailyMore = 0;
         var dailyFound = false;
         IReadOnlyList<string>? warnings = null;
+        IReadOnlyList<BriefOmissionLine> dailyDropped = [];
 
         if (query.Daily)
         {
@@ -85,11 +94,19 @@ public sealed class BriefService(
                 warnings = dailyWarnings;
             }
 
-            var daily = await CollectDailyAsync(zone, scopes, tome, query.ProjectId, cancellationToken);
+            var daily = await CollectDailyAsync(zone, scopes, tome, query, cancellationToken);
             dailyGroups = daily.Groups;
             dailyIds = daily.Ids;
             dailyMore = daily.More;
             dailyFound = daily.Found;
+            dailyDropped = [.. daily.Dropped.Select(record => new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                DailyWindowResolver.LocalDay(record.CreatedAt, zone.Zone).DayNumber,
+                NoScore,
+                record.CreatedAt,
+                BriefOmissionReason.DailyPurse,
+                record.Actor.Alias))];
 
             if (daily.Truncated || daily.More > 0)
             {
@@ -97,13 +114,23 @@ public sealed class BriefService(
             }
         }
 
-        var journal = await CollectJournalAsync(query, scopes, tome, dailyIds, cancellationToken);
+        var (journal, journalDropped) = await CollectJournalAsync(query, scopes, tome, dailyIds, cancellationToken);
         var journalState = Fit(BriefSection.Journal, journal.Sum(entry => entry.Content.Length));
 
         var tomes = await CollectTomesAsync(cancellationToken);
         var tomesState = tomes.Degraded
             ? BriefSectionState.Empty
             : Fit(BriefSection.Tomes, tomes.Items.Sum(row => row.Key.Length + row.Description.Length + row.CreatedBy.Length));
+
+        // Persona and tomes can also fall out of budget, and they keep their existing faces: the section
+        // name in `omitted` and, for tomes, `TomesMore`. Neither is a set of memory records with ids the
+        // reader can recall by, so no digest line can name what fell out of them.
+        var digest = BriefOmissionDigest.Build(
+            FactOmissions(factsState, facts, factsDropped, scopes, now),
+            TombstoneOmissions(tombstonesState, tombstones, tombstonesDropped),
+            JournalOmissions(journalState, journal, journalDropped, scopes),
+            dailyDropped,
+            _options);
 
         return new BriefResult
         {
@@ -123,9 +150,123 @@ public sealed class BriefService(
             DailyGroups = dailyGroups,
             DailyMore = dailyMore,
             Omitted = omitted,
+            OmissionDigest = digest,
             CompactionDue = await compactionDue,
             Warnings = warnings,
         };
+    }
+
+    private IReadOnlyList<BriefOmissionLine> FactOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefFact> kept,
+        IReadOnlyList<MemoryRecord> trimmed,
+        IReadOnlyList<MemoryScope> scopes,
+        DateTimeOffset now)
+    {
+        var lines = new List<BriefOmissionLine>(
+            // the trimmed remainder comes back as bare records, so the digest re-scores them with the same
+            // call the collect path used; a kept fact already carries its score
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                ScopeRank(scopes, record.Scope),
+                MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives),
+                record.CreatedAt,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from fact in kept
+                select new BriefOmissionLine(
+                    fact.Id,
+                    fact.Content,
+                    ScopeRank(scopes, fact.Scope),
+                    fact.Score,
+                    fact.CreatedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    private static IReadOnlyList<BriefOmissionLine> TombstoneOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefTombstone> kept,
+        IReadOnlyList<MemoryRecord> trimmed)
+    {
+        var lines = new List<BriefOmissionLine>(
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.TombstoneReason ?? record.Content,
+                NoGroup,
+                NoScore,
+                record.TombstonedAt ?? DateTimeOffset.MinValue,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from tombstone in kept
+                select new BriefOmissionLine(
+                    tombstone.Id,
+                    tombstone.Reason ?? string.Empty,
+                    NoGroup,
+                    NoScore,
+                    tombstone.TombstonedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    private static IReadOnlyList<BriefOmissionLine> JournalOmissions(
+        BriefSectionState state,
+        IReadOnlyList<BriefJournalEntry> kept,
+        IReadOnlyList<MemoryRecord> trimmed,
+        IReadOnlyList<MemoryScope> scopes)
+    {
+        var lines = new List<BriefOmissionLine>(
+            from record in trimmed
+            select new BriefOmissionLine(
+                record.Id,
+                record.Content,
+                ScopeRank(scopes, record.Scope),
+                NoScore,
+                record.CreatedAt,
+                BriefOmissionReason.ReadLimit));
+
+        if (state == BriefSectionState.Omitted)
+        {
+            lines.AddRange(
+                from entry in kept
+                select new BriefOmissionLine(
+                    entry.Id,
+                    entry.Content,
+                    ScopeRank(scopes, entry.Scope),
+                    NoScore,
+                    entry.CreatedAt,
+                    BriefOmissionReason.SectionBudget));
+        }
+
+        return lines;
+    }
+
+    // The digest groups follow the scope list the read was asked for, so a reader meets the dropped
+    // records in the order the sections below them are printed; scopes nobody asked for sort last.
+    private static int ScopeRank(IReadOnlyList<MemoryScope> scopes, MemoryScope scope)
+    {
+        for (var rank = 0; rank < scopes.Count; rank++)
+        {
+            if (scopes[rank] == scope)
+            {
+                return rank;
+            }
+        }
+
+        return scopes.Count + (int)scope;
     }
 
     private async Task<BriefCompactionDue?> MeasureCompactionDueAsync(string tome, DateTimeOffset now, CancellationToken cancellationToken)
@@ -152,14 +293,14 @@ public sealed class BriefService(
             : new BriefCompactionDue { PendingEntries = groups.Sum(group => group.MemoryIds.Count) };
     }
 
-    private async Task<IReadOnlyList<BriefFact>> CollectFactsAsync(
+    internal async Task<(IReadOnlyList<BriefFact> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectFactsAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var records = await store.ListAsync(new MemoryFilter
+        var filter = new MemoryFilter
         {
             Scopes = scopes,
             Kind = MemoryKind.Fact,
@@ -167,15 +308,24 @@ public sealed class BriefService(
             Tome = tome,
             ProjectId = query.ProjectId,
             ExcludeTags = [PersonaSectionExtensions.PersonaTag],
-        }, cancellationToken);
+            CreatedAfter = query.Since,
+            CreatedBefore = query.Until,
+        };
+
+        var records = await store.ListAsync(filter, cancellationToken);
 
         var limit = ClampHint(query.FactsPerScope, DefaultFactsPerScope);
-        return records
+        // Matches re-checks the window for the reason spelled out in ReadDailyWindowAsync.
+        var byScope = records
+            .Where(record => filter.Matches(record))
             .Select(record => (Record: record, Score: MemoryScorer.Score(NoSimilarity, record, now, _options.RecencyHalfLives)))
             .OrderByDescending(pair => pair.Score)
             .ThenByDescending(pair => pair.Record.CreatedAt)
             .ThenBy(pair => pair.Record.Id)
             .GroupBy(pair => pair.Record.Scope)
+            .ToArray();
+
+        var items = byScope
             .SelectMany(group => group.Take(limit))
             .OrderByDescending(pair => pair.Score)
             .ThenBy(pair => pair.Record.Id)
@@ -188,9 +338,16 @@ public sealed class BriefService(
                 CreatedAt = pair.Record.CreatedAt,
             })
             .ToArray();
+
+        var dropped = byScope
+            .SelectMany(group => group.Skip(limit))
+            .Select(pair => pair.Record)
+            .ToArray();
+
+        return (items, dropped);
     }
 
-    private async Task<IReadOnlyList<BriefTombstone>> CollectTombstonesAsync(
+    internal async Task<(IReadOnlyList<BriefTombstone> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectTombstonesAsync(
         BriefQuery query,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
@@ -205,9 +362,12 @@ public sealed class BriefService(
         }, cancellationToken);
 
         var limit = ClampHint(query.TombstoneLimit, DefaultTombstoneLimit);
-        return records
+        var ranked = records
             .OrderByDescending(record => record.TombstonedAt ?? DateTimeOffset.MinValue)
             .ThenBy(record => record.Id)
+            .ToArray();
+
+        var items = ranked
             .Take(limit)
             .Select(record => new BriefTombstone
             {
@@ -216,25 +376,32 @@ public sealed class BriefService(
                 TombstonedAt = record.TombstonedAt ?? DateTimeOffset.MinValue,
             })
             .ToArray();
+
+        return (items, [.. ranked.Skip(limit)]);
     }
 
-    private async Task<(IReadOnlyList<BriefDailyGroup> Groups, IReadOnlySet<Guid> Ids, int More, bool Truncated, bool Found)>
-        CollectDailyAsync(
+    internal async Task<(
+        IReadOnlyList<BriefDailyGroup> Groups,
+        IReadOnlySet<Guid> Ids,
+        int More,
+        bool Truncated,
+        bool Found,
+        IReadOnlyList<MemoryRecord> Dropped)> CollectDailyAsync(
             DailyZoneResolution zone,
             IReadOnlyList<MemoryScope> scopes,
             string tome,
-            string? projectId,
+            BriefQuery query,
             CancellationToken cancellationToken)
     {
         var plan = new DailyWindowResolver(_options, clock).Resolve(zone.Zone);
-        var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, projectId, cancellationToken);
+        var today = await ReadDailyWindowAsync(plan.Today, scopes, tome, query, cancellationToken);
         var (lastWorkingDay, lastWorkingDayRecords) =
-            await FirstCandidateHoldingAsync(plan, scopes, tome, projectId, cancellationToken);
+            await FirstCandidateHoldingAsync(plan, scopes, tome, query, cancellationToken);
 
         var found = lastWorkingDayRecords.Concat(today).ToList();
         if (found.Count == 0)
         {
-            return ([], new HashSet<Guid>(), 0, false, false);
+            return ([], new HashSet<Guid>(), 0, false, false, []);
         }
 
         var buckets = new List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)>();
@@ -246,19 +413,19 @@ public sealed class BriefService(
         buckets.Add((BriefDailyBucket.Today, plan.Today.Day, today));
 
         var shaped = ShapeGroups(buckets);
-        return (shaped.Groups, found.Select(record => record.Id).ToHashSet(), shaped.More, shaped.Truncated, true);
+        return (shaped.Groups, found.Select(record => record.Id).ToHashSet(), shaped.More, shaped.Truncated, true, shaped.Dropped);
     }
 
-    private (IReadOnlyList<BriefDailyGroup> Groups, int More, bool Truncated) ShapeGroups(
+    private (IReadOnlyList<BriefDailyGroup> Groups, int More, bool Truncated, IReadOnlyList<MemoryRecord> Dropped) ShapeGroups(
         List<(BriefDailyBucket Bucket, DateOnly Day, IReadOnlyList<MemoryRecord> Records)> buckets)
     {
         var entryCap = Math.Max(0, _options.BriefDailyMaxEntryChars);
         var totalCap = Math.Max(0, _options.BriefDailyMaxTotalChars);
         var groups = new List<BriefDailyGroup>();
         var spend = 0;
-        var more = 0;
         var truncated = false;
         var exhausted = false;
+        var dropped = new List<MemoryRecord>();
 
         foreach (var bucket in buckets)
         {
@@ -275,16 +442,16 @@ public sealed class BriefService(
                 {
                     if (exhausted)
                     {
-                        more++;
+                        dropped.Add(record);
                         continue;
                     }
 
-                    var capped = record.Content.Length > entryCap;
+                    var capped = Cuts(record.Content.Length, entryCap);
                     var content = capped ? record.Content[..entryCap] : record.Content;
                     if (spend + content.Length > totalCap)
                     {
                         exhausted = true;
-                        more++;
+                        dropped.Add(record);
                         continue;
                     }
 
@@ -312,19 +479,19 @@ public sealed class BriefService(
             }
         }
 
-        return (groups, more, truncated);
+        return (groups, dropped.Count, truncated, dropped);
     }
 
     private async Task<(DailyWindow? Window, IReadOnlyList<MemoryRecord> Records)> FirstCandidateHoldingAsync(
         DailyWindowPlan plan,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
-        string? projectId,
+        BriefQuery query,
         CancellationToken cancellationToken)
     {
         foreach (var candidate in plan.LastWorkingDayCandidates)
         {
-            var records = await ReadDailyWindowAsync(candidate, scopes, tome, projectId, cancellationToken);
+            var records = await ReadDailyWindowAsync(candidate, scopes, tome, query, cancellationToken);
             if (records.Count > 0)
             {
                 return (candidate, records);
@@ -335,10 +502,55 @@ public sealed class BriefService(
     }
 
     private async Task<IReadOnlyList<MemoryRecord>> ReadDailyWindowAsync(
-        DailyWindow window,
+        DailyWindow bucket,
         IReadOnlyList<MemoryScope> scopes,
         string tome,
-        string? projectId,
+        BriefQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (Narrow(bucket, query) is not { } window)
+        {
+            return [];
+        }
+
+        var filter = new MemoryFilter
+        {
+            Scopes = scopes,
+            Kind = MemoryKind.Journal,
+            Status = MemoryStatus.Active,
+            Tome = tome,
+            ProjectId = query.ProjectId,
+            Tags = [_options.DailyTag],
+            CreatedAfter = window.CreatedAfter,
+            CreatedBefore = window.CreatedBefore,
+        };
+
+        // Two faces, two answers about this re-check. Qdrant has enforced CreatedBefore as an exclusive lt
+        // bound since feature 055, so in production this is defensive. The in-memory fakes are not that
+        // store: FakeMemoryStore.Matching applies CreatedAfter and never consults CreatedBefore, which makes
+        // the line below load-bearing for every boundary test in Core and Cli. Deleting it keeps production
+        // correct and reddens the suite — the root fix is teaching the doubles the bound, and that call is
+        // feature 055's, not this one's.
+        var records = await store.ListAsync(filter, cancellationToken);
+        return [.. records.Where(record => filter.Matches(record))];
+    }
+
+    // The caller's window narrows a bucket instead of replacing it, so the half-open pair keeps its
+    // exclusive upper edge. A bucket the window empties comes back null and is never read: no bucket read
+    // sends a range whose lower bound sits on or after its upper one.
+    private static DailyWindow? Narrow(DailyWindow bucket, BriefQuery query)
+    {
+        var after = query.Since is { } since && since > bucket.CreatedAfter ? since : bucket.CreatedAfter;
+        var before = query.Until is { } until && until < bucket.CreatedBefore ? until : bucket.CreatedBefore;
+
+        return after < before ? bucket with { CreatedAfter = after, CreatedBefore = before } : null;
+    }
+
+    internal async Task<(IReadOnlyList<BriefJournalEntry> Items, IReadOnlyList<MemoryRecord> Dropped)> CollectJournalAsync(
+        BriefQuery query,
+        IReadOnlyList<MemoryScope> scopes,
+        string tome,
+        IReadOnlySet<Guid>? excludeIds,
         CancellationToken cancellationToken)
     {
         var filter = new MemoryFilter
@@ -347,48 +559,35 @@ public sealed class BriefService(
             Kind = MemoryKind.Journal,
             Status = MemoryStatus.Active,
             Tome = tome,
-            ProjectId = projectId,
-            Tags = [_options.DailyTag],
-            CreatedAfter = window.CreatedAfter,
-            CreatedBefore = window.CreatedBefore,
+            ProjectId = query.ProjectId,
+            CreatedAfter = query.Since,
+            CreatedBefore = query.Until,
         };
 
-        // CreatedBefore has been enforced by the store since feature 055: MemoryFilterTranslator maps it
-        // as an exclusive lt bound, the same edge MemoryFilter.Matches uses, so the re-check below is
-        // defensive rather than load-bearing now. It stays because every other bounded reader in the
-        // codebase re-checks the same way (MemoryService.ListAsync, DigestService) and deleting it is
-        // 055's decision, not this one's.
         var records = await store.ListAsync(filter, cancellationToken);
-        return [.. records.Where(record => filter.Matches(record))];
-    }
-
-    private async Task<IReadOnlyList<BriefJournalEntry>> CollectJournalAsync(
-        BriefQuery query,
-        IReadOnlyList<MemoryScope> scopes,
-        string tome,
-        IReadOnlySet<Guid>? excludeIds,
-        CancellationToken cancellationToken)
-    {
-        var records = await store.ListAsync(new MemoryFilter
-        {
-            Scopes = scopes,
-            Kind = MemoryKind.Journal,
-            Status = MemoryStatus.Active,
-            Tome = tome,
-            ProjectId = query.ProjectId,
-        }, cancellationToken);
 
         var limit = ClampHint(query.JournalPerScope, DefaultJournalPerScope);
-        return records
+        // Matches re-checks the window for the reason spelled out in ReadDailyWindowAsync.
+        var byScope = records
+            .Where(record => filter.Matches(record))
             .Where(record => excludeIds is null || !excludeIds.Contains(record.Id))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
             .GroupBy(record => record.Scope)
+            .ToArray();
+
+        var items = byScope
             .SelectMany(group => group.Take(limit))
             .OrderByDescending(record => record.CreatedAt)
             .ThenBy(record => record.Id)
             .Select(CapEntry)
             .ToArray();
+
+        var dropped = byScope
+            .SelectMany(group => group.Skip(limit))
+            .ToArray();
+
+        return (items, dropped);
     }
 
     private async Task<(bool Degraded, string? Note, IReadOnlyList<BriefTome> Items, int More)> CollectTomesAsync(
@@ -428,7 +627,7 @@ public sealed class BriefService(
 
     private BriefJournalEntry CapEntry(MemoryRecord record)
     {
-        var truncated = record.Content.Length > _options.BriefMaxEntryChars;
+        var truncated = Cuts(record.Content.Length, _options.BriefMaxEntryChars);
         return new BriefJournalEntry
         {
             Id = record.Id,
@@ -438,6 +637,11 @@ public sealed class BriefService(
             CreatedAt = record.CreatedAt,
         };
     }
+
+    // The never-truncate floor is a guarantee, not a cap: a record at or under it stays whole no matter
+    // how tight the section cap gets, so a long note is only ever cut when it is too long to be short.
+    private bool Cuts(int length, int cap) =>
+        length > cap && length > Math.Max(0, _options.BriefNeverTruncateChars);
 
     private static IReadOnlyList<MemoryScope> NormalizeScopes(IReadOnlyList<MemoryScope> scopes)
     {

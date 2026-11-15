@@ -128,9 +128,11 @@ day says so in one explicit line naming the window, tags and tome it
 actually read — `No daily notes in 2026-11-12 (window
 2026-11-11T21:00:00Z..2026-11-12T21:00:00Z, tags daily-notes, tome
 default).` — never silence, never a header implying content. That line is
-also the answer to the other question an empty report raises: `report`
-reads the engine's default tome and has no `--tome` flag, so a day that
-looks empty may simply live in another tome. `--project` shares its help
+also the answer to the other question an empty report raises: `report` has no
+`--tome` flag, so the tome it reads comes from the chain below (`GRIMOIRE_TOME`,
+then the `GRIMOIRE_ACTOR` alias, then the AGENTS.md claim, then the configured
+default) — a day that looks empty may simply live in another tome, and the echo
+names the one it actually read. `--project` shares its help
 text with `brief` (where the same filter is described as "the brief"); for
 `report` it filters the reported day's records to that project.
 
@@ -180,6 +182,56 @@ the daily section counts toward emptiness, a daily-only tome no longer gets a
 `hint` preaching "tome is empty". Hint and warning are two signals with
 different reach, not one switch.
 
+### The brief's four knobs
+
+`grimoire brief` renders the startup brief in one of two shapes and under two
+optional bounds:
+
+| Flag | Behavior |
+|---|---|
+| `--format text` (default) | the human brief on stdout; with `--daily`, `Warning:` lines trail the sections |
+| `--format hook` | one JSON `SessionStart` envelope on stdout and nothing else — the same `Warning:` lines go to stderr instead. This is the shape the [SessionStart hook](#sessionstart-hook-the-agent-boots-with-the-brief) forwards |
+| `--max-chars <n>` | Total character budget for the brief; anything that does not fit is named, not silently dropped. Positive integer only (`0`, `1.5` and `wide` all exit usage naming the flag and the value); unset means the engine's own budget. The cap goes into Core's budget walk before anything renders, and the daily purse tightens with it (`min(cap, configured)`) — a small `--max-chars` cannot leave a 6000-character daily flood behind |
+| `--since` / `--until <time>` | Only count memories created inside `[since, until)`. `yyyy-MM-dd` resolves to midnight in the machine's local zone; an ISO-8601 instant carries its own offset. `since` is inclusive, `until` is **exclusive** — a record standing exactly on the upper bound is out. An unparsable value exits usage naming the flag and the value; `since` after `until` exits usage naming `'since'` |
+
+The window bounds **content**, not the lifecycle counters: `tombstones` and
+`compactionDue` stay all-time whatever `--since`/`--until` say. Deliberately —
+`compactionDue` is store health, and graves are dated by when they were
+tombstoned, which a created-at window cannot cut without inventing a second
+windowing mechanism. `memory_brief` on the MCP face takes no window at all; the
+bounded read is the CLI's.
+
+### What fell out of the brief
+
+Sections fill in priority order under the budget, and when something does not
+fit the payload says so twice: `omitted` names the sections that lost content,
+`omissionDigest` names the records. Four record-carrying sections produce a
+digest — `facts`, `tombstones`, `journal`, `daily` — and a section key appears
+only when that section really lost something, always in that order. Each line is
+an id, a reason and a one-line excerpt (`read-limit` and friends are the text
+face; the wire carries the enum names verbatim):
+
+| Loss | Text face | Wire | What happened |
+|---|---|---|---|
+| read limit | `read-limit` | `ReadLimit` | more matched than the per-scope count asked for (`--facts-per-scope`, `--journal-per-scope`, `--tombstone-limit`) |
+| section budget | `over-budget` | `SectionBudget` | the section fell out of the character budget — the heading still prints as `persona: (omitted: over budget)` and its records become digest lines |
+| daily purse | `daily-purse` | `DailyPurse` | the daily section spent its character purse and only counted the rest |
+| excerpt cut | ` [cut]` | `"excerptCut": true` | the digest line itself is shorter than the record |
+
+`persona` and `tomes` can fall out of budget too, and they keep their older
+face: the section name in `omitted`, and for the tome table its own
+`(+N more)` line. They are not sets of memory records with ids, so no digest
+line can name what fell out of them.
+
+An excerpt at or under 300 characters prints whole; above it, it is cut to 80
+and flagged. Both numbers are Core defaults (`BriefNeverTruncateChars`,
+`BriefDigestExcerptChars`) shared by both faces — chosen, not measured, and not
+config keys. The whole map is absent from the payload when nothing fell out:
+never an empty object, never `[]`. Nothing is deleted by any of this — the id on
+a digest line is the record's handle, taken directly by `memory_history` and by
+`grimoire forget <id|query>`, and the excerpt is what a targeted `memory_recall`
+query finds again.
+
 Wire an agent to the memory (stdio MCP):
 
 ```json
@@ -194,7 +246,11 @@ Wire an agent to the memory (stdio MCP):
 
 When a crew of agents shares one memory, give every session its own actor.
 Every write is stamped with one, resolved through a single chain — first
-match wins:
+match wins. The four flag-less CLI reads (`brief`, `list`, `recall`, `report`)
+walk the same chain and the tome it resolves is the tome they read; they just
+never consult `--actor`/`--tome` (they have no such flags) and never reach the
+clientInfo step below, so their parity with the MCP face runs exactly to that
+boundary and no further. The steps, write face first:
 
 1. the explicit `--actor` flag,
 2. `session_identity_set(alias, vendor)` — the MCP tool an agent calls once at
@@ -256,6 +312,119 @@ Kit coexistence: on machines where the OvermindCrewKit mirrors already carry
 the same block, the verb is idempotent — reruns report `unchanged`, and
 `--remove` followed by the kit's own deploy restores the same text. The kit
 owns its copies; this verb only manages what it stamped.
+
+### SessionStart hook: the agent boots with the brief
+
+The repo ships the two scripts a Qwen Code `SessionStart` hook needs —
+`deploy/hooks/grimoire-session-start.sh` (Linux/macOS) and
+`deploy/hooks/grimoire-session-start.ps1` (Windows). Each runs
+`grimoire brief --format hook --daily` and forwards the CLI's envelope line
+untouched, so what the model gets is exactly what the store answered.
+
+The runtime does not append the payload to the conversation: it places
+`hookSpecificOutput.additionalContext` inside the system instruction, wrapped in
+its own `<qwen:session-start-context>` block, HTML-escapes `<` and `>` inside
+that block, and re-stamps it per source (`startup`, `resume`, `compact`) instead
+of accumulating one block per fire — all measured on Qwen Code 0.27.1 against a
+recording model endpoint. That is why the brief arrives tag-free: the CLI's hook
+face rewrites every angle bracket to its square-bracket twin, so board XML
+markers, `<removed …>` tombstones and `alias+vendor` placeholders survive the
+trip readable instead of being mangled by a second escaping pass.
+
+Register the hook **user-scope** — `~/.qwen/settings.json` (or
+`$QWEN_HOME/settings.json`). The measured install uses these fields; the
+annotations describe the 0.27.1 behavior this hook relies on — receipts in
+`audits/t7-live-firing-receipt.md` cover the firing, escaping and re-stamp,
+while `type`/`command`/`name`/`description`/`timeout`/`env` are what the shipped
+snippet ran with end to end:
+
+```jsonc
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        // regex against the event source: startup | resume | clear | compact; omit to match every source
+        "matcher": "startup|resume|compact",
+        // hooks inside one group run in parallel unless this is true
+        "sequential": false,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /path/to/Grimoire/deploy/hooks/grimoire-session-start.sh",
+            "name": "grimoire-brief",
+            "description": "Start the session with the Grimoire brief",
+            // SECONDS (default 60; a value of 1000 or more is still read as legacy milliseconds)
+            "timeout": 24,
+            "env": { "HOOK_GRIMOIRE_BIN": "/home/you/.dotnet/tools/grimoire" },
+            "shell": "bash"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Windows is the same block with
+`"command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\path\\to\\Grimoire\\deploy\\hooks\\grimoire-session-start.ps1"`
+and `"shell": "powershell"`. The `env` block is how a non-PATH install (or a
+test rig) points the hook at its own binary.
+
+A project-scope `<project>/.qwen/settings.json` hook is a different door: it runs
+only after you approve that exact configuration or trust the folder
+(`security.folderTrust.enabled` plus a trust decision), and a block still
+awaiting its first decision is withheld — which looks exactly like "the hook
+never fired". User scope has no such gate; that is why this install is
+user-scope. Hook definitions are read at startup, so after editing the file run
+`/hooks` to reload or restart the session (`/hooks list` in a non-interactive run
+only prints what that process already loaded; there is no `qwen hooks`
+subcommand).
+
+**Sizing `timeout`.** The script spends its budget twice — once draining the
+hook payload from stdin, once calling the CLI — so the worst case is
+`2 × HOOK_GRIMOIRE_TIMEOUT` plus a second of teardown. Set the per-hook `timeout`
+to at least `2 × HOOK_GRIMOIRE_TIMEOUT + 2`: at the default budget of 10 that is
+22; the snippet carries 24 for slack, which is what the twins' worst-case
+measurement (two budgets plus the kill grace) leaves room for. The per-hook
+`timeout` is the runtime's hard ceiling and the knob's range exists to keep it
+meaningful — a budget of 60 or more could never finish before the runtime cut it.
+
+**Knobs.** Both scripts read the same two variables and both validate before
+using them:
+
+| Variable | Meaning |
+|---|---|
+| `HOOK_GRIMOIRE_BIN` | Absolute path to the `grimoire` binary. Unset: `PATH`, then `~/.dotnet/tools/grimoire` (on Windows `%USERPROFILE%\.dotnet\tools\grimoire.exe`). |
+| `HOOK_GRIMOIRE_TIMEOUT` | Seconds of budget per leg. Integers `1..59` only — `0`, `-3`, `1.5`, `abc`, `60`, `2147484` and `99999999999` are all rejected and the default `10` is used instead. A leading zero is accepted as the number it reads (`07` is 7), identically on both platforms. |
+
+The `HOOK_` prefix is not decoration: the CLI claims every `GRIMOIRE_*` variable
+as a config overlay and refuses a name it does not own, so a knob called
+`GRIMOIRE_BIN` would break the very call it is meant to configure (measured:
+`error [config]: Environment override 'GRIMOIRE_BIN' does not match any
+configuration property`).
+
+**When Grimoire is down, the session is fine.** Fail-open is the whole contract:
+store unreachable, binary missing, CLI silent, CLI confused — every path prints a
+parseable empty envelope
+(`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}`),
+exits 0 and leaves one `grimoire-session-start: <reason>` line on stderr. The
+runtime drops a whitespace-empty `additionalContext`, so the session starts
+clean, with no brief and no trace of the failure in the prompt. A broken Grimoire
+costs a session nothing but the brief.
+
+Measured through the shipped `.sh` on this tree, for scale: a live brief arrives
+in 0.43 s as one 31 KB envelope line; a refused store returns the 79-byte empty
+envelope in 0.26 s with one stderr line; a missing binary does it in 14 ms; and
+against an unroutable endpoint the script cuts itself at 10.03 s (2.03 s with
+`HOOK_GRIMOIRE_TIMEOUT=2`), still exiting 0 with the empty envelope. Only the
+last case ever spends the budget. `bash -n` and the PowerShell language parser
+pass on the shipped bytes, and both twins were byte-compared against each other
+and against the direct CLI call on the same live store. Surfaces this feature did
+not exercise: Windows itself (the `.ps1` ran under PowerShell 7.7 on Linux),
+PowerShell 5.1's parser, and `shellcheck` (not installed here). On macOS,
+`timeout` is coreutils — the `.sh` uses it when present and runs unbounded when it
+is not, leaving the per-hook `timeout` as the only ceiling;
+`brew install coreutils` closes that.
 
 ## Distribution
 
@@ -436,7 +605,7 @@ unreachable registry answers an empty list plus a `degradationReason`, and the p
 
 | Tool | Teaches the agent to… |
 |---|---|
-| `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest; `daily: true` folds in the day's `daily-notes` section |
+| `memory_brief` | load the startup brief in one call — persona, top facts, recent journal, tombstone digest; `daily: true` folds in the day's `daily-notes` section; what the budget cut is named twice, the sections in `omitted` and the records in `omissionDigest` |
 | `memory_compact_candidates` | get journal clusters worth distilling into facts |
 | `memory_forget` | retract with a reason (tombstone, never delete) |
 | `memory_history` | walk a memory's full supersede chain before trusting or overwriting it |
@@ -474,9 +643,12 @@ same strictness guards the environment: the daily knobs are overridable as
 that matches no property — `GRIMOIRE_MEMORY__DAILYZONETIMEZONE`, say — fails
 the load instead of being silently ignored.
 `grimoire config set` addresses `section.property` pairs, so a root-level key
-like `defaultTome` is edited directly in the file. That key is also the tome
-the CLI `report` reads: `GRIMOIRE_TOME` steers the MCP and web faces and the
-`--tome` flag chain of the verbs that have it, and `report` has no such flag.
+like `defaultTome` is edited directly in the file. That key is the tail of the
+tome chain, not its head: `GRIMOIRE_TOME` outranks it on the MCP and web faces,
+on the `--tome` flag of the verbs that have it, and on the four flag-less CLI
+reads (`brief`, `list`, `recall`, `report`), which resolve the tome they read
+through `GRIMOIRE_TOME` → the `GRIMOIRE_ACTOR` alias → the AGENTS.md claim →
+this default.
 An unusable handshake window — `sessions.retentionHours` (or its
 `memory.sessionTtlHours` fallback) that is not finite or not positive — stops `serve`
 at startup with a config error naming the knob, because a zero window would retire
