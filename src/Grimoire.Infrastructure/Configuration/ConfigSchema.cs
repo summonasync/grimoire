@@ -1,3 +1,5 @@
+using Grimoire.Core;
+
 namespace Grimoire.Infrastructure.Configuration;
 
 public enum ConfigValueKind
@@ -39,4 +41,12 @@ public static class ConfigSchema
             _ => ConfigValueKind.Text,
         };
     }
+
+    /// <summary>
+    /// The config doors' entry into <see cref="NumericGrammar"/>. Kept as the call site the doors
+    /// already use; <paramref name="number"/> is only worth reading when the verdict is
+    /// <see cref="NumberVerdict.Finite"/>.
+    /// </summary>
+    public static NumberVerdict ClassifyNumber(string value, out double number) =>
+        NumericGrammar.Classify(value, out number);
 }

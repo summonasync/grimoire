@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Nodes;
 using Grimoire.Infrastructure.Configuration;
 using Shouldly;
@@ -114,6 +115,97 @@ public sealed class ConfigCommandTests : IDisposable
         code.ShouldBe(ExitCodes.Config);
     }
 
+    [Theory]
+    [InlineData("sessions.retentionHours", "NaN")]
+    [InlineData("sessions.retentionHours", "Infinity")]
+    [InlineData("sessions.retentionHours", "-Infinity")]
+    [InlineData("sessions.retentionHours", "1e999")]
+    [InlineData("serve.port", "NaN")]
+    [InlineData("serve.port", "Infinity")]
+    [InlineData("serve.port", "-Infinity")]
+    [InlineData("serve.port", "1e999")]
+    public async Task Config_SetNonFiniteNumber_FailsWithConfigExit(string key, string value)
+    {
+        var original = SeedConfig();
+
+        var code = await _host.RunAsync("config", "set", key, value);
+
+        code.ShouldBe(ExitCodes.Config);
+        _host.Output.ToString().ShouldContain($"Configuration property '{key}' must be a finite number, got '{value}'.");
+        ConfigBytes().SequenceEqual(original).ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("sessions.retentionHours")]
+    [InlineData("serve.port")]
+    public async Task Config_SetNonNumericText_KeepsPlainNumberMessageAndLeavesFileUntouched(string key)
+    {
+        var original = SeedConfig();
+
+        var code = await _host.RunAsync("config", "set", key, "banana");
+
+        code.ShouldBe(ExitCodes.Config);
+        _host.Output.ToString().ShouldContain($"Configuration property '{key}' must be a number, got 'banana'.");
+        _host.Output.ToString().ShouldNotContain("finite");
+        ConfigBytes().SequenceEqual(original).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Config_SetNonFiniteNumberOnMissingFile_LeavesNoConfigFile()
+    {
+        var code = await _host.RunAsync("config", "set", "sessions.retentionHours", "NaN");
+
+        code.ShouldBe(ExitCodes.Config);
+        File.Exists(_host.ConfigPath).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("serve.port", "6060", "\"port\": 6060")]
+    [InlineData("sessions.retentionHours", "48", "\"retentionHours\": 48")]
+    [InlineData("memory.dedupSimilarityThreshold", "0.85", "\"dedupSimilarityThreshold\": 0.85")]
+    public async Task Config_SetFiniteNumber_StillWritesUnquotedNumber(string key, string value, string fragment)
+    {
+        SeedConfig();
+
+        var code = await _host.RunAsync("config", "set", key, value);
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        File.ReadAllText(_host.ConfigPath).ShouldContain(fragment);
+    }
+
+    [Fact]
+    public async Task Config_SetCollidingSessionCollection_RestoresPreviousFileByteForByte()
+    {
+        var original = SeedConfig();
+
+        var code = await _host.RunAsync("config", "set", "qdrant.sessionCollection", "grimoire");
+
+        code.ShouldBe(ExitCodes.Config);
+        _host.Output.ToString().ShouldContain("error [config]: Qdrant collections are invalid:");
+        ConfigBytes().SequenceEqual(original).ShouldBeTrue();
+        new ConfigLoader(_host.ConfigPath).Load().Qdrant.SessionCollection.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Config_SetCollidingSessionCollectionOnMissingFile_DeletesCreatedFile()
+    {
+        var code = await _host.RunAsync("config", "set", "qdrant.sessionCollection", "grimoire");
+
+        code.ShouldBe(ExitCodes.Config);
+        File.Exists(_host.ConfigPath).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Config_SetDistinctSessionCollection_WritesIt()
+    {
+        SeedConfig();
+
+        var code = await _host.RunAsync("config", "set", "qdrant.sessionCollection", "grimoire-archive");
+
+        code.ShouldBe(ExitCodes.Ok, _host.Output.ToString());
+        new ConfigLoader(_host.ConfigPath).Load().Qdrant.SessionCollection.ShouldBe("grimoire-archive");
+    }
+
     [Fact]
     public async Task Config_UnknownAction_ExitsUsage()
     {
@@ -123,4 +215,20 @@ public sealed class ConfigCommandTests : IDisposable
     }
 
     public void Dispose() => _host.Dispose();
+
+    private byte[] SeedConfig()
+    {
+        var bytes = Encoding.UTF8.GetBytes("""
+            {
+              "serve": { "port": 5080 },
+              "sessions": { "retentionHours": 24 }
+            }
+            """);
+        Directory.CreateDirectory(Path.GetDirectoryName(_host.ConfigPath)!);
+        File.WriteAllBytes(_host.ConfigPath, bytes);
+        return bytes;
+    }
+
+    private byte[] ConfigBytes() =>
+        File.Exists(_host.ConfigPath) ? File.ReadAllBytes(_host.ConfigPath) : [];
 }

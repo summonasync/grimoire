@@ -14,6 +14,11 @@ Packs `src/Grimoire.Cli`, installs or updates the global tool from `build/packag
 builds the SPA and copies `web/out` to `%USERPROFILE%\.grimoire\web`. Then `grimoire init`
 on a first run (writes `%USERPROFILE%\.grimoire\config.json`, creates the Qdrant collection).
 
+A running `grimoire.exe` locks the tool store, so the script first stops the
+`serve-hidden.vbs` launcher (it would respawn serve) and every `grimoire` process — serve
+and the MCP servers of open agent sessions. The launcher is restarted at the end, even
+when the update fails; agent sessions need an MCP reconnect (`/mcp` in Claude Code).
+
 ## Config edits a fresh box needed
 
 | Key | Value | Why |

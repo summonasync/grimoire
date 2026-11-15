@@ -1,16 +1,40 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Grimoire.Api.Tests.Fakes;
 using Grimoire.Core;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Localization;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
 
 namespace Grimoire.Api.Tests;
 
-public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<GrimoireApiFactory>
+public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<GrimoireApiFactory>, IDisposable
 {
+    private const string Binds = "binds";
+
+    private const string Malformed = "malformed";
+
+    private const string OutOfRange = "out-of-range";
+
     private static readonly DateTimeOffset Now = new(2026, 11, 13, 9, 0, 0, TimeSpan.Zero);
+
+    private readonly string _exportRoot = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_exportRoot))
+        {
+            Directory.Delete(_exportRoot, true);
+        }
+    }
 
     [Fact]
     public async Task Get_ReturnsRowsNewestFirstWithAgesFromPinnedClock()
@@ -147,12 +171,11 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         // SpaHosting installs app.MapFallback and a literal route beats a fallback either way
         // (moving the mapping behind UseSpaFrontend keeps the suite green) — so this pins the
         // route split and dies if the fallback ever swallows /api paths.
-        var exportRoot = Path.Combine(Path.GetTempPath(), "grimoire-api-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(exportRoot);
+        Directory.CreateDirectory(_exportRoot);
         await File.WriteAllTextAsync(
-            Path.Combine(exportRoot, "index.html"),
+            Path.Combine(_exportRoot, "index.html"),
             "<html><title>grimoire spa shell</title></html>");
-        using var scoped = GrimoireApiFactory.Create(staticRootPath: exportRoot);
+        using var scoped = GrimoireApiFactory.Create(staticRootPath: _exportRoot);
         scoped.Reset();
         scoped.Clock.MoveTo(Now);
         scoped.Sessions.Seed(Entry(Now.AddHours(-4), "qwen", "2026-07-28"));
@@ -170,7 +193,6 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         (await shell.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
         root.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await root.Content.ReadAsStringAsync()).ShouldContain("grimoire spa shell");
-        Directory.Delete(exportRoot, true);
     }
 
     [Theory]
@@ -250,6 +272,141 @@ public class SessionsEndpointsTests(GrimoireApiFactory factory) : IClassFixture<
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
         body.GetProperty("limit").GetInt32().ShouldBe(limit);
         body.GetProperty("windowHours").GetDouble().ShouldBe(windowHours);
+    }
+
+    [Theory]
+    [InlineData("1,5", "15")]
+    [InlineData("8760,5", "87605")]
+    public async Task Get_CommaGroupSeparator_Returns400InsteadOfMultiplyingTheWindow(string value, string swallowed)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+        factory.Sessions.Seed(Entry(Now.AddHours(-1), "qwen", "2026-07-28"));
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?windowHours={value}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_request");
+        message.ShouldContain("windowHours");
+        message.ShouldContain($"'{value}'");
+        message.ShouldNotContain(swallowed);
+        message.ShouldNotContain("body");
+        factory.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("windowHours", "1e3", Binds, "1000")]
+    [InlineData("windowHours", "2.5", Binds, "2.5")]
+    [InlineData("windowHours", "1E+3", Malformed, "'1E 3'")]
+    [InlineData("windowHours", "1,5", Malformed, "'1,5'")]
+    [InlineData("windowHours", "8760,5", Malformed, "'8760,5'")]
+    [InlineData("windowHours", "abc", Malformed, "'abc'")]
+    [InlineData("windowHours", "", Malformed, "''")]
+    [InlineData("windowHours", "1&windowHours=2", Malformed, "'1,2'")]
+    [InlineData("limit", "1e3", OutOfRange, "'1000'")]
+    [InlineData("limit", "1e1", Binds, "10")]
+    [InlineData("limit", "2.5", Malformed, "'2.5'")]
+    [InlineData("limit", "1E+3", Malformed, "'1E 3'")]
+    [InlineData("limit", "1,5", Malformed, "'1,5'")]
+    [InlineData("limit", "abc", Malformed, "'abc'")]
+    [InlineData("limit", "", Malformed, "''")]
+    [InlineData("limit", "1&limit=2", Malformed, "'1,2'")]
+    public async Task Get_SameWireFormOnBothKnobs_AnswersTheSameDoor(string knob, string value, string door, string evidence)
+    {
+        factory.Reset();
+        factory.Clock.MoveTo(Now);
+        factory.Sessions.Seed(Entry(Now.AddHours(-1), "qwen", "2026-07-28"));
+
+        var response = await factory.NewClient().GetAsync($"/api/sessions?{knob}={value}");
+
+        if (door == Binds)
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestJson.Options);
+            body.GetProperty(knob).GetDouble().ShouldBe(double.Parse(evidence, CultureInfo.InvariantCulture));
+            return;
+        }
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_request");
+        message.ShouldContain(knob);
+        message.ShouldContain(evidence);
+        message.ShouldNotContain("body");
+        factory.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e999")]
+    public async Task Get_NonFiniteWindowHours_IsRefusedBeforeTheProjectionCanSubstituteRetention(string value)
+    {
+        using var scoped = GrimoireApiFactory.Create(sessionsRetentionHours: 6);
+        scoped.Reset();
+        scoped.Clock.MoveTo(Now);
+        scoped.Sessions.Seed(Entry(Now.AddHours(-2), "inside", "2026-07-28"));
+
+        var response = await scoped.NewClient().GetAsync($"/api/sessions?windowHours={value}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var (code, message) = await ReadError(response);
+        code.ShouldBe("invalid_request");
+        message.ShouldContain("windowHours");
+        scoped.Sessions.LastLimit.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task FrameworkQueryBinding_UnderTwoPinnedServerCultures_AnswersIdentically()
+    {
+        // Regression guard, not a fix: measured 2026-11-13, minimal-API query binding already ignores
+        // the server culture, so these rows prove no repair — they go red only if a future framework
+        // release starts reading the locale into binding. The sessions knobs are one step safer than
+        // this guard: they parse against the InvariantCulture literal, pinned by the grammar table.
+        var us = await BindUnderCulture("en-US");
+        var de = await BindUnderCulture("de-DE");
+
+        us.culture.ShouldBe("en-US");
+        de.culture.ShouldBe("de-DE");
+        de.rows.ShouldBe(us.rows);
+    }
+
+    private static async Task<(string culture, IReadOnlyList<string> rows)> BindUnderCulture(string name)
+    {
+        var culture = CultureInfo.GetCultureInfo(name);
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.Configure<RequestLocalizationOptions>(options =>
+        {
+            options.DefaultRequestCulture = new RequestCulture(culture);
+            options.SupportedCultures = [culture];
+        });
+        using var app = builder.Build();
+        app.UseRequestLocalization();
+        app.MapGet("/culture", () => CultureInfo.CurrentCulture.Name);
+        app.MapGet("/dbl", (double? v) => v is null ? "null" : v.Value.ToString("R", CultureInfo.InvariantCulture));
+        app.MapGet("/int", (int? v) => v is null ? "null" : v.Value.ToString(CultureInfo.InvariantCulture));
+        await app.StartAsync();
+
+        var address = app.Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()!.Addresses.First();
+        using var client = new HttpClient { BaseAddress = new Uri(address) };
+        var observed = await client.GetStringAsync("/culture");
+        var rows = new List<string>();
+        foreach (var query in new[] { "v=1e3", "v=1E+3", "v=1,5", "v=2.5", "v=abc", "v=", "v=1&v=2", "v=NaN", "v=8760,5" })
+        {
+            foreach (var path in new[] { "/dbl", "/int" })
+            {
+                var response = await client.GetAsync($"{path}?{query}");
+                rows.Add($"{path}?{query} = {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            }
+        }
+
+        await app.StopAsync();
+        return (observed, rows);
     }
 
     [Fact]

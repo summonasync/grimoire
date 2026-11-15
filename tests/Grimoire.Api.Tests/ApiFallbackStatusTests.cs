@@ -57,6 +57,34 @@ public class ApiFallbackStatusTests : IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
     }
 
+    [Theory]
+    [InlineData("{not json")]
+    [InlineData("")]
+    public async Task MalformedOrMissingJsonBody_Returns400ThatBlamesTheBody(string payload)
+    {
+        using var factory = new GrimoireApiFactory();
+
+        var response = await factory.NewClient()
+            .PostAsync("/api/memories", new StringContent(payload, Encoding.UTF8, "application/json"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync())
+            .ShouldContain("The request body is missing, malformed, or does not match the expected schema.");
+    }
+
+    [Fact]
+    public async Task UnparseableQueryOnBodylessRoute_Returns400ThatNamesNoBody()
+    {
+        using var factory = new GrimoireApiFactory();
+
+        var response = await factory.NewClient().GetAsync("/api/agents?windowDays=abc");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var raw = await response.Content.ReadAsStringAsync();
+        raw.ShouldContain("query parameter");
+        raw.ShouldNotContain("body");
+    }
+
     [Fact]
     public async Task UnknownApiPath_Returns404NotFoundPayload()
     {

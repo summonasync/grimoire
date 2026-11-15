@@ -40,6 +40,7 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
         ConfigMerger.ApplyOverrides(root, NonReserved(_environment), EnvironmentPrefix);
         var options = Deserialize(root);
         EnsureProjectRegistryValid(options.Projects);
+        EnsureQdrantCollectionsValid(options.Qdrant);
         return options;
     }
 
@@ -49,6 +50,15 @@ public sealed class ConfigLoader(string? path = null, IReadOnlyDictionary<string
         if (errors.Count > 0)
         {
             throw new ConfigException($"Project registry is invalid: {string.Join(" ", errors)}");
+        }
+    }
+
+    private static void EnsureQdrantCollectionsValid(QdrantOptions qdrant)
+    {
+        var errors = QdrantCollectionsValidator.Validate(qdrant);
+        if (errors.Count > 0)
+        {
+            throw new ConfigException($"Qdrant collections are invalid: {string.Join(" ", errors)}");
         }
     }
 
