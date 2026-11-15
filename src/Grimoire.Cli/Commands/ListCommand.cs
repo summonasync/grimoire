@@ -14,8 +14,14 @@ internal sealed class ListCommand(CliEnvironment environment)
         CancellationToken cancellationToken)
     {
         var memories = services.GetRequiredService<MemoryService>();
+        var identity = await ActorResolver.ResolveAsync(
+            environment, null, null,
+            services.GetRequiredService<MemoryEngineOptions>().DefaultTome,
+            services.GetRequiredService<IActorClaimProvider>(),
+            services.GetService<IAgentIdentitySource>(), cancellationToken);
         var records = await memories.ListAsync(new MemoryFilter
         {
+            Tome = identity.Tome,
             Scopes = CliValues.ScopeList(invocation.Spec, invocation.Value("scope")),
             Status = CliValues.Status(invocation.Spec, invocation.Value("status"), MemoryStatus.Active),
             Tags = CliValues.Tags(invocation.Value("tag")),

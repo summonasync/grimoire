@@ -32,6 +32,28 @@ internal static class MemoryFormatter
 
     public static void WriteBrief(TextWriter output, BriefResult brief, bool daily)
     {
+        WriteBriefSections(output, brief, daily);
+        if (daily)
+        {
+            WriteBriefWarnings(output, brief);
+        }
+    }
+
+    public static void WriteBriefWarnings(TextWriter output, BriefResult brief)
+    {
+        if (brief.Warnings is not { } warnings)
+        {
+            return;
+        }
+
+        foreach (var warning in warnings)
+        {
+            output.WriteLine($"Warning: {warning}");
+        }
+    }
+
+    public static void WriteBriefSections(TextWriter output, BriefResult brief, bool daily)
+    {
         output.WriteLine(Heading("persona", brief.PersonaState));
         if (brief.Persona is { } persona)
         {
@@ -49,12 +71,16 @@ internal static class MemoryFormatter
             WriteLines(output, fact.Content, "    ");
         }
 
+        WriteOmitted(output, brief, BriefSection.Facts);
+
         output.WriteLine(Heading("tombstones", brief.TombstonesState));
         foreach (var tombstone in brief.Tombstones)
         {
             output.WriteLine($"  {tombstone.Id} {tombstone.TombstonedAt:u}");
             WriteLines(output, tombstone.Reason ?? "(no reason)", "    ");
         }
+
+        WriteOmitted(output, brief, BriefSection.Tombstones);
 
         output.WriteLine(Heading("journal", brief.JournalState));
         foreach (var entry in brief.Journal)
@@ -66,6 +92,8 @@ internal static class MemoryFormatter
                 output.WriteLine("    (truncated)");
             }
         }
+
+        WriteOmitted(output, brief, BriefSection.Journal);
 
         output.WriteLine(Heading("tomes", brief.TomesState));
         foreach (var tome in brief.Tomes)
@@ -115,13 +143,7 @@ internal static class MemoryFormatter
             output.WriteLine($"  (+{brief.DailyMore} more)");
         }
 
-        if (brief.Warnings is { } warnings)
-        {
-            foreach (var warning in warnings)
-            {
-                output.WriteLine($"Warning: {warning}");
-            }
-        }
+        WriteOmitted(output, brief, BriefSection.Daily);
     }
 
     private static string Heading(string name, BriefSectionState state) => state switch
@@ -129,6 +151,37 @@ internal static class MemoryFormatter
         BriefSectionState.Empty => $"{name}: (empty)",
         BriefSectionState.Omitted => $"{name}: (omitted: over budget)",
         _ => $"{name}:",
+    };
+
+    // Core hands back the records the read lost already folded to one line and already cut to the digest
+    // width, so the text face prints them as given: unfolding or trimming here would invent a second
+    // truncation path. Persona and tomes are not memory-record sections, they keep the heading marker.
+    private static void WriteOmitted(TextWriter output, BriefResult brief, BriefSection section)
+    {
+        if (brief.OmissionDigest?.TryGetValue(section, out var omissions) is not true || omissions.Count == 0)
+        {
+            return;
+        }
+
+        output.WriteLine($"  omitted {omissions.Count}:");
+        foreach (var record in omissions.Dropped)
+        {
+            var text = record.Excerpt.Length == 0 ? "(no text)" : record.Excerpt;
+            if (record.ExcerptCut)
+            {
+                text += " [cut]";
+            }
+
+            output.WriteLine($"    {record.MemoryId} {Describe(record.Reason)}: {text}");
+        }
+    }
+
+    private static string Describe(BriefOmissionReason reason) => reason switch
+    {
+        BriefOmissionReason.SectionBudget => "over-budget",
+        BriefOmissionReason.ReadLimit => "read-limit",
+        BriefOmissionReason.DailyPurse => "daily-purse",
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "Unknown omission reason."),
     };
 
     private static string Describe(BriefDailyBucket bucket) => bucket switch

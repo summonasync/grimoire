@@ -81,6 +81,11 @@ internal static class CliValues
                 : throw new UsageException($"--{name} expects true or false, got '{value}'.", spec)
             : false;
 
+    public static BriefFormat Format(CommandSpec spec, string? value) =>
+        value is null ? BriefFormat.Text
+            : Enum.TryParse<BriefFormat>(value, ignoreCase: true, out var format) && Enum.IsDefined(format) ? format
+            : throw new UsageException($"Unknown format '{value}' (expected: text, hook).", spec);
+
     public static ScryAttribution Attribution(CommandSpec spec, string? value) =>
         value is null ? ScryAttribution.None
             : Enum.TryParse<ScryAttribution>(value, ignoreCase: true, out var attribution) && Enum.IsDefined(attribution)

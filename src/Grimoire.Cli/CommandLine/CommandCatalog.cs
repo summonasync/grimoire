@@ -53,6 +53,20 @@ internal static class CommandCatalog
     private static readonly FlagSpec Daily = FlagSpec.Switch(
         "daily", "Add the daily section: notes tagged daily-notes from the last working day and today, grouped by actor.");
 
+    private static readonly FlagSpec Format = new(
+        "format", "text|hook", "Output shape: text writes the human brief, hook the SessionStart envelope. Default: text.");
+
+    private static readonly FlagSpec MaxChars = new(
+        "max-chars", "n", "Total character budget for the brief; sections that do not fit are omitted and named. " +
+                         "Default: the engine's brief budget.");
+
+    private static readonly FlagSpec Since = new(
+        "since", "time", "Only count memories created at or after this ISO-8601 instant or yyyy-MM-dd local date.");
+
+    private static readonly FlagSpec Until = new(
+        "until", "time", "Only count memories created before this ISO-8601 instant or yyyy-MM-dd local date. " +
+                         "The bound is exclusive: a record exactly on it is out.");
+
     private static readonly FlagSpec Reason = new(
         "reason", "text", "Tombstone reason. Default: 'forgotten via grimoire cli'.");
 
@@ -188,7 +202,7 @@ internal static class CommandCatalog
             Name = "brief",
             Summary = "Render the agent startup brief: persona, top facts, recent journal, tombstones.",
             Syntax = "brief",
-            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit, Daily],
+            Flags = [ProjectFilter, Scope, FactsPerScope, JournalPerScope, TombstoneLimit, Daily, Format, MaxChars, Since, Until],
         },
         new CommandSpec
         {

@@ -859,7 +859,7 @@ public sealed class BriefServiceTests
     }
 
     [Fact]
-    public async Task Brief_FlagOff_WithOmittedSections_MatchesThePreFeatureSnapshot()
+    public async Task Brief_FlagOff_WithOmittedSections_MatchesTheDigestBearingSnapshot()
     {
         SeedSnapshotFixture(_store, _manifests);
 
@@ -867,7 +867,637 @@ public sealed class BriefServiceTests
             .BriefAsync(Query(), CancellationToken.None);
 
         brief.Omitted.ShouldNotBeEmpty();
-        PayloadMatchesSnapshot(brief, "2a7774f2cdff6bd7daa097c00ca6d578d190b69b52670d140c29b3df083ac709");
+        // re-pinned 2026-11-13 on the T2 digest slice (base carrier 6b78fa3): the fixture is
+        // SeedSnapshotFixture with BriefMaxTotalChars = 120, whose journal section falls out of budget,
+        // so this payload now legitimately carries omissionDigest{Journal: 2 SectionBudget lines}.
+        // The method lost "PreFeatureSnapshot" from its name at the same time — the payload it pins is
+        // no longer the pre-feature one. The three no-omission pin sites (2d86019d…) did NOT move.
+        PayloadMatchesSnapshot(brief, "b31d8c8b9550aaf8a7658bbc66f51bf0c19b6eeadff468a961c57f050179190a");
+    }
+
+    [Fact]
+    public async Task Brief_Window_FactExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var until = FakeClock.DefaultStart;
+        Seed("fact in by one tick", kind: MemoryKind.Fact, importance: 1, created: until.AddTicks(-1));
+        Seed("fact exactly on until", kind: MemoryKind.Fact, importance: 1, created: until);
+
+        var brief = await Service().BriefAsync(
+            Query(since: until.AddDays(-1), until: until), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Content).ShouldBe(["fact in by one tick"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_SinceBoundIsInclusiveAndOneTickEarlierIsOut()
+    {
+        var since = FakeClock.DefaultStart.AddDays(-2);
+        Seed("fact exactly on since", kind: MemoryKind.Fact, importance: 1, created: since);
+        Seed("fact one tick before since", kind: MemoryKind.Fact, importance: 1, created: since.AddTicks(-1));
+
+        var brief = await Service().BriefAsync(Query(since: since), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Content).ShouldBe(["fact exactly on since"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_JournalExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var until = FakeClock.DefaultStart;
+        Seed("journal in by one tick", created: until.AddTicks(-1));
+        Seed("journal exactly on until", created: until);
+
+        var brief = await Service().BriefAsync(
+            Query(since: until.AddDays(-1), until: until), CancellationToken.None);
+
+        brief.Journal.Select(entry => entry.Content).ShouldBe(["journal in by one tick"]);
+    }
+
+    [Fact]
+    public async Task Brief_Window_PassesTheBoundsToTheFactsAndJournalReads()
+    {
+        var captured = new List<MemoryFilter>();
+        _store.OnListAsync = captured.Add;
+        var since = FakeClock.DefaultStart.AddDays(-1);
+        var until = FakeClock.DefaultStart;
+
+        await Service().BriefAsync(Query(since: since, until: until), CancellationToken.None);
+
+        captured.Count.ShouldBeGreaterThan(0);
+        captured.Count(filter => filter.Kind == MemoryKind.Fact
+            && filter.CreatedAfter == since && filter.CreatedBefore == until).ShouldBe(1);
+
+        // the untagged journal reads are the journal section and the compaction backlog, and only the
+        // section is bounded by the caller's window, hence the exact count rather than a blanket rule
+        captured.Count(filter => filter.Kind == MemoryKind.Journal && filter.Tags.Count == 0
+            && filter.CreatedAfter == since && filter.CreatedBefore == until).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_Window_DailyNoteExactlyOnUntilIsOutAndOneTickEarlierIsIn()
+    {
+        var store = new FakeMemoryStore();
+        var until = Utc(2026, 11, 9, 6);
+        SeedDailyNote(store, "daily in by one tick", until.AddTicks(-1), "medivh", "claude");
+        SeedDailyNote(store, "daily exactly on until", until, "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true, since: Utc(2026, 11, 9, 0), until: until), CancellationToken.None);
+
+        brief.DailyGroups.ShouldHaveSingleItem();
+        brief.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.Today);
+        brief.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["daily in by one tick"]);
+        brief.DailyMore.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Brief_Window_DailyNoteOutsideTheWindowIsNotCountedInMore()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "in window note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "after the until bound", Utc(2026, 11, 9, 7), "medivh", "claude");
+
+        var bounded = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 14))
+            .BriefAsync(Query(daily: true, until: Utc(2026, 11, 9, 6)), CancellationToken.None);
+        var open = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 14))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        bounded.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+        bounded.DailyMore.ShouldBe(0);
+        bounded.Omitted.ShouldNotContain(BriefSection.Daily);
+
+        // the same store and the same purse with no window is what pushes the second note into more;
+        // without this control the assertion above could be green because nothing ever overflowed
+        open.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+        open.DailyMore.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_Window_IntersectsTheDailyBucketsAndSkipsTheReadsItEmpties()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "in window note", Utc(2026, 11, 9, 5), "medivh", "claude");
+        SeedDailyNote(store, "friday note", Utc(2026, 11, 6, 8), "kelthuzad", "claude");
+
+        var captured = new List<MemoryFilter>();
+        store.OnListAsync = captured.Add;
+        var since = Utc(2026, 11, 9, 0);
+        var until = Utc(2026, 11, 9, 6);
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true, since: since, until: until), CancellationToken.None);
+
+        var bucketReads = captured.Where(filter => filter.Tags.Contains("daily-notes")).ToArray();
+        bucketReads.ShouldHaveSingleItem();
+        bucketReads[0].CreatedAfter.ShouldBe(since);
+        bucketReads[0].CreatedBefore.ShouldBe(until);
+        brief.DailyGroups.SelectMany(group => group.Entries).Count().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Brief_WindowUnset_NoReadCarriesDateBoundsAndThePayloadIsThePinnedOne()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var captured = new List<MemoryFilter>();
+        _store.OnListAsync = captured.Add;
+
+        var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        captured.Count.ShouldBeGreaterThan(0);
+        captured.ShouldAllBe(filter => filter.CreatedAfter == null && filter.CreatedBefore == null);
+        PayloadMatchesSnapshot(brief, "2d86019df2275119a42f01e2e8b31c8bac877d34b1b5dd5137d8a4812873628d");
+    }
+
+    [Fact]
+    public async Task CollectFacts_PerScopeTrimHandsBackTheDroppedRemainder()
+    {
+        var one = Seed("fact one", kind: MemoryKind.Fact, importance: 1);
+        var two = Seed("fact two", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-1));
+        var three = Seed("fact three", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-2));
+        var four = Seed("fact four", kind: MemoryKind.Fact, importance: 1, created: FakeClock.DefaultStart.AddDays(-3));
+        var global = Seed("global fact", kind: MemoryKind.Fact, scope: MemoryScope.Global, importance: 1);
+
+        var (kept, dropped) = await Service().CollectFactsAsync(
+            Query(factsPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            FakeClock.DefaultStart,
+            CancellationToken.None);
+
+        // one and global tie at score 1.0 and the final fact order breaks the tie by Id,
+        // so the kept list pins the set; the dropped tail lives inside one scope group and is ordered
+        kept.Select(fact => fact.Id).OrderBy(id => id).ShouldBe(new[] { one.Id, global.Id, two.Id }.OrderBy(id => id));
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id, four.Id]);
+        dropped.Select(record => record.Content).ToList().ShouldBe(["fact three", "fact four"]);
+        kept.Select(fact => fact.Id).ToHashSet().Overlaps(dropped.Select(record => record.Id).ToHashSet()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task CollectTombstones_LimitCutHandsBackTheRemainderInCutOrder()
+    {
+        var fresh = Seed("fresh decision", status: MemoryStatus.Tombstoned, tombstoneReason: "wrong fact", tombstonedAt: FakeClock.DefaultStart.AddDays(-1));
+        var middle = Seed("middle decision", status: MemoryStatus.Tombstoned, tombstoneReason: "retracted", tombstonedAt: FakeClock.DefaultStart.AddDays(-2));
+        var stale = Seed("stale decision", status: MemoryStatus.Tombstoned, tombstoneReason: "superseded by vote", tombstonedAt: FakeClock.DefaultStart.AddDays(-5));
+
+        var (kept, dropped) = await Service().CollectTombstonesAsync(
+            Query(tombstoneLimit: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            CancellationToken.None);
+
+        kept.Select(tombstone => tombstone.Id).ToList().ShouldBe([fresh.Id, middle.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([stale.Id]);
+        dropped[0].TombstoneReason.ShouldBe("superseded by vote");
+    }
+
+    [Fact]
+    public async Task CollectJournal_PerScopeTrimHandsBackTheDroppedRemainder()
+    {
+        var one = Seed("journal one", created: FakeClock.DefaultStart);
+        var two = Seed("journal two", created: FakeClock.DefaultStart.AddHours(-1));
+        var three = Seed("journal three", created: FakeClock.DefaultStart.AddHours(-2));
+        var global = Seed("global journal", scope: MemoryScope.Global, created: FakeClock.DefaultStart.AddHours(-3));
+
+        var (kept, dropped) = await Service().CollectJournalAsync(
+            Query(journalPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            null,
+            CancellationToken.None);
+
+        kept.Select(entry => entry.Id).ToList().ShouldBe([one.Id, two.Id, global.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id]);
+        dropped[0].Content.ShouldBe("journal three");
+    }
+
+    [Fact]
+    public async Task CollectJournal_DailyExcludedIdsAreNotHandedBackAsDropped()
+    {
+        var excluded = Seed("journal excluded by daily", created: FakeClock.DefaultStart);
+        var one = Seed("journal one", created: FakeClock.DefaultStart.AddHours(-1));
+        var two = Seed("journal two", created: FakeClock.DefaultStart.AddHours(-2));
+        var three = Seed("journal three", created: FakeClock.DefaultStart.AddHours(-3));
+
+        var (kept, dropped) = await Service().CollectJournalAsync(
+            Query(journalPerScope: 2),
+            [MemoryScope.Project, MemoryScope.Global],
+            TomeKey.DefaultTome,
+            new HashSet<Guid>([excluded.Id]),
+            CancellationToken.None);
+
+        kept.Select(entry => entry.Id).ToList().ShouldBe([one.Id, two.Id]);
+        dropped.Select(record => record.Id).ToList().ShouldBe([three.Id]);
+        dropped.Select(record => record.Id).ShouldNotContain(excluded.Id);
+    }
+
+    [Fact]
+    public async Task CollectDaily_PurseTailHandsBackTheUnwrittenRecords()
+    {
+        var store = new FakeMemoryStore();
+        var notes = new List<MemoryRecord>();
+        for (var index = 0; index < 4; index++)
+        {
+            notes.Add(SeedDailyNote(store, new string((char)('a' + index), 40), Utc(2026, 11, 9, 3 + index), "medivh", "claude"));
+        }
+
+        var (groups, ids, more, _, _, dropped) = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 100))
+            .CollectDailyAsync(
+                DailyWindowResolver.ResolveZone("Europe/Moscow"),
+                [MemoryScope.Project, MemoryScope.Global],
+                TomeKey.DefaultTome,
+                Query(daily: true),
+                CancellationToken.None);
+
+        groups.SelectMany(group => group.Entries).Select(entry => entry.Content).ToList()
+            .ShouldBe([new string('a', 40), new string('b', 40)]);
+        more.ShouldBe(2);
+        dropped.Select(record => record.Id).ToList().ShouldBe([notes[2].Id, notes[3].Id]);
+        // ids is computed upstream of the kept/dropped split, so this counts what the split alone cannot:
+        // nothing was both written and dropped
+        ids.Count.ShouldBe(groups.SelectMany(group => group.Entries).Count() + dropped.Count);
+        dropped.Select(record => record.Content).ToList().ShouldBe([new string('c', 40), new string('d', 40)]);
+        ids.ShouldContain(notes[3].Id);
+    }
+
+    [Fact]
+    public async Task Brief_Window_LandsOnAnEarlierCandidateWhenTheNewestOneHoldsNothingInsideTheWindow()
+    {
+        var store = new FakeMemoryStore();
+        SeedDailyNote(store, "note outside the window", MoscowMidnightUtc(new DateOnly(2026, 11, 8)).AddHours(5), "medivh", "claude");
+        SeedDailyNote(store, "note inside the window", MoscowMidnightUtc(new DateOnly(2026, 11, 7)).AddHours(5), "kelthuzad", "claude");
+
+        var bounded = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true,
+                since: MoscowMidnightUtc(new DateOnly(2026, 11, 7)),
+                until: MoscowMidnightUtc(new DateOnly(2026, 11, 8))), CancellationToken.None);
+
+        bounded.DailyGroups.ShouldHaveSingleItem();
+        bounded.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.LastWorkingDay);
+        bounded.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 7));
+        bounded.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["note inside the window"]);
+
+        // the same store without the window lands on the newest holding candidate, so the
+        // assertion above measures the window moving the loop and not an unrelated fixture quirk
+        var open = await ServiceAt(MoscowMondayUtc, store, DailyOptions())
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        open.DailyGroups.ShouldHaveSingleItem();
+        open.DailyGroups[0].Bucket.ShouldBe(BriefDailyBucket.LastWorkingDay);
+        open.DailyGroups[0].Day.ShouldBe(new DateOnly(2026, 11, 8));
+        open.DailyGroups[0].Entries.Select(entry => entry.Content).ToList().ShouldBe(["note outside the window"]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_PerScopeTrimNamesEveryDroppedFact()
+    {
+        SeedIn(_store, "fact fresh", kind: MemoryKind.Fact, importance: 1, id: StableId(1));
+        var mid = SeedIn(_store, "fact mid", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+        var old = SeedIn(_store, "fact old", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-2), id: StableId(3));
+
+        var brief = await Service().BriefAsync(Query(factsPerScope: 1), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Content).ShouldBe(["fact fresh"]);
+        var section = brief.OmissionDigest![BriefSection.Facts];
+        section.Count.ShouldBe(2);
+        section.Dropped.Select(line => line.MemoryId).ToList().ShouldBe([mid.Id, old.Id]);
+        section.Dropped.Select(line => line.Excerpt).ToList().ShouldBe(["fact mid", "fact old"]);
+        section.Dropped.ShouldAllBe(line => line.Reason == BriefOmissionReason.ReadLimit);
+        section.Count.ShouldBe(section.Dropped.Count);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_TombstoneCutAtLimitIsNamedPerRecord()
+    {
+        SeedIn(_store, "buried fresh", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "wrong fact", tombstonedAt: FakeClock.DefaultStart, id: StableId(1));
+        var middle = SeedIn(_store, "buried middle", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "retracted mid", tombstonedAt: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+        var oldest = SeedIn(_store, "buried oldest", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "superseded by vote", tombstonedAt: FakeClock.DefaultStart.AddDays(-2), id: StableId(3));
+
+        var brief = await Service().BriefAsync(Query(tombstoneLimit: 1), CancellationToken.None);
+
+        brief.Tombstones.ShouldHaveSingleItem();
+        var section = brief.OmissionDigest![BriefSection.Tombstones];
+        section.Count.ShouldBe(2);
+        section.Dropped.Select(line => line.MemoryId).ToList().ShouldBe([middle.Id, oldest.Id]);
+        // the excerpt of a tombstone is the reason it was buried — that is what the section would have shown
+        section.Dropped.Select(line => line.Excerpt).ToList().ShouldBe(["retracted mid", "superseded by vote"]);
+        section.Dropped.ShouldAllBe(line => line.Reason == BriefOmissionReason.ReadLimit);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_SectionOutOfBudgetListsItsOwnRecordsBesideTheTrimmedTail()
+    {
+        SeedIn(_store, new string('f', 40), kind: MemoryKind.Fact, importance: 1, id: StableId(1));
+        SeedIn(_store, new string('e', 40), kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+        var trimmed = SeedIn(_store, new string('d', 40), kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-2), id: StableId(3));
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 60 })
+            .BriefAsync(Query(factsPerScope: 2), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
+        brief.Facts.ShouldBeEmpty();
+        // the digest describes the loss, it does not replace it: the section name stays in omitted
+        brief.Omitted.ShouldBe([BriefSection.Facts]);
+
+        var section = brief.OmissionDigest![BriefSection.Facts];
+        section.Count.ShouldBe(3);
+        section.Dropped.Select(line => line.Reason).ToList().ShouldBe([
+            BriefOmissionReason.SectionBudget,
+            BriefOmissionReason.SectionBudget,
+            BriefOmissionReason.ReadLimit,
+        ]);
+        section.Dropped[^1].MemoryId.ShouldBe(trimmed.Id);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_DailyPurseTailListsTheUnwrittenNotes()
+    {
+        var store = new FakeMemoryStore();
+        for (var index = 0; index < 4; index++)
+        {
+            SeedDailyNote(store, new string((char)('a' + index), 40), Utc(2026, 11, 9, 3 + index), "medivh", "claude");
+        }
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 100))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var section = brief.OmissionDigest![BriefSection.Daily];
+        section.Count.ShouldBe(brief.DailyMore);
+        section.Count.ShouldBe(2);
+        section.Dropped.Select(line => line.Excerpt).ToList().ShouldBe([new string('c', 40), new string('d', 40)]);
+        section.Dropped.ShouldAllBe(line => line.Reason == BriefOmissionReason.DailyPurse);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_ShortDroppedRecordStaysWholeAndLongOneIsCutWithItsId()
+    {
+        var shortText = new string('s', 250);
+        var longText = new string('l', 500);
+        SeedIn(_store, "the kept one", kind: MemoryKind.Fact, importance: 1, id: StableId(1));
+        var whole = SeedIn(_store, shortText, kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+        var folded = SeedIn(_store, "line one\nline  two\tline three", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-2), id: StableId(3));
+        var cut = SeedIn(_store, longText, kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-3), id: StableId(4));
+
+        var brief = await Service().BriefAsync(Query(factsPerScope: 1), CancellationToken.None);
+
+        var lines = brief.OmissionDigest![BriefSection.Facts].Dropped;
+        lines.Select(line => line.MemoryId).ToList().ShouldBe([whole.Id, folded.Id, cut.Id]);
+
+        lines[0].Excerpt.ShouldBe(shortText);
+        lines[0].ExcerptCut.ShouldBeFalse();
+
+        lines[1].Excerpt.ShouldBe("line one line two line three");
+        lines[1].ExcerptCut.ShouldBeFalse();
+
+        lines[2].Excerpt.ShouldBe(longText[..MemoryEngineOptions.DefaultBriefDigestExcerptChars]);
+        lines[2].Excerpt.Length.ShouldBe(80);
+        lines[2].ExcerptCut.ShouldBeTrue();
+        lines[2].MemoryId.ShouldNotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_ThresholdsAreNamedDefaultsNotMeasuredNumbers()
+    {
+        MemoryEngineOptions.DefaultBriefDigestExcerptChars.ShouldBe(80);
+        MemoryEngineOptions.DefaultBriefNeverTruncateChars.ShouldBe(300);
+
+        var options = new MemoryEngineOptions();
+        options.BriefDigestExcerptChars.ShouldBe(MemoryEngineOptions.DefaultBriefDigestExcerptChars);
+        options.BriefNeverTruncateChars.ShouldBe(MemoryEngineOptions.DefaultBriefNeverTruncateChars);
+    }
+
+    [Fact]
+    public async Task Brief_JournalCap_NeverTruncatesAShortRecordEvenUnderATightCap()
+    {
+        var shortNote = new string('n', 120);
+        SeedIn(_store, shortNote, created: FakeClock.DefaultStart);
+        SeedIn(_store, new string('m', 500), created: FakeClock.DefaultStart.AddHours(-1));
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxEntryChars = 50 })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.Journal[0].Content.ShouldBe(shortNote);
+        brief.Journal[0].Truncated.ShouldBeFalse();
+
+        // the cap still applies above the floor, otherwise the guarantee would be a silent cap override
+        brief.Journal[1].Content.Length.ShouldBe(50);
+        brief.Journal[1].Truncated.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Brief_DailyFlag_NeverTruncatesAShortNoteEvenUnderATightEntryCap()
+    {
+        var store = new FakeMemoryStore();
+        var shortNote = new string('n', 200);
+        SeedDailyNote(store, shortNote, Utc(2026, 11, 9, 5), "medivh", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(entryCap: 40))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        var entry = brief.DailyGroups.SelectMany(group => group.Entries).Single();
+        entry.Content.ShouldBe(shortNote);
+        entry.Truncated.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_NoOmissions_SerializesNoDigestKeyAtAll()
+    {
+        SeedSnapshotFixture(_store, _manifests);
+
+        var brief = await Service(new MemoryEngineOptions { DailyTimeZone = "Europe/Moscow" })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.OmissionDigest.ShouldBeNull();
+        CanonicalPayload(brief).ShouldNotContain("OmissionDigest");
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_WithOmissions_SerializesCountAndPerRecordLines()
+    {
+        SeedIn(_store, "fact fresh", kind: MemoryKind.Fact, importance: 1, id: StableId(1));
+        SeedIn(_store, "fact trimmed", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+
+        var brief = await Service().BriefAsync(Query(factsPerScope: 1), CancellationToken.None);
+
+        var payload = CanonicalPayload(brief);
+        payload.ShouldContain("OmissionDigest");
+        payload.ShouldContain("Fact");
+        payload.ShouldContain("fact trimmed");
+        payload.ShouldContain("ReadLimit");
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_FactsOrderOnDeclaredKeysNotOnTheOrderTheReadCameIn()
+    {
+        var globalTop = SeedIn(_store, "global top", scope: MemoryScope.Global, kind: MemoryKind.Fact,
+            importance: 1, id: StableId(4));
+        var projectOldest = SeedIn(_store, "project oldest", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-4), id: StableId(3));
+        var globalTrimmed = SeedIn(_store, "global trimmed", scope: MemoryScope.Global, kind: MemoryKind.Fact,
+            importance: 1, created: FakeClock.DefaultStart.AddDays(-2), id: StableId(1));
+        var projectMid = SeedIn(_store, "project mid", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-3), id: StableId(2));
+        var projectTop = SeedIn(_store, "project top", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(5));
+
+        var brief = await Service().BriefAsync(
+            Query(factsPerScope: 1, scopes: [MemoryScope.Project, MemoryScope.Global]), CancellationToken.None);
+
+        brief.Facts.Select(fact => fact.Id).OrderBy(id => id)
+            .ShouldBe(new[] { globalTop.Id, projectTop.Id }.OrderBy(id => id));
+
+        // seed order put the global trimmed record first and the collection hands its tail back in
+        // group-creation order; the declared contract is the requested scope list, so project first
+        brief.OmissionDigest![BriefSection.Facts].Dropped.Select(line => line.MemoryId).ToList()
+            .ShouldBe([projectMid.Id, projectOldest.Id, globalTrimmed.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_TombstonesOrderNewestFirstWithIdBreakingTheTie()
+    {
+        var tieHigh = SeedIn(_store, "buried high", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "high id tie", tombstonedAt: FakeClock.DefaultStart.AddDays(-5), id: StableId(9));
+        var later = SeedIn(_store, "buried later", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "later cut", tombstonedAt: FakeClock.DefaultStart.AddDays(-4), id: StableId(3));
+        var tieLow = SeedIn(_store, "buried low", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "low id tie", tombstonedAt: FakeClock.DefaultStart.AddDays(-5), id: StableId(2));
+        SeedIn(_store, "buried fresh", kind: MemoryKind.Journal, status: MemoryStatus.Tombstoned,
+            tombstoneReason: "wrong fact", tombstonedAt: FakeClock.DefaultStart, id: StableId(1));
+
+        var brief = await Service().BriefAsync(Query(tombstoneLimit: 1), CancellationToken.None);
+
+        // seeded oldest-of-the-tail first and the highest id before the lowest one: neither the seed
+        // order nor a plain id sort produces this list, only the declared tombstoned-at then id keys
+        brief.OmissionDigest![BriefSection.Tombstones].Dropped.Select(line => line.MemoryId).ToList()
+            .ShouldBe([later.Id, tieLow.Id, tieHigh.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_JournalOrdersOnDeclaredKeysNotOnTheOrderTheReadCameIn()
+    {
+        var globalTop = SeedIn(_store, "journal global top", scope: MemoryScope.Global,
+            created: FakeClock.DefaultStart, id: StableId(4));
+        var projectOldest = SeedIn(_store, "journal project oldest",
+            created: FakeClock.DefaultStart.AddDays(-4), id: StableId(3));
+        var globalTrimmed = SeedIn(_store, "journal global trimmed", scope: MemoryScope.Global,
+            created: FakeClock.DefaultStart.AddDays(-2), id: StableId(1));
+        var projectMid = SeedIn(_store, "journal project mid",
+            created: FakeClock.DefaultStart.AddDays(-3), id: StableId(2));
+        var projectTop = SeedIn(_store, "journal project top",
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(5));
+
+        var brief = await Service().BriefAsync(
+            Query(journalPerScope: 1, scopes: [MemoryScope.Project, MemoryScope.Global]), CancellationToken.None);
+
+        brief.Journal.Select(entry => entry.Id).OrderBy(id => id)
+            .ShouldBe(new[] { globalTop.Id, projectTop.Id }.OrderBy(id => id));
+
+        brief.OmissionDigest![BriefSection.Journal].Dropped.Select(line => line.MemoryId).ToList()
+            .ShouldBe([projectMid.Id, projectOldest.Id, globalTrimmed.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_DailyOrdersDayThenActorThenTimeNotTheSeedOrder()
+    {
+        var store = new FakeMemoryStore();
+        var todayZoe = SeedDailyNote(store, new string('a', 40), Utc(2026, 11, 9, 5), "zoe", "claude");
+        var fridayAbe = SeedDailyNote(store, new string('b', 40),
+            MoscowMidnightUtc(new DateOnly(2026, 11, 6)).AddHours(9), "abe", "claude");
+        var todayAbe = SeedDailyNote(store, new string('c', 40), Utc(2026, 11, 9, 4), "abe", "claude");
+        var fridayZoe = SeedDailyNote(store, new string('d', 40),
+            MoscowMidnightUtc(new DateOnly(2026, 11, 6)).AddHours(10), "ZOE", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 40))
+            .BriefAsync(Query(daily: true), CancellationToken.None);
+
+        brief.DailyGroups.SelectMany(group => group.Entries).Select(entry => entry.Id).ShouldBe([fridayAbe.Id]);
+
+        // the seed order is the exact reverse of the contract, so a digest that inherits enumeration
+        // order or sorts on one key emits a different list and goes red here
+        brief.OmissionDigest![BriefSection.Daily].Dropped.Select(line => line.MemoryId).ToList()
+            .ShouldBe([fridayZoe.Id, todayAbe.Id, todayZoe.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_RecordOutsideTheWindowAppearsInNeitherJournalNorDigest()
+    {
+        var until = FakeClock.DefaultStart;
+        SeedIn(_store, "in window fresh", kind: MemoryKind.Fact, importance: 1, created: until.AddTicks(-1),
+            id: StableId(1));
+        var trimmed = SeedIn(_store, "in window trimmed", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-1), id: StableId(2));
+        var outside = SeedIn(_store, "before the since bound", kind: MemoryKind.Fact, importance: 1,
+            created: FakeClock.DefaultStart.AddDays(-10), id: StableId(3));
+
+        var bounded = await Service().BriefAsync(
+            Query(factsPerScope: 1, since: until.AddDays(-3), until: until), CancellationToken.None);
+
+        var lines = bounded.OmissionDigest![BriefSection.Facts].Dropped;
+        lines.Select(line => line.MemoryId).ToList().ShouldBe([trimmed.Id]);
+        bounded.Facts.Select(fact => fact.Id).ShouldNotContain(outside.Id);
+        lines.ShouldNotContain(line => line.MemoryId == outside.Id);
+
+        // control: the same store with no window does lose that record to the trim, so the assertion
+        // above measures the exclusion and not a fixture that never had a third fact in the tail
+        var open = await Service().BriefAsync(Query(factsPerScope: 1), CancellationToken.None);
+        open.OmissionDigest![BriefSection.Facts].Dropped
+            .Select(line => line.MemoryId).ToList().ShouldBe([trimmed.Id, outside.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_NoteAlreadyShownAsDailyIsNotADigestLine()
+    {
+        var asDaily = SeedIn(_store, "daily note also journal", created: FakeClock.DefaultStart.AddHours(-3),
+            tags: ["daily-notes"], id: StableId(1));
+        var fresh = SeedIn(_store, "plain fresh note", created: FakeClock.DefaultStart.AddHours(-1), id: StableId(2));
+        var trimmed = SeedIn(_store, "plain trimmed note", created: FakeClock.DefaultStart.AddHours(-2), id: StableId(3));
+
+        var brief = await Service(DailyOptions()).BriefAsync(
+            Query(daily: true, journalPerScope: 1), CancellationToken.None);
+
+        brief.DailyGroups.SelectMany(group => group.Entries).Select(entry => entry.Id).ShouldBe([asDaily.Id]);
+        var lines = brief.OmissionDigest![BriefSection.Journal].Dropped;
+        lines.Select(line => line.MemoryId).ToList().ShouldBe([trimmed.Id]);
+        lines.ShouldNotContain(line => line.MemoryId == asDaily.Id);
+        brief.Journal.Select(entry => entry.Id).ShouldNotContain(asDaily.Id);
+
+        // control: with the daily flag off the same record is in the journal running and lands in the
+        // trimmed tail, so what keeps it out of the digest above is the exclusion, not the fixture
+        var noDaily = await Service(DailyOptions()).BriefAsync(Query(journalPerScope: 1), CancellationToken.None);
+        noDaily.OmissionDigest![BriefSection.Journal].Dropped
+            .Select(line => line.MemoryId).ToList().ShouldBe([trimmed.Id, asDaily.Id]);
+    }
+
+    [Fact]
+    public async Task Brief_OmissionDigest_BucketTheWindowEmptiesContributesNoDigestLines()
+    {
+        var store = new FakeMemoryStore();
+        var friday = SeedDailyNote(store, new string('f', 40),
+            MoscowMidnightUtc(new DateOnly(2026, 11, 6)).AddHours(9), "abe", "claude");
+        SeedDailyNote(store, new string('a', 40), Utc(2026, 11, 9, 3), "abe", "claude");
+        var todayMid = SeedDailyNote(store, new string('b', 40), Utc(2026, 11, 9, 4), "abe", "claude");
+        var todayTail = SeedDailyNote(store, new string('c', 40), Utc(2026, 11, 9, 5), "abe", "claude");
+
+        var brief = await ServiceAt(MoscowMondayUtc, store, DailyOptions(totalCap: 40))
+            .BriefAsync(Query(daily: true, since: Utc(2026, 11, 9, 0), until: Utc(2026, 11, 10, 0)),
+                CancellationToken.None);
+
+        var section = brief.OmissionDigest![BriefSection.Daily];
+        section.Count.ShouldBe(2);
+        section.Dropped.Select(line => line.MemoryId).ToList().ShouldBe([todayMid.Id, todayTail.Id]);
+        section.Dropped.ShouldNotContain(line => line.MemoryId == friday.Id);
     }
 
     private static readonly DateTimeOffset MoscowMondayUtc = new(2026, 11, 9, 7, 0, 0, TimeSpan.Zero);
@@ -878,6 +1508,7 @@ public sealed class BriefServiceTests
 
         var payload = CanonicalPayload(brief);
         payload.ShouldNotContain("\"Warnings\"");
+        payload.Contains("OmissionDigest").ShouldBe(brief.OmissionDigest is not null);
         Sha256Hex(payload).ShouldBe(hash);
     }
 
@@ -907,7 +1538,7 @@ public sealed class BriefServiceTests
         return new DateOnly(local.Year, local.Month, local.Day);
     }
 
-    private static void SeedDailyNote(
+    private static MemoryRecord SeedDailyNote(
         FakeMemoryStore store,
         string content,
         DateTimeOffset created,
@@ -980,7 +1611,9 @@ public sealed class BriefServiceTests
         int? factsPerScope = null,
         int? journalPerScope = null,
         int? tombstoneLimit = null,
-        bool daily = false) => new()
+        bool daily = false,
+        DateTimeOffset? since = null,
+        DateTimeOffset? until = null) => new()
         {
             Tome = tome,
             ProjectId = projectId,
@@ -989,6 +1622,8 @@ public sealed class BriefServiceTests
             JournalPerScope = journalPerScope,
             TombstoneLimit = tombstoneLimit,
             Daily = daily,
+            Since = since,
+            Until = until,
         };
 
     private MemoryRecord Seed(
