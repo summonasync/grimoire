@@ -9,25 +9,7 @@ namespace Grimoire.Mcp.Tests;
 
 public sealed class McpToolContractTests
 {
-    private static readonly string[] ToolNames =
-    [
-        "memory_brief",
-        "memory_compact_candidates",
-        "memory_digest",
-        "memory_forget",
-        "memory_history",
-        "memory_list",
-        "memory_note",
-        "memory_persona_get",
-        "memory_recall",
-        "memory_remember",
-        "memory_restore",
-        "memory_scry",
-        "memory_stats",
-        "memory_tome_create",
-        "projects",
-        "session_identity_set",
-    ];
+    private static readonly string[] ToolNames = ContractedToolNames.All;
 
     public static TheoryData<string, string[]> TeachingKeywords()
     {
