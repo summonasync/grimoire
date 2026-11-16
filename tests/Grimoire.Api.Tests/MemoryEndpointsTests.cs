@@ -1055,6 +1055,86 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     }
 
     [Fact]
+    public async Task Patch_ForeignTome_Returns404AndLeavesRecordUntouched()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+        var record = tomeFactory.Store.Seed("alpha note", [1f, 0f], tome: "alpha", tags: ["keep"], importance: 0.3);
+
+        var response = await tomeFactory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            content = "smuggled edit",
+            reason = "cross-tome attempt",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var error = await ReadError(response);
+        error.code.ShouldBe("not_found");
+        error.message.ShouldContain("does not exist in tome 'eng'");
+
+        var stored = tomeFactory.Store.Records.Single(r => r.Id == record.Id);
+        stored.Content.ShouldBe("alpha note");
+        stored.Tags.ShouldBe(["keep"]);
+        stored.Importance.ShouldBe(0.3);
+        stored.Tome.ShouldBe("alpha");
+        tomeFactory.Store.UpsertCount.ShouldBe(0);
+        tomeFactory.Store.UpdateCount.ShouldBe(0);
+        tomeFactory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Patch_ExplicitTomeOverride_EditsNamedTome()
+    {
+        using var tomeFactory = GrimoireApiFactory.Create(envTome: "eng");
+        tomeFactory.Reset();
+        var record = tomeFactory.Store.Seed("alpha note", [1f, 0f], tome: "alpha");
+
+        var response = await tomeFactory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            tome = "alpha",
+            tags = new[] { "named" },
+            reason = "naming the record's own tome",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await ReadFromJsonAsync<MemoryRecord>(response))!.Tags.ShouldBe(["named"]);
+        tomeFactory.Store.Records.Single(r => r.Id == record.Id).Tome.ShouldBe("alpha");
+    }
+
+    [Fact]
+    public async Task Patch_ExplicitTomeMatchingDefault_Edits()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("default tome note", [1f, 0f]);
+
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            tome = record.Tome,
+            tags = new[] { "touched" },
+            reason = "explicit own tome",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await ReadFromJsonAsync<MemoryRecord>(response))!.Tags.ShouldBe(["touched"]);
+    }
+
+    [Fact]
+    public async Task Patch_WithGarbageTome_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("any note", [1f, 0f]);
+
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            tome = "Not Valid!!",
+            reason = "bad tome",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
+    [Fact]
     public async Task Forget_TombstonesWithReasonAndTimestamp()
     {
         factory.Reset();
