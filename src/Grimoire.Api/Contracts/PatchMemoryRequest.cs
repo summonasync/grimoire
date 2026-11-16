@@ -10,5 +10,7 @@ public sealed record PatchMemoryRequest
 
     public string? Reason { get; init; }
 
+    public string? Tome { get; init; }
+
     public bool IsEmpty => Content is null && Tags is null && Importance is null;
 }

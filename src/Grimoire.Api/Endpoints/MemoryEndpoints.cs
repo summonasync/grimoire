@@ -60,6 +60,7 @@ internal static class MemoryEndpoints
 
         app.MapGet("/api/memories/{id:guid}", async (Guid id, CancellationToken cancellationToken) =>
         {
+            // Cross-tome by design: administrative read for the console SPA; agents read through MCP.
             var record = await store.GetAsync(id, cancellationToken);
             return record is null
                 ? ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.")
@@ -155,6 +156,26 @@ internal static class MemoryEndpoints
             if (string.IsNullOrWhiteSpace(request.Reason))
             {
                 return ApiResponses.Error(HttpStatusCode.BadRequest, "invalid_reason", "A patch reason is required.");
+            }
+
+            if (request.Tome is { } requestedTome && !TomeKey.TryNormalize(requestedTome, out _))
+            {
+                return ApiResponses.Error(
+                    HttpStatusCode.BadRequest,
+                    "invalid_tome",
+                    TomeParam.InvalidMessage("tome", requestedTome));
+            }
+
+            var tome = await tomes.ResolveAsync(request.Tome, cancellationToken);
+            var record = await store.GetAsync(id, cancellationToken);
+            if (record is null)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist.");
+            }
+
+            if (record.Tome != tome)
+            {
+                return ApiResponses.Error(HttpStatusCode.NotFound, "not_found", $"Memory '{id}' does not exist in tome '{tome}'.");
             }
 
             try
