@@ -437,7 +437,7 @@ this repo:
 ```bash
 dotnet pack src/Grimoire.Cli -c Release -o build/packages
 dotnet tool install -g Grimoire --add-source build/packages --no-cache
-grimoire --version    # -> grimoire 0.8.0
+grimoire --version    # -> grimoire 0.9.0
 ```
 
 `-g` lands `grimoire` on PATH (`~/.dotnet/tools` on Linux/macOS,
@@ -465,8 +465,8 @@ running binary at boot and prints what it found. Both branches, verbatim from a
 boot of this branch's binary:
 
 ```
-Warning: Deployed SPA export reports version 0.1.0 while this binary is 0.8.0; the served UI was built for a different release. Rebuild web/ and redeploy the export.
-Warning: Deployed SPA export version is unknown (grimoire-web.json is absent); it was never compared against this binary (0.8.0).
+Warning: Deployed SPA export reports version 0.1.0 while this binary is 0.9.0; the served UI was built for a different release. Rebuild web/ and redeploy the export.
+Warning: Deployed SPA export version is unknown (grimoire-web.json is absent); it was never compared against this binary (0.9.0).
 ```
 
 The first is a mismatch and names both versions; the second is the

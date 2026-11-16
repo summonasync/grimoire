@@ -23,6 +23,22 @@ public sealed class UsageWriterTests
     }
 
     [Fact]
+    public void WriteGeneral_SeparatesTheLongestVerbNameFromItsSummary()
+    {
+        var output = new StringWriter();
+
+        UsageWriter.WriteGeneral(output);
+
+        var text = output.ToString();
+        var longest = CommandCatalog.All.Max(spec => spec.Name.Length);
+        foreach (var spec in CommandCatalog.All.Where(candidate => candidate.Name.Length == longest))
+        {
+            text.ShouldContain($"{spec.Name}  {spec.Summary[..20]}",
+                customMessage: $"'{spec.Name}' is the longest verb at {longest} chars; its summary must not glue to the name");
+        }
+    }
+
+    [Fact]
     public void WriteCommand_ListsFlagsWithDescriptions()
     {
         var output = new StringWriter();
