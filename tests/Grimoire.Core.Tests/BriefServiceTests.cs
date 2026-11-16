@@ -199,16 +199,54 @@ public sealed class BriefServiceTests
         var brief = await Service(options).BriefAsync(Query(), CancellationToken.None);
 
         brief.PersonaState.ShouldBe(BriefSectionState.Populated);
-        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
-        brief.Facts.ShouldBeEmpty();
+        // facts take whole entries while the purse holds instead of dropping the section wholesale
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.Facts.ShouldNotBeEmpty();
+        brief.Facts.Sum(fact => fact.Content.Length).ShouldBeLessThanOrEqualTo(250);
         brief.TombstonesState.ShouldBe(BriefSectionState.Populated);
-        brief.JournalState.ShouldBe(BriefSectionState.Populated);
-        brief.Omitted.ShouldBe([BriefSection.Facts]);
+        brief.Omitted.ShouldNotContain(BriefSection.Facts);
+        // what the facts purse left behind is journal's problem now — the all-or-nothing Fit applies there
+        brief.JournalState.ShouldBe(BriefSectionState.Omitted);
+        brief.Omitted.ShouldBe([BriefSection.Journal]);
 
         var consumed = brief.Persona!.Identity.Length
+            + brief.Facts.Sum(fact => fact.Content.Length)
             + brief.Tombstones.Sum(tombstone => tombstone.Reason!.Length)
             + brief.Journal.Sum(entry => entry.Content.Length);
         consumed.ShouldBeLessThanOrEqualTo(250);
+    }
+
+    [Fact]
+    public async Task Brief_FactBiggerThanTheWholePurse_IsOmittedAndNamed()
+    {
+        Seed(new string('f', 80), kind: MemoryKind.Fact);
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 40 })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
+        brief.Facts.ShouldBeEmpty();
+        brief.Omitted.ShouldBe([BriefSection.Facts]);
+        var section = brief.OmissionDigest![BriefSection.Facts];
+        section.Count.ShouldBe(1);
+        section.Dropped.Single().Reason.ShouldBe(BriefOmissionReason.SectionBudget);
+    }
+
+    [Fact]
+    public async Task Brief_FactsSection_SkipsAnOversizedFactAndKeepsTheNextThatFits()
+    {
+        Seed(new string('h', 90), kind: MemoryKind.Fact, importance: 1);
+        Seed(new string('s', 30), kind: MemoryKind.Fact, importance: 0.1, created: FakeClock.DefaultStart.AddHours(-1));
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 60 })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.Facts.Select(fact => fact.Content).ShouldBe([new string('s', 30)]);
+
+        var section = brief.OmissionDigest![BriefSection.Facts];
+        section.Count.ShouldBe(1);
+        section.Dropped.Single().Reason.ShouldBe(BriefOmissionReason.SectionBudget);
     }
 
     [Fact]
@@ -1202,15 +1240,15 @@ public sealed class BriefServiceTests
         var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 60 })
             .BriefAsync(Query(factsPerScope: 2), CancellationToken.None);
 
-        brief.FactsState.ShouldBe(BriefSectionState.Omitted);
-        brief.Facts.ShouldBeEmpty();
-        // the digest describes the loss, it does not replace it: the section name stays in omitted
-        brief.Omitted.ShouldBe([BriefSection.Facts]);
+        // one 40-char fact fits the 60-char purse; the second goes to the budget tail, the third was
+        // already outside the factsPerScope read limit
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.Facts.Select(fact => fact.Id).ShouldBe([StableId(1)]);
+        brief.Omitted.ShouldBe([]);
 
         var section = brief.OmissionDigest![BriefSection.Facts];
-        section.Count.ShouldBe(3);
+        section.Count.ShouldBe(2);
         section.Dropped.Select(line => line.Reason).ToList().ShouldBe([
-            BriefOmissionReason.SectionBudget,
             BriefOmissionReason.SectionBudget,
             BriefOmissionReason.ReadLimit,
         ]);

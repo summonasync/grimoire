@@ -9,9 +9,10 @@ internal static class UsageWriter
         output.WriteLine("Usage: grimoire <command> [arguments] [--option value]");
         output.WriteLine();
         output.WriteLine("Commands:");
+        var nameWidth = CommandCatalog.All.Max(spec => spec.Name.Length) + 2;
         foreach (var spec in CommandCatalog.All)
         {
-            output.WriteLine($"  {spec.Name.PadRight(13)}{spec.Summary}");
+            output.WriteLine($"  {spec.Name.PadRight(nameWidth)}{spec.Summary}");
         }
 
         output.WriteLine();

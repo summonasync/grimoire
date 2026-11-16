@@ -60,7 +60,31 @@ public sealed class BriefService(
         // records that were never in the running (outside the caller's window, already shown as daily
         // notes, or in buckets the window emptied) are excluded, not lost, and stay out of the digest.
         var (facts, factsDropped) = await CollectFactsAsync(query, scopes, tome, now, cancellationToken);
-        var factsState = Fit(BriefSection.Facts, facts.Sum(fact => fact.Content.Length));
+        // Facts take whole entries while the purse holds instead of dropping the section wholesale:
+        // a fresh session should meet its standing facts ahead of tombstones and journal, so a tight
+        // budget starves the scored tail, never the whole section.
+        var keptFacts = new List<BriefFact>(facts.Count);
+        var budgetFacts = new List<BriefFact>();
+        foreach (var fact in facts)
+        {
+            if (fact.Content.Length <= remaining)
+            {
+                keptFacts.Add(fact);
+                remaining -= fact.Content.Length;
+            }
+            else
+            {
+                budgetFacts.Add(fact);
+            }
+        }
+
+        var factsState = facts.Count == 0
+            ? BriefSectionState.Empty
+            : keptFacts.Count > 0 ? BriefSectionState.Populated : BriefSectionState.Omitted;
+        if (factsState == BriefSectionState.Omitted)
+        {
+            omitted.Add(BriefSection.Facts);
+        }
 
         var (tombstones, tombstonesDropped) = await CollectTombstonesAsync(query, scopes, tome, cancellationToken);
         var tombstonesState = Fit(BriefSection.Tombstones, tombstones.Sum(tombstone => tombstone.Reason?.Length ?? 0));
@@ -126,7 +150,7 @@ public sealed class BriefService(
         // name in `omitted` and, for tomes, `TomesMore`. Neither is a set of memory records with ids the
         // reader can recall by, so no digest line can name what fell out of them.
         var digest = BriefOmissionDigest.Build(
-            FactOmissions(factsState, facts, factsDropped, scopes, now),
+            FactOmissions(budgetFacts, factsDropped, scopes, now),
             TombstoneOmissions(tombstonesState, tombstones, tombstonesDropped),
             JournalOmissions(journalState, journal, journalDropped, scopes),
             dailyDropped,
@@ -137,7 +161,7 @@ public sealed class BriefService(
             PersonaState = personaState,
             Persona = personaState == BriefSectionState.Populated ? document : null,
             FactsState = factsState,
-            Facts = factsState == BriefSectionState.Populated ? facts : [],
+            Facts = factsState == BriefSectionState.Populated ? keptFacts : [],
             TombstonesState = tombstonesState,
             Tombstones = tombstonesState == BriefSectionState.Populated ? tombstones : [],
             JournalState = journalState,
@@ -157,15 +181,14 @@ public sealed class BriefService(
     }
 
     private IReadOnlyList<BriefOmissionLine> FactOmissions(
-        BriefSectionState state,
-        IReadOnlyList<BriefFact> kept,
+        IReadOnlyList<BriefFact> budgetDropped,
         IReadOnlyList<MemoryRecord> trimmed,
         IReadOnlyList<MemoryScope> scopes,
         DateTimeOffset now)
     {
         var lines = new List<BriefOmissionLine>(
             // the trimmed remainder comes back as bare records, so the digest re-scores them with the same
-            // call the collect path used; a kept fact already carries its score
+            // call the collect path used; a budget-dropped fact already carries its score
             from record in trimmed
             select new BriefOmissionLine(
                 record.Id,
@@ -175,18 +198,16 @@ public sealed class BriefService(
                 record.CreatedAt,
                 BriefOmissionReason.ReadLimit));
 
-        if (state == BriefSectionState.Omitted)
-        {
-            lines.AddRange(
-                from fact in kept
-                select new BriefOmissionLine(
-                    fact.Id,
-                    fact.Content,
-                    ScopeRank(scopes, fact.Scope),
-                    fact.Score,
-                    fact.CreatedAt,
-                    BriefOmissionReason.SectionBudget));
-        }
+        // whatever the purse cut — the whole section or only the scored tail — is named the same way
+        lines.AddRange(
+            from fact in budgetDropped
+            select new BriefOmissionLine(
+                fact.Id,
+                fact.Content,
+                ScopeRank(scopes, fact.Scope),
+                fact.Score,
+                fact.CreatedAt,
+                BriefOmissionReason.SectionBudget));
 
         return lines;
     }
