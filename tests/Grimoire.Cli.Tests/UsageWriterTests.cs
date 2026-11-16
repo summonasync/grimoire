@@ -33,7 +33,8 @@ public sealed class UsageWriterTests
         var longest = CommandCatalog.All.Max(spec => spec.Name.Length);
         foreach (var spec in CommandCatalog.All.Where(candidate => candidate.Name.Length == longest))
         {
-            text.ShouldContain($"{spec.Name}  {spec.Summary[..20]}",
+            var excerpt = spec.Summary[..Math.Min(20, spec.Summary.Length)];
+            text.ShouldContain($"{spec.Name}  {excerpt}",
                 customMessage: $"'{spec.Name}' is the longest verb at {longest} chars; its summary must not glue to the name");
         }
     }

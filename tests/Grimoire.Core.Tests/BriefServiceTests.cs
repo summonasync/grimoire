@@ -205,6 +205,9 @@ public sealed class BriefServiceTests
         brief.Facts.Sum(fact => fact.Content.Length).ShouldBeLessThanOrEqualTo(250);
         brief.TombstonesState.ShouldBe(BriefSectionState.Populated);
         brief.Omitted.ShouldNotContain(BriefSection.Facts);
+        // what the facts purse left behind is journal's problem now — the all-or-nothing Fit applies there
+        brief.JournalState.ShouldBe(BriefSectionState.Omitted);
+        brief.Omitted.ShouldBe([BriefSection.Journal]);
 
         var consumed = brief.Persona!.Identity.Length
             + brief.Facts.Sum(fact => fact.Content.Length)
@@ -224,6 +227,23 @@ public sealed class BriefServiceTests
         brief.FactsState.ShouldBe(BriefSectionState.Omitted);
         brief.Facts.ShouldBeEmpty();
         brief.Omitted.ShouldBe([BriefSection.Facts]);
+        var section = brief.OmissionDigest![BriefSection.Facts];
+        section.Count.ShouldBe(1);
+        section.Dropped.Single().Reason.ShouldBe(BriefOmissionReason.SectionBudget);
+    }
+
+    [Fact]
+    public async Task Brief_FactsSection_SkipsAnOversizedFactAndKeepsTheNextThatFits()
+    {
+        Seed(new string('h', 90), kind: MemoryKind.Fact, importance: 1);
+        Seed(new string('s', 30), kind: MemoryKind.Fact, importance: 0.1, created: FakeClock.DefaultStart.AddHours(-1));
+
+        var brief = await Service(new MemoryEngineOptions { BriefMaxTotalChars = 60 })
+            .BriefAsync(Query(), CancellationToken.None);
+
+        brief.FactsState.ShouldBe(BriefSectionState.Populated);
+        brief.Facts.Select(fact => fact.Content).ShouldBe([new string('s', 30)]);
+
         var section = brief.OmissionDigest![BriefSection.Facts];
         section.Count.ShouldBe(1);
         section.Dropped.Single().Reason.ShouldBe(BriefOmissionReason.SectionBudget);
