@@ -4,6 +4,8 @@ namespace Grimoire.Mcp.Projections;
 
 internal sealed record StatsView
 {
+    public required string ServerVersion { get; init; }
+
     public required string Tome { get; init; }
 
     public required long Active { get; init; }

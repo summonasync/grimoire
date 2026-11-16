@@ -21,6 +21,19 @@ public sealed class StatsToolTests
     }
 
     [Fact]
+    public async Task Stats_ServerVersion_MatchesTheHandshake()
+    {
+        await using var session = await McpTestSession.StartAsync(
+            new McpHostOptions { ServerVersion = "9.9.9-skew-probe" });
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("serverVersion").GetString()
+            .ShouldBe(session.Client.ServerInfo.Version);
+    }
+
+    [Fact]
     public async Task Stats_ReportsTheGcHeartbeatWithStaleness()
     {
         await using var session = await McpTestSession.StartAsync(gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) });

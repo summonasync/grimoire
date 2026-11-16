@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 
 namespace Grimoire.Mcp.Tools;
 
-internal sealed class StatsTool(MemoryService memories, IMemoryStore store, MemoryActorProvider actors)
+internal sealed class StatsTool(MemoryService memories, IMemoryStore store, MemoryActorProvider actors, string serverVersion)
 {
     public const string Name = "memory_stats";
 
@@ -19,7 +19,8 @@ internal sealed class StatsTool(MemoryService memories, IMemoryStore store, Memo
         "scopes the briefed tome; byTome splits active and tombstoned per tome while counts span the whole store. " +
         "Opt into pendingCompactionByTome when you need the backlog split per tome - it plans every tome's journal " +
         "and costs extra, so it is skipped by default. Call it after a failed memory call to check reachability, " +
-        "or to size the compaction loop before working candidates.";
+        "or to size the compaction loop before working candidates. serverVersion names the running build so a client " +
+        "can detect server skew without shelling out.";
 
     public Task<CallToolResult> GetStats(
         [Description("Tome named in the response as yours; omit unless you want to declare another tome you own. Stats themselves always span the whole store.")]
@@ -40,6 +41,7 @@ internal sealed class StatsTool(MemoryService memories, IMemoryStore store, Memo
 
             return ToolResults.Success(new StatsView
             {
+                ServerVersion = serverVersion,
                 Tome = resolvedTome,
                 Active = stats.Active,
                 Superseded = stats.Superseded,

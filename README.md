@@ -617,7 +617,7 @@ unreachable registry answers an empty list plus a `degradationReason`, and the p
 | `memory_recall` | search before assuming — hybrid-scored, scope-filtered |
 | `memory_remember` | write a memory (journal vs fact routing, scope choice); Project scope demands a registered projectId or auto-tags one from the working directory |
 | `memory_scry` | read into other tomes — the one deliberate cross-tome surface |
-| `memory_stats` | counts, `pendingCompaction`, provider health |
+| `memory_stats` | counts, `pendingCompaction`, provider health, `serverVersion` |
 | `memory_tome_create` | open a new tome when nothing fits — the description is the routing hint other agents read in the brief's tome table |
 | `projects` | read and amend the alias→workspace registry — the kebab-case aliases with absolute paths that a `Project`-scope write is auto-tagged from, plus the optional board link; an alias the registry does not know is rejected with the registered set spelled out, and `Sync` pulls the project list from the local Overmind host, marking what the board dropped as gone rather than deleting it |
 | `session_identity_set` | say who is talking — this session's actor alias and vendor — so every later write carries real provenance instead of the shared placeholder; the latest pair wins, it lives for the connection only and is never persisted, and a `--actor` flag still outranks it |
