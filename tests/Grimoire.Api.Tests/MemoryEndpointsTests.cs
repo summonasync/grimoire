@@ -1122,9 +1122,8 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
     public async Task Patch_WithGarbageTome_Returns400()
     {
         factory.Reset();
-        var record = factory.Store.Seed("any note", [1f, 0f]);
 
-        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{Guid.NewGuid()}", new
         {
             tome = "Not Valid!!",
             reason = "bad tome",
@@ -1132,6 +1131,22 @@ public class MemoryEndpointsTests(GrimoireApiFactory factory) : IClassFixture<Gr
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await ReadError(response)).code.ShouldBe("invalid_tome");
+    }
+
+    [Fact]
+    public async Task Patch_TomeOnlyBody_Returns400()
+    {
+        factory.Reset();
+        var record = factory.Store.Seed("untouched note", [1f, 0f]);
+
+        var response = await factory.NewClient().PatchAsJsonAsync($"/api/memories/{record.Id}", new
+        {
+            tome = record.Tome,
+            reason = "tome alone carries no fields",
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await ReadError(response)).code.ShouldBe("invalid_patch");
     }
 
     [Fact]
