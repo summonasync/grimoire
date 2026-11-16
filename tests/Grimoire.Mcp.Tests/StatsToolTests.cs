@@ -21,6 +21,18 @@ public sealed class StatsToolTests
     }
 
     [Fact]
+    public async Task Stats_ServerVersion_MatchesTheHandshake()
+    {
+        await using var session = await McpTestSession.StartAsync();
+
+        var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>());
+
+        result.ShouldSucceed();
+        result.Payload().GetProperty("serverVersion").GetString()
+            .ShouldBe(session.Client.ServerInfo.Version);
+    }
+
+    [Fact]
     public async Task Stats_ReportsTheGcHeartbeatWithStaleness()
     {
         await using var session = await McpTestSession.StartAsync(gcOptions: new GcOptions { SweepInterval = TimeSpan.FromMinutes(30) });

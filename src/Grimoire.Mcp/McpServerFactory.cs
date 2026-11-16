@@ -30,7 +30,7 @@ internal static class McpServerFactory
             ToolCollection = new McpServerPrimitiveCollection<McpServerTool>(),
         };
 
-        foreach (var tool in ToolCatalog.CreateTools(services, sessionIdentity, actors, refinement))
+        foreach (var tool in ToolCatalog.CreateTools(services, sessionIdentity, actors, refinement, options.ServerVersion))
         {
             serverOptions.ToolCollection.Add(tool);
         }

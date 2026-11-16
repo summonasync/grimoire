@@ -24,7 +24,7 @@ public sealed class McpToolContractTests
         data.Add("memory_digest", ["longMemo", "recent", "gone", "tag", "similar", "omitted", "truncated", "bump access stats", "compact"]);
         data.Add("memory_persona_get", ["identity, tone, preferences, rules", "never filled", "human-curated"]);
         data.Add("memory_compact_candidates", ["pendingCompaction", "memory_forget", "distill", "tome"]);
-        data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store"]);
+        data.Add("memory_stats", ["pendingCompaction", "byTome", "gc", "stale=true", "whole store", "serverVersion"]);
         data.Add("memory_brief", ["startup contract", "omitted", "cold start", "hint", "truncated"]);
         data.Add("memory_tome_create", ["tome table", "create only when no tome fits", "kebab-case", "280", "human-only"]);
         data.Add("memory_scry", ["OTHER tomes", "cross-tome", "access bump", "session rows never cross", "includeJournal", "anonymous"]);

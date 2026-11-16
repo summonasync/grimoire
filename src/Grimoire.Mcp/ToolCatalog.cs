@@ -12,7 +12,8 @@ internal static class ToolCatalog
         IServiceProvider services,
         SessionIdentityHolder sessionIdentity,
         MemoryActorProvider actors,
-        SessionActorRefinement refinement)
+        SessionActorRefinement refinement,
+        string serverVersion)
     {
         var store = Require<IMemoryStore>(services);
         var embeddings = Require<IEmbeddingProvider>(services);
@@ -58,7 +59,7 @@ internal static class ToolCatalog
             Build(BriefTool.Name, BriefTool.Title, BriefTool.Description, new BriefTool(brief, store, actors).Brief, readOnly: true, destructive: false, idempotent: true),
             Build(DigestTool.Name, DigestTool.Title, DigestTool.Description, new DigestTool(digests, store, actors).Digest, readOnly: true, destructive: false, idempotent: true),
             Build(CompactCandidatesTool.Name, CompactCandidatesTool.Title, CompactCandidatesTool.Description, new CompactCandidatesTool(memories, store, actors).GetCandidates, readOnly: true, destructive: false, idempotent: true),
-            Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, store, actors).GetStats, readOnly: true, destructive: false, idempotent: true),
+            Build(StatsTool.Name, StatsTool.Title, StatsTool.Description, new StatsTool(memories, store, actors, serverVersion).GetStats, readOnly: true, destructive: false, idempotent: true),
             Build(ScryTool.Name, ScryTool.Title, ScryTool.Description, new ScryTool(memories, store, actors).Scry, readOnly: true, destructive: false, idempotent: true),
             Build(ProjectsTool.Name, ProjectsTool.Title, ProjectsTool.Description, new ProjectsTool(registryStore, projectSync).Projects, readOnly: false, destructive: true, idempotent: false),
             Build(TomeCreateTool.Name, TomeCreateTool.Title, TomeCreateTool.Description, new TomeCreateTool(manifests, actors).Create, readOnly: false, destructive: false, idempotent: false),
