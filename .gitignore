@@ -15,3 +15,12 @@ TestResults/
 
 .claude/worktrees/
 build/
+
+# Public audits surface (066 scrub): only the approved keep-set stays tracked;
+# internal reviews, probes and evidence remain on disk but out of git.
+audits/*
+!audits/design-assets-contact-sheet.png
+!audits/naming-tournament-*
+!audits/release-*
+!audits/strategy-grimoire-*
+!audits/t7-live-firing-receipt.md
