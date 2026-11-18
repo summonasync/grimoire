@@ -11,6 +11,7 @@ public class OriginGuardTests
     [InlineData("http://localhost.evil.example")]
     [InlineData("https://localhost")]
     [InlineData("null")]
+    [InlineData("")]
     public async Task Patch_WithNonLoopbackOrigin_RefusedAndRecordUnchanged(string origin)
     {
         using var factory = new GrimoireApiFactory();
@@ -22,7 +23,7 @@ public class OriginGuardTests
             "PATCH",
             $"/api/memories/{record.Id}",
             host: "127.0.0.1",
-            origin: origin,
+            origins: [origin],
             body: """{"content":"smuggled edit","reason":"rebind attempt"}""");
 
         response.Status.ShouldBe(HttpStatusCode.Forbidden);
@@ -34,6 +35,51 @@ public class OriginGuardTests
         factory.Store.UpdateCount.ShouldBe(0);
         factory.Store.GetCount.ShouldBe(0);
         factory.Embeddings.Requests.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task Mutation_WithEvilOrigin_RefusedOnEveryMethod(string method)
+    {
+        using var factory = new GrimoireApiFactory();
+        var record = factory.Store.Seed("guarded note", [1f, 0f]);
+
+        var response = await RawHttpProbe.SendAsync(
+            factory.NewClient().BaseAddress!,
+            method,
+            $"/api/memories/{record.Id}",
+            host: "127.0.0.1",
+            origins: ["http://evil.example"],
+            body: """{"content":"smuggled edit","reason":"rebind attempt"}""");
+
+        response.Status.ShouldBe(HttpStatusCode.Forbidden);
+        factory.Store.UpsertCount.ShouldBe(0);
+        factory.Store.UpdateCount.ShouldBe(0);
+        factory.Store.DeleteCount.ShouldBe(0);
+        factory.Store.GetCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Patch_WithMultipleOriginHeaders_Refused()
+    {
+        using var factory = new GrimoireApiFactory();
+        var record = factory.Store.Seed("guarded note", [1f, 0f]);
+
+        var response = await RawHttpProbe.SendAsync(
+            factory.NewClient().BaseAddress!,
+            "PATCH",
+            $"/api/memories/{record.Id}",
+            host: "127.0.0.1",
+            origins: ["http://localhost", "http://evil.example"],
+            body: """{"content":"smuggled edit","reason":"rebind attempt"}""");
+
+        response.Status.ShouldBe(HttpStatusCode.Forbidden);
+        factory.Store.UpsertCount.ShouldBe(0);
+        factory.Store.UpdateCount.ShouldBe(0);
+        factory.Store.GetCount.ShouldBe(0);
     }
 
     [Fact]
@@ -52,6 +98,7 @@ public class OriginGuardTests
 
         response.Status.ShouldBe(HttpStatusCode.OK);
         factory.Store.Records.Single(r => r.Id == record.Id).Content.ShouldBe("edited by native client");
+        factory.Store.GetCount.ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -65,7 +112,7 @@ public class OriginGuardTests
             "GET",
             "/api/memories",
             host: "127.0.0.1",
-            origin: "http://evil.example");
+            origins: ["http://evil.example"]);
 
         response.Status.ShouldBe(HttpStatusCode.OK);
         response.Raw.ShouldContain("readable note");
@@ -87,7 +134,7 @@ public class OriginGuardTests
             "PATCH",
             $"/api/memories/{record.Id}",
             host: "127.0.0.1",
-            origin: origin,
+            origins: [origin],
             body: """{"content":"edited from spa","reason":"spa edit"}""");
 
         response.Status.ShouldBe(HttpStatusCode.OK);

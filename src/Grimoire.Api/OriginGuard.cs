@@ -33,6 +33,9 @@ internal static class OriginGuard
     private static bool IsMutation(string method) =>
         HttpMethods.IsPost(method) || HttpMethods.IsPut(method) || HttpMethods.IsPatch(method) || HttpMethods.IsDelete(method);
 
+    // Lenient Uri shapes (backslash/path in the authority) can false-PASS; browsers serialize
+    // origins canonically and hand-built clients may omit Origin anyway — adjudicated acceptable
+    // in review-070-03 S1, not a hole under the loopback threat model.
     private static bool IsLoopbackOrigin(StringValues origin) =>
         origin.Count == 1
         && origin[0] is { } value

@@ -13,7 +13,7 @@ internal static class RawHttpProbe
         string method,
         string path,
         string host,
-        string? origin = null,
+        string[]? origins = null,
         string? body = null)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -22,9 +22,12 @@ internal static class RawHttpProbe
         await using var stream = tcp.GetStream();
 
         var request = new StringBuilder($"{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n");
-        if (origin is not null)
+        if (origins is not null)
         {
-            request.Append($"Origin: {origin}\r\n");
+            foreach (var origin in origins)
+            {
+                request.Append($"Origin: {origin}\r\n");
+            }
         }
         if (body is not null)
         {
