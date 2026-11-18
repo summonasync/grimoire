@@ -93,6 +93,7 @@ public static class ApiHostBuilder
 
         var app = builder.Build();
         app.UseHostFiltering();
+        app.UseOriginGuard();
         app.UseStructuredErrors();
         app.MapMemoryEndpoints(
             memories,

@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Shouldly;
 using Xunit;
 
@@ -56,19 +54,6 @@ public class HostGuardTests
         status.ShouldBe(HttpStatusCode.OK);
     }
 
-    // HttpClient rewrites an explicit Host header to the request URI's authority, so the
-    // probe goes over a raw socket — the same wire shape as the audit's curl probe.
-    private static async Task<HttpStatusCode> RawGetAsync(Uri baseAddress, string path, string host)
-    {
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        using var tcp = new TcpClient();
-        await tcp.ConnectAsync(baseAddress.Host, baseAddress.Port, cts.Token);
-        await using var stream = tcp.GetStream();
-        var request = Encoding.ASCII.GetBytes(
-            $"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
-        await stream.WriteAsync(request, cts.Token);
-        using var reader = new StreamReader(stream, Encoding.ASCII);
-        var statusLine = await reader.ReadLineAsync(cts.Token);
-        return (HttpStatusCode)int.Parse(statusLine!.Split(' ')[1]);
-    }
+    private static async Task<HttpStatusCode> RawGetAsync(Uri baseAddress, string path, string host) =>
+        (await RawHttpProbe.SendAsync(baseAddress, "GET", path, host)).Status;
 }
