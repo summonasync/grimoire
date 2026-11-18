@@ -2,6 +2,8 @@ using Grimoire.Api.Endpoints;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Grimoire.Api;
 
@@ -15,6 +17,7 @@ internal static class StructuredErrors
 
     public static void UseStructuredErrors(this WebApplication app)
     {
+        var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger(nameof(StructuredErrors));
         app.Use(async (context, next) =>
         {
             try
@@ -45,6 +48,18 @@ internal static class StructuredErrors
                     StatusCodes.Status409Conflict,
                     "reindex_required",
                     ex.Message);
+            }
+            catch (Exception ex)
+            {
+                // The correlation id in the body is the join key to the logged exception;
+                // internals never travel to the client.
+                logger?.LogError(ex, "Unhandled exception on {Method} {Path} (correlation {Correlation})",
+                    context.Request.Method, context.Request.Path, context.TraceIdentifier);
+                await WriteAsync(
+                    context,
+                    StatusCodes.Status500InternalServerError,
+                    "internal_error",
+                    $"An unexpected internal failure occurred. Correlation id: {context.TraceIdentifier}.");
             }
         });
     }
