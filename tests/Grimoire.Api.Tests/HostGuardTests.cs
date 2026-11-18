@@ -11,6 +11,8 @@ public class HostGuardTests
     [Theory]
     [InlineData("audit-invalid.example")]
     [InlineData("audit-invalid.example:4770")]
+    [InlineData("127.0.0.1.evil.example")]
+    [InlineData("localhost.evil.example")]
     public async Task Get_WithHostileHostHeader_RefusedWith400(string host)
     {
         using var factory = new GrimoireApiFactory();
@@ -31,6 +33,12 @@ public class HostGuardTests
 
         status.ShouldBe(HttpStatusCode.BadRequest);
         storeListed.ShouldBeFalse();
+
+        // Positive control: the same route under an allowed Host must reach the store,
+        // so the refusal assertion above cannot go vacuously green after a refactor.
+        var allowed = await factory.NewClient().GetAsync("/api/memories");
+        allowed.StatusCode.ShouldBe(HttpStatusCode.OK);
+        storeListed.ShouldBeTrue();
     }
 
     // The harness binds an ephemeral port (Port = 0); the fixed 4770 in the Host header
@@ -52,14 +60,15 @@ public class HostGuardTests
     // probe goes over a raw socket — the same wire shape as the audit's curl probe.
     private static async Task<HttpStatusCode> RawGetAsync(Uri baseAddress, string path, string host)
     {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var tcp = new TcpClient();
-        await tcp.ConnectAsync(baseAddress.Host, baseAddress.Port);
+        await tcp.ConnectAsync(baseAddress.Host, baseAddress.Port, cts.Token);
         await using var stream = tcp.GetStream();
         var request = Encoding.ASCII.GetBytes(
             $"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
-        await stream.WriteAsync(request);
+        await stream.WriteAsync(request, cts.Token);
         using var reader = new StreamReader(stream, Encoding.ASCII);
-        var statusLine = await reader.ReadLineAsync();
+        var statusLine = await reader.ReadLineAsync(cts.Token);
         return (HttpStatusCode)int.Parse(statusLine!.Split(' ')[1]);
     }
 }
