@@ -32,7 +32,7 @@ internal static class StructuredErrors
                         AcceptsBody(context.Request.Method) ? BodyFault : ParameterFault);
                 }
             }
-            catch (UpstreamUnavailableException ex)
+            catch (UpstreamUnavailableException ex) when (!context.Response.HasStarted)
             {
                 await WriteAsync(
                     context,
@@ -41,7 +41,7 @@ internal static class StructuredErrors
                     $"Upstream '{ex.Upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +
                     "Nothing was written by this call. Check the service and its configuration, then retry.");
             }
-            catch (ReindexRequiredException ex)
+            catch (ReindexRequiredException ex) when (!context.Response.HasStarted)
             {
                 await WriteAsync(
                     context,
@@ -49,10 +49,16 @@ internal static class StructuredErrors
                     "reindex_required",
                     ex.Message);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                // A client abort belongs to Kestrel's shutdown, not to the error contract.
+                throw;
+            }
+            catch (Exception ex) when (!context.Response.HasStarted)
             {
                 // The correlation id in the body is the join key to the logged exception;
-                // internals never travel to the client.
+                // internals never travel to the client. Past HasStarted a write would append
+                // to a committed body — let those fall through to the server instead.
                 logger?.LogError(ex, "Unhandled exception on {Method} {Path} (correlation {Correlation})",
                     context.Request.Method, context.Request.Path, context.TraceIdentifier);
                 await WriteAsync(
