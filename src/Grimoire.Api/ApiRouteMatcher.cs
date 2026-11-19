@@ -84,8 +84,9 @@ internal static class ApiRouteMatcher
         foreach (var reference in parameter.ParameterPolicies)
         {
             // Patterns from endpoint data sources carry unresolved policy names, and constraint
-            // evaluation works without a request context for the constraints in use.
-            var policy = reference.ParameterPolicy ?? policyFactory.Create(parameter, reference.Content);
+            // evaluation works without a request context for the constraints in use. An unresolved
+            // reference always carries its inline text, so Content is non-null on this branch.
+            var policy = reference.ParameterPolicy ?? policyFactory.Create(parameter, reference.Content!);
             if (policy is IRouteConstraint constraint &&
                 !constraint.Match(null, null, parameter.Name, values, RouteDirection.IncomingRequest))
             {
