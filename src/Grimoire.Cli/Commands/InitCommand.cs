@@ -2,6 +2,7 @@ using Grimoire.Cli.CommandLine;
 using Grimoire.Cli.Configuration;
 using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
+using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,6 +28,30 @@ internal sealed class InitCommand(CliEnvironment environment)
         environment.Output.WriteLine(
             $"Collection '{config.Qdrant.Collection}' is ready (embedding '{config.Embedding.Model}', {config.Embedding.Dimensions} dimensions)");
 
+        var embeddings = services.GetRequiredService<IEmbeddingProvider>();
+        try
+        {
+            await embeddings.EmbedAsync(ProbeText, cancellationToken);
+        }
+        catch (UpstreamUnavailableException ex)
+        {
+            environment.Error.WriteLine($"Ollama is not reachable at {config.Embedding.Endpoint}: {ex.Message}");
+            environment.Error.WriteLine("Start Ollama (e.g. `ollama serve`) and rerun `grimoire init`.");
+            return ExitCodes.UpstreamUnavailable;
+        }
+        catch (EmbeddingResponseException ex) when (ex.Message.StartsWith(MissingModelPrefix, StringComparison.Ordinal))
+        {
+            environment.Error.WriteLine($"Embedding model '{config.Embedding.Model}' is not present in Ollama.");
+            environment.Error.WriteLine($"Pull it first: ollama pull {config.Embedding.Model}");
+            return ExitCodes.Dependency;
+        }
+        catch (EmbeddingResponseException ex)
+        {
+            environment.Error.WriteLine($"Embedding probe failed: {ex.Message}");
+            return ExitCodes.Dependency;
+        }
+        environment.Output.WriteLine($"Embedding model '{config.Embedding.Model}' answered the init probe");
+
         if (claim is { } block)
         {
             WriteClaimBlock(block.Alias, block.Tome);
@@ -34,6 +59,11 @@ internal sealed class InitCommand(CliEnvironment environment)
 
         return ExitCodes.Ok;
     }
+
+    internal const string ProbeText = "grimoire-init-probe";
+
+    // The provider surfaces the HTTP status only inside the message; 404 is the missing-model signal.
+    private const string MissingModelPrefix = "Ollama returned HTTP 404 ";
 
     private static (string Alias, string? Tome)? ParseClaim(CliInvocation invocation)
     {

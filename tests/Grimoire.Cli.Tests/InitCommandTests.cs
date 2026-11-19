@@ -1,5 +1,8 @@
+using Grimoire.Cli.Commands;
 using Grimoire.Cli.Tests.Fakes;
+using Grimoire.Core;
 using Grimoire.Infrastructure.Configuration;
+using Grimoire.Infrastructure.Embeddings;
 using Grimoire.Infrastructure.Memory;
 using Qdrant.Client.Grpc;
 using Shouldly;
@@ -224,6 +227,61 @@ public sealed class InitCommandTests : IDisposable
         return count;
     }
 
+    [Fact]
+    public async Task Init_MissingModel_PrintsPullRemedyAndExitsDependency()
+    {
+        using var host = NewHost();
+        host.Embeddings.EmbedFailure = new EmbeddingResponseException("Ollama returned HTTP 404 for model 'qwen3-embedding'.");
+
+        var code = await host.RunAsync("init");
+
+        code.ShouldBe(ExitCodes.Dependency);
+        var output = host.Output.ToString();
+        output.ShouldContain("not present in Ollama");
+        output.ShouldContain("ollama pull qwen3-embedding");
+    }
+
+    [Fact]
+    public async Task Init_OllamaUnreachable_ExitsUpstreamUnavailableWithoutPullRemedy()
+    {
+        using var host = NewHost();
+        host.Embeddings.EmbedFailure = new UpstreamUnavailableException("ollama", new HttpRequestException("connection refused"));
+
+        var code = await host.RunAsync("init");
+
+        code.ShouldBe(ExitCodes.UpstreamUnavailable);
+        var output = host.Output.ToString();
+        output.ShouldContain("not reachable");
+        output.ShouldNotContain("ollama pull");
+    }
+
+    [Fact]
+    public async Task Init_ProbeErrorOtherThan404_ReportsWithoutPullRemedy()
+    {
+        using var host = NewHost();
+        host.Embeddings.EmbedFailure = new EmbeddingResponseException(
+            "Ollama model 'qwen3-embedding' returned 768 dimensions but 1024 are configured.");
+
+        var code = await host.RunAsync("init");
+
+        code.ShouldBe(ExitCodes.Dependency);
+        host.Output.ToString().ShouldNotContain("ollama pull");
+    }
+
+    [Fact]
+    public async Task Init_ModelPresent_ProbePassesAndClaimStillLands()
+    {
+        using var host = NewHost();
+        WriteAgentsFile(host, "# Team instructions");
+
+        var code = await host.RunAsync("init", "--agent", "dan");
+
+        code.ShouldBe(ExitCodes.Ok, host.Output.ToString());
+        host.Output.ToString().ShouldContain("answered the init probe");
+        ReadAgentsFile(host).ShouldContain("alias: dan");
+    }
+
     private TestHost NewHost(IReadOnlyDictionary<string, string>? configEnvironment = null) =>
-        new(db: _db, configEnvironment: configEnvironment);
+        new(db: _db, configEnvironment: configEnvironment,
+            embeddings: new StubEmbeddings(new Dictionary<string, float[]> { [InitCommand.ProbeText] = new float[1024] }));
 }

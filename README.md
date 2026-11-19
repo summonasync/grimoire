@@ -77,18 +77,28 @@ that is the deal.
 
 ## Quickstart
 
-Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com), Docker.
+Prerequisites: Docker (Qdrant + Ollama), or your own loopback instances of
+both. The release binary needs no .NET SDK and no repo clone; building from
+source does ([.NET 10 SDK](https://dotnet.microsoft.com), plus Node.js for
+`web/`).
 
 ```bash
-# 1. Local infrastructure (Qdrant + Ollama, loopback only)
-docker compose -f deploy/docker-compose.yml up -d
+# 1. Install the release binary and the web console (Linux/macOS).
+#    Replace 0.9.1 / linux-x64 with the release and RID you install;
+#    on Windows use: pwsh -File install.ps1 -Archive grimoire-0.9.1-win-x64.zip
+curl -fsSL https://github.com/summonasync/grimoire/releases/latest/download/install.sh -o install.sh
+curl -fsSL https://github.com/summonasync/grimoire/releases/latest/download/grimoire-0.9.1-linux-x64.tar.gz -o grimoire-0.9.1-linux-x64.tar.gz
+bash install.sh grimoire-0.9.1-linux-x64.tar.gz
 
-# 2. Build and test
-dotnet build Grimoire.sln
-dotnet test Grimoire.sln
+# 2. Local infrastructure (Qdrant + Ollama, loopback only).
+#    deploy/docker-compose.yml in the repo is a ready-made compose file —
+#    copy that one file, or run your own Qdrant and Ollama on loopback.
+docker compose -f deploy/docker-compose.yml up -d
+ollama pull qwen3-embedding   # the default embedding model
 
 # 3. First run
-grimoire init     # writes ~/.grimoire/config.json, creates the collection
+grimoire init     # writes ~/.grimoire/config.json, creates the collection,
+                  # probes Ollama for the model and names the pull remedy when missing
 grimoire serve    # web console on http://127.0.0.1:4770
 
 # 4. Or let the console come to you
@@ -428,17 +438,26 @@ is not, leaving the per-hook `timeout` as the only ceiling;
 
 ## Distribution
 
-The CLI ships as a dotnet tool: `src/Grimoire.Cli` packs
-`Grimoire.<version>.nupkg` (version from `Directory.Build.props`, tool
-command `grimoire`). The public feed (nuget.org) is an owner decision still
-pending, so the shipped channel today is a local folder feed built from
-this repo:
+The public channel is **GitHub Releases**: self-contained single-file binaries
+per RID (`win-x64`, `linux-x64`, `osx-arm64`), each archive carrying the stamped
+SPA static export and an internal `SHA256SUMS`, with `install.sh` / `install.ps1`
+as release assets. No .NET SDK and no clone needed: the install script lands the
+binary on PATH and the export into `~/.grimoire/web`, idempotently and without
+sudo. Archives are built by `scripts/release-pack.sh`, which refuses to pack
+when the SPA stamp and the assembly version disagree.
+
+The dev channel stays a dotnet tool from a local folder feed (nuget.org publish
+is declined for now): `src/Grimoire.Cli` packs `Grimoire.<version>.nupkg`
+(version from `Directory.Build.props`, tool command `grimoire`):
 
 ```bash
 dotnet pack src/Grimoire.Cli -c Release -o build/packages
 dotnet tool install -g Grimoire --add-source build/packages --no-cache
-grimoire --version    # -> grimoire 0.9.0
+grimoire --version    # -> grimoire 0.9.1
 ```
+
+From source: `dotnet build Grimoire.sln` and `dotnet test Grimoire.sln`; run any
+face with `dotnet run --project src/Grimoire.Cli -- <verb>`.
 
 `-g` lands `grimoire` on PATH (`~/.dotnet/tools` on Linux/macOS,
 `%USERPROFILE%\.dotnet\tools` on Windows; use `--tool-path <dir>` for
@@ -461,12 +480,12 @@ rsync -a --delete web/out/ ~/.grimoire/web/
 `npm run build` exports the SPA and `web/scripts/emit-web-stamp.mjs` stamps the
 export with `productVersion` (read from `Directory.Build.props`, the single
 version truth), `webSha` and `builtAt`. `serve` compares that stamp against the
-running binary at boot and prints what it found. Both branches, verbatim from a
-boot of this branch's binary:
+running binary at boot and prints what it found. Both branches (version numbers
+illustrative; the wording is `SpaStampVerifier`'s):
 
 ```
-Warning: Deployed SPA export reports version 0.1.0 while this binary is 0.9.0; the served UI was built for a different release. Rebuild web/ and redeploy the export.
-Warning: Deployed SPA export version is unknown (grimoire-web.json is absent); it was never compared against this binary (0.9.0).
+Warning: Deployed SPA export reports version 0.1.0 while this binary is 0.9.1; the served UI was built for a different release. Rebuild web/ and redeploy the export.
+Warning: Deployed SPA export version is unknown (grimoire-web.json is absent); it was never compared against this binary (0.9.1).
 ```
 
 The first is a mismatch and names both versions; the second is the

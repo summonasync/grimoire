@@ -8,9 +8,16 @@ public sealed class StubEmbeddings(IReadOnlyDictionary<string, float[]> vectors)
 
     public string? UnavailableText { get; set; }
 
+    public Exception? EmbedFailure { get; set; }
+
     public Task<ReadOnlyMemory<float>> EmbedAsync(string text, CancellationToken cancellationToken)
     {
         Requests.Add(text);
+
+        if (EmbedFailure is { } failure)
+        {
+            throw failure;
+        }
 
         if (text == UnavailableText)
         {
