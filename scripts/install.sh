@@ -25,8 +25,8 @@ trap 'rm -rf "$TMP"' EXIT
 case "$SOURCE" in
   http://*|https://*)
     echo "downloading $SOURCE"
-    curl -fL --retry 2 -o "$TMP/archive" "$SOURCE"
-    ARCHIVE="$TMP/archive"
+    curl -fL --retry 2 -o "$TMP/$(basename "${SOURCE%%\?*}")" "$SOURCE"
+    ARCHIVE="$TMP/$(basename "${SOURCE%%\?*}")"
     ;;
   *)
     [ -f "$SOURCE" ] || { echo "archive not found: $SOURCE" >&2; exit 1; }
