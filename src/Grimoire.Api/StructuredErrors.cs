@@ -2,6 +2,8 @@ using Grimoire.Api.Endpoints;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Grimoire.Api;
 
@@ -15,6 +17,7 @@ internal static class StructuredErrors
 
     public static void UseStructuredErrors(this WebApplication app)
     {
+        var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger(nameof(StructuredErrors));
         app.Use(async (context, next) =>
         {
             try
@@ -29,7 +32,7 @@ internal static class StructuredErrors
                         AcceptsBody(context.Request.Method) ? BodyFault : ParameterFault);
                 }
             }
-            catch (UpstreamUnavailableException ex)
+            catch (UpstreamUnavailableException ex) when (!context.Response.HasStarted)
             {
                 await WriteAsync(
                     context,
@@ -38,13 +41,31 @@ internal static class StructuredErrors
                     $"Upstream '{ex.Upstream}' is unavailable: not reachable, it timed out, or it rejected the configured credentials. " +
                     "Nothing was written by this call. Check the service and its configuration, then retry.");
             }
-            catch (ReindexRequiredException ex)
+            catch (ReindexRequiredException ex) when (!context.Response.HasStarted)
             {
                 await WriteAsync(
                     context,
                     StatusCodes.Status409Conflict,
                     "reindex_required",
                     ex.Message);
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                // A client abort belongs to Kestrel's shutdown, not to the error contract.
+                throw;
+            }
+            catch (Exception ex) when (!context.Response.HasStarted)
+            {
+                // The correlation id in the body is the join key to the logged exception;
+                // internals never travel to the client. Past HasStarted a write would append
+                // to a committed body — let those fall through to the server instead.
+                logger?.LogError(ex, "Unhandled exception on {Method} {Path} (correlation {Correlation})",
+                    context.Request.Method, context.Request.Path, context.TraceIdentifier);
+                await WriteAsync(
+                    context,
+                    StatusCodes.Status500InternalServerError,
+                    "internal_error",
+                    $"An unexpected internal failure occurred. Correlation id: {context.TraceIdentifier}.");
             }
         });
     }

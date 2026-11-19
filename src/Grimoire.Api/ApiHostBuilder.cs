@@ -8,6 +8,7 @@ using Grimoire.Api.Sessions;
 using Grimoire.Api.Tomes;
 using Grimoire.Core;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -54,6 +55,11 @@ public static class ApiHostBuilder
         {
             json.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         });
+        // The bind guard proves where the socket listens, not who the request claims to target:
+        // a DNS-rebinding browser reaches the same loopback socket with a hostile Host header.
+        // Port-less entries accept any port (audit-2026-11-15 W1).
+        builder.Services.Configure<HostFilteringOptions>(filtering =>
+            filtering.AllowedHosts = ["127.0.0.1", "localhost", "grimoire.localhost"]);
         builder.Services.AddHostedService<LoopbackGuardService>();
         builder.Services.AddHostedService(_ => new GcSweeper(
             memories.GcAsync,
@@ -86,6 +92,8 @@ public static class ApiHostBuilder
         builder.Services.AddSingleton(tomeResolver);
 
         var app = builder.Build();
+        app.UseHostFiltering();
+        app.UseOriginGuard();
         app.UseStructuredErrors();
         app.MapMemoryEndpoints(
             memories,
