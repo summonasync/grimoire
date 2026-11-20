@@ -104,7 +104,8 @@ Prerequisites: .NET 10 SDK; Node.js for the SPA.
 dotnet build Grimoire.sln
 dotnet test Grimoire.sln
 dotnet run --project src/Grimoire.Cli -- <verb>    # init, serve, mcp, ...
-(cd web && npm ci && npm run build)                # SPA export for the console
+(cd web && npm ci && npm run build)                # SPA export; postbuild stamps web/out/grimoire-web.json
+rsync -a --delete web/out/ ~/.grimoire/web/        # deploy the export for `serve`
 ```
 
 The release channel and the dev tool feed (dotnet tool) are described in

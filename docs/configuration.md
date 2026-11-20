@@ -82,6 +82,30 @@ knobs: the CLI claims the whole `GRIMOIRE_*` namespace and a foreign knob in
 it would break the call it configures. Three names are carved out as identity
 variables, not config: `GRIMOIRE_ACTOR`, `GRIMOIRE_TOME`, `GRIMOIRE_HOME`.
 
+## Refusals and sharp edges
+
+- **Unknown keys in the file are rejected** — a typo in a hand-edited config
+  fails loudly instead of being ignored.
+- **Unknown env overrides are rejected** the same way:
+  `GRIMOIRE_MEMORY__DAILYZONETIMEZONE` fails the load like any other name
+  that matches no property.
+- **`defaultTome` is the tail of the tome chain, not its head**:
+  `GRIMOIRE_TOME` outranks it on the MCP and web faces and on the `--tome`
+  flag; the four flag-less CLI reads resolve through the chain and land on
+  this default last.
+- **An unusable handshake window stops `serve` at startup** with a config
+  error naming the knob: `sessions.retentionHours` (or its
+  `memory.sessionTtlHours` fallback) that is not finite or not positive would
+  retire live handshake rows instead of aged ones.
+- **The topic-vote knobs are not config keys**: `NearTopicSimilarityThreshold`
+  (0.75), `TopicAgreementCount` (2), `TopicConfidenceThreshold` (0.8) are
+  defaults on `MemoryEngineOptions` that `EngineOptionsMapper` never reads —
+  `GRIMOIRE_MEMORY__TOPICCONFIDENCETHRESHOLD` fails the load; retuning means
+  editing the declared default.
+- `sessionCollection` defaults to `<collection>-sessions`; all three
+  collection names must be pairwise distinct (validator refuses collisions at
+  load).
+
 ## Precedence in one list
 
 1. explicit tool parameter (where the door takes one, e.g. `tome`);

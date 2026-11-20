@@ -91,6 +91,74 @@ similar journal entries (pure math over stored embeddings), the agent distills
 them into `kind=fact` records with `sources` provenance and tombstones the
 consumed entries; `memory_stats` reports `pendingCompaction`.
 
+## The brief, its knobs and its budget
+
+`memory_brief` / `grimoire brief` is the session-start read: persona, top
+facts, recent journal and the tombstone digest in one call, sections filled
+in priority order under a character budget. What did not fit is named twice —
+`omitted` names the sections, `omissionDigest` names the records.
+
+Four record-carrying sections produce a digest (`facts`, `tombstones`,
+`journal`, `daily`), keys appearing only when that section really lost
+something, always in that order. Each digest line: id, reason, one-line
+excerpt.
+
+| Loss | Text face | Wire | Meaning |
+|---|---|---|---|
+| read limit | `read-limit` | `ReadLimit` | more matched than the per-scope count asked for |
+| section budget | `over-budget` | `SectionBudget` | the section fell out of the character budget; its records become digest lines |
+| daily purse | `daily-purse` | `DailyPurse` | the daily section spent its purse and only counted the rest |
+| excerpt cut | ` [cut]` | `"excerptCut": true` | the digest line itself is shorter than the record |
+
+`persona` and `tomes` can fall out of budget too but keep the older face (the
+name in `omitted`, `(+N more)` for the tome table) — they are not record sets
+with ids. An excerpt at or under 300 characters prints whole; above it, cut to
+80 and flagged — both Core defaults (`BriefNeverTruncateChars`,
+`BriefDigestExcerptChars`), chosen not measured, not config keys. The whole
+digest map is absent when nothing fell out — never an empty object. Nothing is
+deleted by any of this: a digest id is the record's handle for
+`memory_history` / `grimoire forget`, and the excerpt is what a targeted
+`memory_recall` finds again.
+
+CLI knobs: `--format text|hook` (hook emits one JSON SessionStart envelope;
+warnings go to stderr there, trail the sections in text), `--max-chars <n>`
+(total budget; the cap enters Core's budget walk before rendering and the
+daily purse tightens with it — `min(cap, configured)`), `--since`/`--until`
+(`[since, until)`, date-only means midnight local, `until` exclusive;
+unparsable or inverted windows exit usage naming the flag and value). The
+window bounds content, not lifecycle counters: `tombstones` and
+`compactionDue` stay all-time deliberately. `memory_brief` on the MCP face
+takes no window at all.
+
+The daily section (`daily: true` / `brief --daily`): active journal records
+tagged `daily-notes` within the brief's scope filter (`Session` is never
+briefed), in two buckets — today and the first day behind it holding a note
+(up to a week back), grouped by actor, oldest first. A record landing in
+`daily` is dropped from `journal` — never paid for twice. Day cut: local
+midnight in `memory.dailyTimeZone` (machine zone while unset). Purse: bodies
+over 1500 characters are cut and flagged `truncated`; after 6000 characters
+the rest is only counted in `more`. Both numbers are code defaults, not
+config keys. `report` is always machine-local, `--daily` cuts its day in the
+configured zone — when the two differ, so does "today".
+
+Degraded config says so instead of rendering an empty room, and only when the
+daily section was asked for: a blank `memory.dailyTag` disables the section
+and warns naming the key (an empty value is used as given — not a reset to
+`daily-notes`); an unset `memory.dailyTimeZone` is silent (that is the
+default), only an unresolvable id falls back to UTC and warns naming the id.
+Both arrive in `warnings`, disabled-section first. The CLI never prints the
+tome-level warning that `memory_brief` does — an asymmetry older than the
+daily section, kept as-is. The tome warning fires only for a named-by-request
+tome holding no record anywhere (`KnownTomeKeys` counts Active and Tombstoned;
+a daily-only tome is known and never warned about).
+
+`grimoire report` is the evening read: one local day's active records grouped
+by actor, `--date`/`--tag`/`--project`/`--json` narrow it. An empty day says
+so in one line naming the window, tags and the tome actually read — never
+silence. `report` has no `--tome` flag: the tome comes from the resolution
+chain (`docs/agent-wiring.md`), and the echo line is how you tell "no notes"
+from "wrong tome".
+
 ## What the server saw: the handshake registry
 
 `grimoire mcp` records one row per connection on its **first request** —
