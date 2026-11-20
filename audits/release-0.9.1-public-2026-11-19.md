@@ -98,8 +98,38 @@ data, schema or config shape changed by 067; the init probe adds no writes.
 - License is Apache-2.0 as of PR #41 (owner ruling 2026-11-20, board decision
   9e7f8188); the MIT wording in the 0.1.0–0.9.1 history stays as shipped.
 
+## Execution 2026-11-20 — RELEASE PUBLISHED
+
+`gh release create` was not needed: a predecessor session had left the release
+as a DRAFT (assets: install scripts only; target stale `e629943`; body pre-
+license-propagation). medivh-grim completed it on the owner's word:
+
+- Repacked all three archives from main `a71be0f` (PR #45 / 069 web fixes must
+  ride the console export — the draft-era archives carried the pre-069 export;
+  stamps read back from all three archives: `0.9.1 @ a71be0f`).
+- Retargeted the draft to `a71be0f` (full SHA required — short shas are refused
+  by the API), replaced the body with `audits/release-notes-0.9.1.md` including
+  the Apache-2.0 line and the NEW archive digests, uploaded the three archives
+  (GitHub asset digests matched local sha256 byte-for-byte; round-trip download
+  verified 2/2).
+- Published 2026-11-20 14:04:51Z: https://github.com/summonasync/grimoire/releases/tag/v0.9.1
+  — tag `v0.9.1` points at `a71be0fe84b9882ef5d68a23206231d8cb4241a1`.
+
+Final asset digests (sha256):
+
+```
+f847b0b19ce9feb099d5d8cba8e602ac9a99f513b7cc125e3ecf9702ef0e7585  grimoire-0.9.1-linux-x64.tar.gz
+e19e4248cdae75c5d8d35c1fe164f24565fdae67a86b9abe59123cce8c84b22c  grimoire-0.9.1-osx-arm64.tar.gz
+6be2f058e083dc73c344b66ec21b3137df3902c4c227580969fef65fbf307174  grimoire-0.9.1-win-x64.zip
+16d03e48492be7da0dcf5d6e56e3390f506e9551ed87a9b6793e9d11a89f6a1d  install.sh
+317134cc754e03bacf59c7473f7c7053a571de43f44653b90d9481da1c943810  install.ps1
+```
+
+The `## Carriers` table above (232ba90-era hashes) is superseded by this
+section. Upload legs stalled under the dead process proxies until
+HTTP(S)_PROXY/ALL_PROXY were stripped — same environment trap as the gates.
+
 ## Left open
 
 - idea 15b07142: HTTP status on EmbeddingResponseException + /api/tags probe.
-- 068 docs-split follows serially (README ownership stays in release-ops).
-- Social preview image: web-UI-only upload, owner's door (066 result cd042465).
+- Repo visibility flip + social preview upload: owner's doors, untouched.
