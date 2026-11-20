@@ -24,3 +24,11 @@ audits/*
 !audits/release-*
 !audits/strategy-grimoire-*
 !audits/t7-live-firing-receipt.md
+
+# Overmind materialization mirrors and ceremony pins are machine state, never
+# repo content: BACKLOG/ + ENTRIES/ are rewritten mirrors of the board,
+# .overmind/ holds per-worktree project pins. Protected here (not just in the
+# local .git/info/exclude) so no clone can accidentally commit them.
+BACKLOG/
+ENTRIES/
+.overmind/
