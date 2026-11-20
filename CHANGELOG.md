@@ -12,7 +12,8 @@ this changelog; their content lives in git history.
 
 ### Added
 
-- MIT license (`LICENSE`).
+- Apache-2.0 license (`LICENSE`), superseding the MIT grant of 0.1.0–0.9.1
+  (owner ruling 2026-11-20, carrier PR #41).
 - Community health files: `SECURITY.md`, `CONTRIBUTING.md`, issue and pull
   request templates.
 

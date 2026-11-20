@@ -3,6 +3,7 @@
 Grimoire is a local agent memory service: one binary, three faces — an MCP
 stdio server for your coding agents, a loopback web console, and a management
 CLI — over a single Qdrant store on your machine. No cloud, no telemetry.
+License: Apache-2.0 (see `LICENSE`).
 
 ## Install
 
