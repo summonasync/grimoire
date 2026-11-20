@@ -93,7 +93,8 @@ data, schema or config shape changed by 067; the init probe adds no writes.
 - 067 landed as PR #42, merge `e629943` (owner GitHub merge). The archive stamps
   name `232ba90`, the tree the SPA export was built from; it is an ancestor of
   the merge, and the merge added no web/ content, so the stamps stay truthful.
-  Tag target for `gh release create v0.9.1` is `e629943`.
+  Tag target for `gh release create v0.9.1` is `297ec67` (main after PR #43;
+  supersedes the `e629943` line written before the propagation landed).
 - License is Apache-2.0 as of PR #41 (owner ruling 2026-11-20, board decision
   9e7f8188); the MIT wording in the 0.1.0–0.9.1 history stays as shipped.
 
