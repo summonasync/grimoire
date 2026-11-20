@@ -39,7 +39,7 @@ export function ScryPage() {
           onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
           placeholder="What do the other tomes know about…"
           aria-label="Scry query"
-          className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted"
+          className="min-w-0 flex-1 rounded-md bg-transparent text-base outline-none placeholder:text-muted focus-visible:ring-2 focus-visible:ring-jade/60"
         />
         {filters.query.length > 0 && (
           <Button

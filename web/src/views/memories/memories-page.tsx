@@ -48,6 +48,15 @@ export function MemoriesPage() {
   const effectiveFilters =
     filters.query === deferredQuery ? filters : { ...filters, query: deferredQuery };
   const effectiveTome = railTome ?? effectiveFilters.tome;
+  const pristineFilters =
+    filters.query.trim() === "" &&
+    filters.scopes.length === 0 &&
+    filters.kind === "" &&
+    filters.tags.trim() === "" &&
+    filters.limit.trim() === "" &&
+    filters.status !== "all" &&
+    filters.status.length === 1 &&
+    filters.status[0] === "active";
 
   const list = useQuery(
     memoriesQueryOptions(toMemoryListParams({ ...effectiveFilters, tome: effectiveTome })),
@@ -123,13 +132,23 @@ export function MemoriesPage() {
             <div className="p-4">
               <EmptyState
                 icon="filter"
-                title="Nothing matches these filters"
-                reason={
-                  effectiveTome
-                    ? `No active records in tome '${effectiveTome}' for the current filters — widen the scope or clear the tome filter.`
-                    : "The store returned no records for the current filters — try clearing them."
+                title={
+                  pristineFilters && !effectiveTome
+                    ? "The store is empty"
+                    : "Nothing matches these filters"
                 }
-                action={{ label: "Reset filters", onClick: () => setFilters(defaultMemoryFilters()) }}
+                reason={
+                  pristineFilters && !effectiveTome
+                    ? "No memories yet — capture one with Add memory, or let your agents write through memory_remember."
+                    : effectiveTome
+                      ? `No active records in tome '${effectiveTome}' for the current filters — widen the scope or clear the tome filter.`
+                      : "The store returned no records for the current filters — try clearing them."
+                }
+                action={
+                  pristineFilters && !effectiveTome
+                    ? undefined
+                    : { label: "Reset filters", onClick: () => setFilters(defaultMemoryFilters()) }
+                }
               />
             </div>
           ) : (
@@ -138,6 +157,7 @@ export function MemoriesPage() {
                 <p className="text-xs text-muted">
                   {list.data?.count.toLocaleString()} record
                   {list.data?.count === 1 ? "" : "s"} · tome {list.data?.tome}
+                  {effectiveFilters.query.trim().length > 0 && " · ranked by similarity to your query"}
                 </p>
               </div>
               <RecordMoveBar

@@ -16,9 +16,7 @@ export function PersistenceBanner({ persistence }: PersistenceBannerProps) {
       <div className="min-w-0">
         <p className="text-sm font-medium text-gilt">Settings are view-only in this build</p>
         <p className="mt-0.5 text-xs text-muted">{persistence.reason}</p>
-        <p className="mt-1 text-xs text-muted">
-          Edit the config file by hand — {persistence.hint}
-        </p>
+        <p className="mt-1 text-xs text-muted">{persistence.hint}</p>
       </div>
     </div>
   );

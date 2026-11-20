@@ -58,7 +58,17 @@ export function ConsoleScreen() {
 
   if (stats.error) {
     return (
-      <QueryFailure message={stats.error.message} onRetry={() => void stats.refetch()} />
+      <div className="space-y-5">
+        <header>
+          <h1 className="font-display text-3xl leading-tight font-semibold tracking-tight">
+            Console
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Your agents remember. Here is what is happening.
+          </p>
+        </header>
+        <QueryFailure message={stats.error.message} onRetry={() => void stats.refetch()} />
+      </div>
     );
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ShelfToastProvider } from "@/features/shelf";
 import { cn } from "@/shared/lib/cn";
 import { useHashTab } from "@/shared/lib/use-hash-tab";
@@ -21,11 +21,40 @@ interface AppShellProps {
 export function AppShell({ tabs }: AppShellProps) {
   const active = useHashTab("console");
   const current = tabItems.find((item) => item.id === active) ?? tabItems[0]!;
+  const [navOpen, setNavOpen] = useState(false);
+
+  useEffect(() => {
+    const close = () => setNavOpen(false);
+    window.addEventListener("hashchange", close);
+    return () => window.removeEventListener("hashchange", close);
+  }, []);
+
+  useEffect(() => {
+    if (!navOpen) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.querySelector<HTMLElement>("aside nav a")?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
 
   return (
     <TomeFilterProvider>
       <ShelfToastProvider>
         <div className="relative flex min-h-dvh w-full">
+          <a
+            href="#main"
+            onClick={(event) => {
+              event.preventDefault();
+              document.getElementById("main")?.focus();
+            }}
+            className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-jade/60"
+          >
+            Skip to content
+          </a>
           <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
             <Image
               src={current.art}
@@ -44,7 +73,20 @@ export function AppShell({ tabs }: AppShellProps) {
             <div className="absolute inset-0" style={{ backgroundColor: "var(--art-scrim)" }} />
           </div>
 
-          <aside className="glass-shell relative z-20 flex w-56 shrink-0 flex-col border-r border-border">
+          {navOpen && (
+            <div
+              aria-hidden
+              className="fixed inset-0 z-30 bg-black/50 md:hidden"
+              onClick={() => setNavOpen(false)}
+            />
+          )}
+
+          <aside
+            className={cn(
+              "glass-shell fixed inset-y-0 left-0 z-40 flex w-56 flex-col border-r border-border transition-transform duration-200 md:static md:visible md:z-20 md:shrink-0 md:translate-x-0",
+              navOpen ? "translate-x-0" : "invisible -translate-x-full",
+            )}
+          >
             <div className="flex items-center gap-2.5 px-4 py-5">
               <span className="flex size-9 items-center justify-center rounded-lg border border-jade/40 bg-jade/10">
                 <Sigil seed="grimoire-wordmark" className="size-5" />
@@ -93,9 +135,20 @@ export function AppShell({ tabs }: AppShellProps) {
 
           <div className="relative z-10 flex min-w-0 flex-1 flex-col">
             <header className="flex items-center justify-end gap-2 border-b border-border/70 px-6 py-3">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen(true)}
+                className="mr-auto rounded-md border border-border p-2 text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/60 md:hidden"
+              >
+                <Icon name="menu" className="size-4" />
+              </button>
               <ThemeToggle />
             </header>
-            <main className="min-w-0 flex-1 px-6 py-6">{tabs[active]}</main>
+            <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-6 py-6 focus:outline-none">
+              {tabs[active]}
+            </main>
           </div>
         </div>
       </ShelfToastProvider>

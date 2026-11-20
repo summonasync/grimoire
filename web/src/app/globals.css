@@ -14,9 +14,9 @@
   --accent: #9e1b23;
   --accent-foreground: #fdf9f2;
   --accent-soft: rgba(158, 27, 35, 0.1);
-  --gilt: #8a6a17;
+  --gilt: #5c470e;
   --jade: #1c7a51;
-  --ember: #a8560d;
+  --ember: #793e09;
   --arcane: #6b4d9e;
   --tide: #1f6f8b;
   --rose: #a63d5e;
@@ -135,8 +135,8 @@ body {
   }
 
   .field:focus-visible {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    border-color: var(--jade);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--jade) 22%, transparent);
   }
 
   .label {
