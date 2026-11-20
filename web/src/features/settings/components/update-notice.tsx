@@ -33,7 +33,7 @@ export function UpdateNotice({ outcome, hint }: UpdateNoticeProps) {
           <p className="mt-0.5 text-xs break-words text-muted">
             {outcome.code}: {outcome.message}
           </p>
-          {hint !== null && (
+          {hint !== null && !outcome.message.includes(hint) && (
             <p className="mt-1.5 text-xs text-muted">How to change settings instead: {hint}</p>
           )}
         </div>

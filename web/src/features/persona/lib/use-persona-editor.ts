@@ -20,25 +20,62 @@ function toFailure(error: Error | null): ApiFailure | null {
   return { code: "network_error", message: error.message || "The request failed." };
 }
 
+function readStoredDraft(key: string): PersonaDocument | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const stored = window.sessionStorage.getItem(key);
+    if (stored === null) {
+      return null;
+    }
+    const parsed = JSON.parse(stored) as Partial<PersonaDocument>;
+    if (typeof parsed.identity === "string" && typeof parsed.tone === "string"
+      && typeof parsed.preferences === "string" && typeof parsed.rules === "string") {
+      return {
+        identity: parsed.identity,
+        tone: parsed.tone,
+        preferences: parsed.preferences,
+        rules: parsed.rules,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function usePersonaEditor(tome: string | null) {
   const queryClient = useQueryClient();
   const query = useQuery(personaQueryOptions(tome));
-  const [draft, setDraft] = useState<PersonaDocument | null>(null);
+  const storageKey = "grimoire-persona-draft:" + (tome ?? "default");
+  const [draft, setDraft] = useState<PersonaDocument | null>(() => readStoredDraft(storageKey));
   const [savedTome, setSavedTome] = useState<string | null>(null);
   const dirtyRef = useRef(false);
 
   useEffect(() => {
-    if (query.data === undefined || dirtyRef.current) {
+    if (query.data === undefined || dirtyRef.current || draft !== null) {
       return;
     }
     setDraft(query.data);
-  }, [query.data]);
+  }, [query.data, draft]);
 
   const isDirty = draft !== null && query.data !== undefined && !documentsEqual(draft, query.data);
 
   useEffect(() => {
     dirtyRef.current = isDirty;
   }, [isDirty]);
+
+  useEffect(() => {
+    if (draft === null || query.data === undefined) {
+      return;
+    }
+    if (documentsEqual(draft, query.data)) {
+      window.sessionStorage.removeItem(storageKey);
+    } else {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
+    }
+  }, [draft, query.data, storageKey]);
 
   useUnsavedGuard(isDirty);
 

@@ -20,9 +20,20 @@ export function MemoryListRow({ record, selected, onOpen, checked, onToggle }: M
   return (
     <tr
       onClick={() => onOpen(record.id)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(record.id);
+        }
+      }}
+      tabIndex={0}
       aria-selected={selected}
       className={cn(
         "cursor-pointer border-b border-border/60 transition-colors last:border-0",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-jade/60",
         selected ? "bg-jade/10" : "hover:bg-foreground/[0.03]",
       )}
     >
