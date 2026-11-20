@@ -108,7 +108,7 @@ reconnects. The saving lands on the next reconnect, not at install time.
 
 Delivery surface, read from the registration files on disk: **Qwen Code**
 (`~/.qwen/settings.json`, actor `tucker+qwen`) and **Claude Code** (`~/.claude.json`, actor
-`guldan+claude`) — both point at `/home/johan-boolman/.local/bin/grimoire mcp` with only the two
+`guldan+claude`) — both point at `~/.local/bin/grimoire mcp` with only the two
 reserved env keys (`GRIMOIRE_TOME=crew`, `GRIMOIRE_ACTOR=…`). No codex or kimi entry exists on this
 machine, so no claim is made about them. Reconnect by restarting those clients; the registrations
 themselves needed no edit and none was made.
