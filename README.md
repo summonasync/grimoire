@@ -162,3 +162,8 @@ Security model and private reporting: [SECURITY.md](SECURITY.md).
 *summonasync — one dev, a swarm of agents, nothing leaves the machine.*
 Everything here runs on your machine: the store lives in `~/.grimoire`, the
 web face binds `127.0.0.1` only. If it does not — that is a bug, file it.
+
+---
+
+`await SummonAsync();` — part of the summoner's kit  
+overmind · **▸ grimoire** · squeezr · synchro · syncrowatch · summonasync studio
