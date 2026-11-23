@@ -147,9 +147,8 @@ promises. 0.3.0–0.7.0 were internal milestones and live in git history.
   honest responses on every edge path
 - [x] **0.9.1** — tome guard on REST PATCH, `serverVersion` skew visibility,
   brief facts served whole in score order
-- [ ] **0.9.2 — in the works** — Apache-2.0 relicensing (from MIT), community
-  health files, public security hardening: Host/Origin filtering and a
-  structured error catch-all (`070`)
+- [ ] **0.9.2 — in the works** — community health files, public security
+  hardening: Host/Origin filtering and a structured error catch-all (`070`)
 - [ ] **beyond** — the board decides; small honest steps, nothing remote-bound
 
 ## License & security
