@@ -19,7 +19,7 @@ public sealed class TomeKeyTests
     [InlineData("My Tome", "my-tome")]
     [InlineData("product_assistants", "product-assistants")]
     [InlineData("  Mixed_Case Name  ", "mixed-case-name")]
-    [InlineData("Johan-Boolman", "johan-boolman")]
+    [InlineData("Test-User", "test-user")]
     public void Normalize_TrimsLowercasesAndKebabs(string candidate, string expected)
     {
         TomeKey.Normalize(candidate).ShouldBe(expected);

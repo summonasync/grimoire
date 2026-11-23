@@ -53,10 +53,10 @@ public sealed class McpCommandTests
         var options = McpCommand.BuildHostOptions(
             ActorResolver.Parse(null),
             "team-platform",
-            "evgenii+claude");
+            "agent+claude");
 
         options.Actor.ShouldBeNull();
-        options.EnvActor.ShouldBe("evgenii+claude");
+        options.EnvActor.ShouldBe("agent+claude");
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class McpCommandTests
         var options = McpCommand.BuildHostOptions(
             ActorResolver.Parse("junior+claude"),
             null,
-            "evgenii+claude");
+            "agent+claude");
 
         options.Actor.ShouldNotBeNull();
         options.Actor!.Value.Alias.ShouldBe("junior");

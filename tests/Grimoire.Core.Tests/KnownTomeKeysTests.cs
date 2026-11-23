@@ -56,18 +56,18 @@ public sealed class KnownTomeKeysTests
         _store.Seed(TestMemories.Create("inno note", [1f, 0f, 0f], tome: "inno-crew"));
 
         var warnings = await EmptyTomeWarning.BuildAsync(
-            _store, isEmpty: true, requestedTome: "linnovate", resolvedTome: "linnovate", CancellationToken.None);
+            _store, isEmpty: true, requestedTome: "legacy-app", resolvedTome: "legacy-app", CancellationToken.None);
 
-        warnings.ShouldBe(["tome 'linnovate' is empty or does not exist. Known tome keys: inno-crew"]);
+        warnings.ShouldBe(["tome 'legacy-app' is empty or does not exist. Known tome keys: inno-crew"]);
     }
 
     [Fact]
     public async Task EmptyTomeWarning_EmptyStore_UsesTheNoneYetWording()
     {
         var warnings = await EmptyTomeWarning.BuildAsync(
-            _store, isEmpty: true, requestedTome: "linnovate", resolvedTome: "linnovate", CancellationToken.None);
+            _store, isEmpty: true, requestedTome: "legacy-app", resolvedTome: "legacy-app", CancellationToken.None);
 
-        warnings.ShouldBe(["tome 'linnovate' is empty or does not exist. Known tome keys: (none yet)"]);
+        warnings.ShouldBe(["tome 'legacy-app' is empty or does not exist. Known tome keys: (none yet)"]);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class KnownTomeKeysTests
         _store.Seed(TestMemories.Create("inno note", [1f, 0f, 0f], tome: "inno-crew"));
 
         var warnings = await EmptyTomeWarning.BuildAsync(
-            _store, isEmpty: false, requestedTome: "linnovate", resolvedTome: "linnovate", CancellationToken.None);
+            _store, isEmpty: false, requestedTome: "legacy-app", resolvedTome: "legacy-app", CancellationToken.None);
 
         warnings.ShouldBeNull();
         _store.ListCallCount.ShouldBe(0);

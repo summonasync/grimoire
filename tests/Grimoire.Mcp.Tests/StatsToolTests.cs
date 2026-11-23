@@ -271,12 +271,12 @@ public sealed class StatsToolTests
 
         var result = await session.Client.CallToolAsync("memory_stats", new Dictionary<string, object?>
         {
-            ["tome"] = "linnovate",
+            ["tome"] = "legacy-app",
         });
 
         result.ShouldSucceed();
         result.Payload().GetProperty("warnings")[0].GetString()
-            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: (none yet)");
+            .ShouldBe("tome 'legacy-app' is empty or does not exist. Known tome keys: (none yet)");
     }
 
     [Fact]

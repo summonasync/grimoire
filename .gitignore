@@ -22,6 +22,7 @@ audits/*
 !audits/design-assets-contact-sheet.png
 !audits/naming-tournament-*
 !audits/release-*
+audits/release-*.log
 !audits/strategy-grimoire-*
 !audits/t7-live-firing-receipt.md
 
@@ -32,3 +33,6 @@ audits/*
 BACKLOG/
 ENTRIES/
 .overmind/
+FeatureRequest/
+ideas/
+.kimi-code/

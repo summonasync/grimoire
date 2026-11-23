@@ -399,14 +399,14 @@ public sealed class DigestToolTests
         var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
         {
             ["topic"] = "deploy",
-            ["tome"] = "linnovate",
+            ["tome"] = "legacy-app",
         });
 
         result.ShouldSucceed();
         var payload = result.Payload();
         payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(0);
         payload.GetProperty("warnings")[0].GetString()
-            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: (none yet)");
+            .ShouldBe("tome 'legacy-app' is empty or does not exist. Known tome keys: (none yet)");
     }
 
     [Fact]
@@ -426,14 +426,14 @@ public sealed class DigestToolTests
         var result = await session.Client.CallToolAsync("memory_digest", new Dictionary<string, object?>
         {
             ["topic"] = "deploy",
-            ["tome"] = "linnovate",
+            ["tome"] = "legacy-app",
         });
 
         result.ShouldSucceed();
         var payload = result.Payload();
         payload.GetProperty("longMemo").GetProperty("items").GetArrayLength().ShouldBe(0);
         payload.GetProperty("warnings")[0].GetString()
-            .ShouldBe("tome 'linnovate' is empty or does not exist. Known tome keys: inno-crew");
+            .ShouldBe("tome 'legacy-app' is empty or does not exist. Known tome keys: inno-crew");
     }
 
     [Fact]
