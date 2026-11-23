@@ -18,7 +18,7 @@
 *The book the summoner writes results into.*
 
 `await SummonAsync();` — part of the summoner's kit
-overmind · **▸ grimoire** · squeezr · mindlash studio
+overmind · **▸ grimoire** · squeezr · synchro · summonasync studio
 
 ---
 
@@ -131,6 +131,26 @@ dotnet test Grimoire.sln
 dotnet format --verify-no-changes
 (cd web && npm run lint && npx tsc --noEmit && npm run build)
 ```
+
+## Roadmap
+
+The Overmind board drives 0.x — releases land when the gates pass, no date
+promises. 0.3.0–0.7.0 were internal milestones and live in git history.
+
+- [x] **0.1.0** — memory core: hybrid recall (vector × recency × importance),
+  tomes, tombstone corrections, cross-tome scry, background GC
+- [x] **0.2.0** — one payload per MCP result, raw Unicode in tool output
+- [x] **0.8.0** — handshake instructions, `grimoire install` routing block,
+  tome manifests with a human-only purge door
+- [x] **0.9.0** — live MCP session registry, daily section in the brief,
+  `grimoire report`, recall escalation loop, unified filter semantics,
+  honest responses on every edge path
+- [x] **0.9.1** — tome guard on REST PATCH, `serverVersion` skew visibility,
+  brief facts served whole in score order
+- [ ] **0.9.2 — in the works** — Apache-2.0 relicensing (from MIT), community
+  health files, public security hardening: Host/Origin filtering and a
+  structured error catch-all (`070`)
+- [ ] **beyond** — the board decides; small honest steps, nothing remote-bound
 
 ## License & security
 
